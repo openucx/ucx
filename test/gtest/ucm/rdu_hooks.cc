@@ -45,16 +45,20 @@ protected:
         ucs::test::cleanup();
     }
 
-    /* Find the event of a buffer. Events of allocations which were not made
-     * through the hook report the size from the runtime, which may be rounded
-     * up, so for them the size is only a lower bound. */
+    /* Find the event of a buffer. Only the allocation hook reports the
+     * requested range; the free event reports the size from the runtime, which
+     * may be rounded up, and existing allocations are reported as part of the
+     * RDU device mapping, so for them the event only has to contain the
+     * buffer. */
     static void check_event(const mem_event_vec_t &events,
                             const std::string &name, void *ptr, size_t size,
-                            bool exact_size)
+                            bool exact)
     {
         for (const auto &event : events) {
-            if ((event.address == ptr) &&
-                (exact_size ? (event.size == size) : (event.size >= size))) {
+            if (exact ? ((event.address == ptr) && (event.size == size)) :
+                        ((event.address <= ptr) &&
+                         (UCS_PTR_BYTE_OFFSET(event.address, event.size) >=
+                          UCS_PTR_BYTE_OFFSET(ptr, size)))) {
                 EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, event.mem_type);
                 return;
             }

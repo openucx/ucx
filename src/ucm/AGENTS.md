@@ -42,7 +42,11 @@ is `api/ucm.h`; everything else is internal.
   own malloc symbols don't collide with the application's libc.
 - GPU allocator hooks must report into `event/` via the existing
   `MEM_TYPE_ALLOC`/`FREE` codes — `ucs/memory/memtype_cache` consumes them
-  and decides per-pointer the memory type.
+  and decides per-pointer the memory type. Use `ucm_dispatch_mem_type_alloc`
+  and `ucm_dispatch_mem_type_free` from `event/event.h` to report them, and
+  set `.path_pattern` in the module's `ucm_event_installer_t` so existing
+  allocations are reported by the shared `/proc/self/maps` scan in
+  `event/event.c` rather than by a module-specific scan.
 - Per-arch bistro code uses raw machine-code emission; `docs/CodeStyle.md`
   applies but expect inline comments describing instruction encodings.
 - `CFLAGS_NO_DEPRECATED` is added to `libucm_la_CFLAGS`; do not rely on

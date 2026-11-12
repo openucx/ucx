@@ -134,27 +134,6 @@ static ucm_rdu_foreach_func_t ucm_rdu_get_foreach_alloc(void)
 }
 
 static void
-ucm_rdu_mem_type_event_init(ucm_event_t *event, void *addr, size_t length)
-{
-    /* Report the type as unknown, so the memory type cache asks the RDU memory
-     * domain for the type and the device of the buffer on first use */
-    event->mem_type.address   = addr;
-    event->mem_type.size      = length;
-    event->mem_type.mem_type  = UCS_MEMORY_TYPE_UNKNOWN;
-    event->mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event->mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-}
-
-static void ucm_rdu_dispatch_mem_type_event(ucm_event_type_t event_type,
-                                            void *addr, size_t length)
-{
-    ucm_event_t event;
-
-    ucm_rdu_mem_type_event_init(&event, addr, length);
-    ucm_event_dispatch(event_type, &event);
-}
-
-static void
 ucm_rdu_find_alloc_cb(const void *va, size_t size, uint32_t rdu_id, void *arg)
 {
     ucm_rdu_find_alloc_ctx_t *ctx = arg;
@@ -194,7 +173,10 @@ void *ucm_rdu_malloc(uint32_t rdu_id, size_t size, int mem_type)
     ptr = orig_func(rdu_id, size, mem_type);
     if (ptr != NULL) {
         ucm_trace("ucm_rdu_malloc(rdu_id=%u size=%zu)=%p", rdu_id, size, ptr);
-        ucm_rdu_dispatch_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, ptr, size);
+        /* Report the type as unknown, so the memory type cache asks the RDU
+         * memory domain for the type and the device of the buffer */
+        ucm_dispatch_mem_type_alloc(ptr, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
@@ -216,8 +198,8 @@ void ucm_rdu_free(uint32_t rdu_id, void *ptr)
     /* The runtime keeps the address range mapped and later reuses it for other
      * allocations, so invalidate cached information before releasing it */
     if (ptr != NULL) {
-        ucm_rdu_dispatch_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, ptr,
-                                        ucm_rdu_get_alloc_size(ptr));
+        ucm_dispatch_mem_type_free(ptr, ucm_rdu_get_alloc_size(ptr),
+                                   UCS_MEMORY_TYPE_UNKNOWN);
     }
 
     orig_func(rdu_id, ptr);
@@ -283,39 +265,11 @@ out_unlock:
     return status;
 }
 
-static void ucm_rdu_existing_alloc_cb(const void *va, size_t size,
-                                      uint32_t rdu_id, void *arg)
-{
-    ucm_event_handler_t *handler = arg;
-    ucm_event_t event;
-
-    ucm_debug("dispatching initial memtype allocation for %p..%p rdu %u", va,
-              UCS_PTR_BYTE_OFFSET(va, size), rdu_id);
-
-    ucm_rdu_mem_type_event_init(&event, (void*)va, size);
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
-}
-
-static void ucm_rdumem_get_existing_alloc(ucm_event_handler_t *handler)
-{
-    ucm_rdu_foreach_func_t foreach_alloc;
-
-    if (!(handler->events & UCM_EVENT_MEM_TYPE_ALLOC)) {
-        return;
-    }
-
-    foreach_alloc = ucm_rdu_get_foreach_alloc();
-    if (foreach_alloc != NULL) {
-        foreach_alloc(ucm_rdu_existing_alloc_cb, handler);
-    }
-}
-
+/* RDU memory is allocated from a mapping of the RDU device, so existing
+ * allocations are reported as part of that mapping */
 static ucm_event_installer_t ucm_rdu_initializer = {
-    .install            = ucm_rdumem_install,
-    .get_existing_alloc = ucm_rdumem_get_existing_alloc
+    .install      = ucm_rdumem_install,
+    .path_pattern = "/dev/rdu"
 };
 
 UCS_STATIC_INIT
