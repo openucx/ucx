@@ -86,6 +86,7 @@ EXTRA_DIST += debian/copyright
 EXTRA_DIST += debian/control
 EXTRA_DIST += debian/ucx.install
 EXTRA_DIST += debian/ucx-cuda.install
+EXTRA_DIST += debian/ucx-gaudi.install
 EXTRA_DIST += debian/ucx-gdrcopy.install
 EXTRA_DIST += debian/ucx-xpmem.install
 EXTRA_DIST += debian/ucx.prerm
