@@ -47,6 +47,9 @@ protected:
         params.features   = UCP_FEATURE_RMA;
 
         ASSERT_UCS_OK(ucp_config_read(NULL, NULL, &config));
+        /* Only memory type detection is tested, so do not use network
+         * transports, which may be unable to register RDU memory */
+        ASSERT_UCS_OK(ucp_config_modify(config, "TLS", "self,rdu"));
         status = ucp_init(&params, config, &m_context);
         ucp_config_release(config);
         ASSERT_UCS_OK(status);
