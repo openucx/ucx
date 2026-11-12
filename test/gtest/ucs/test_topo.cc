@@ -511,6 +511,50 @@ UCS_TEST_F(test_topo, get_distance) {
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
 }
 
+UCS_TEST_F(test_topo, get_distance_invalid_sys_dev) {
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xf1a8;
+    bus_id.bus      = 0x03;
+    bus_id.slot     = 0x1d;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+
+    const unsigned num_devices = ucs_topo_num_devices();
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev, invalid_sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(invalid_sys_dev, sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+}
+
+UCS_TEST_F(test_topo, get_distance_no_sysfs_entry) {
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_bus_id_t bus_id;
+
+    /* Fake bus ids have no sysfs entry, so the sysfs path lookup fails */
+    bus_id.domain   = 0xf1a7;
+    bus_id.bus      = 0x02;
+    bus_id.slot     = 0x1e;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev1));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev2));
+
+    const ucs::scoped_log_level enable_debug(UCS_LOG_LEVEL_DEBUG);
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+}
+
 UCS_TEST_F(test_topo, provider_push_pop) {
     ucs_sys_dev_distance_t dist;
     const ucs_sys_topo_ops_t ops_a = {

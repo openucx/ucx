@@ -1102,6 +1102,7 @@ public:
     }
 
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
+        bool has_scalable_tls = false;
         ucp_rsc_index_t rsc_index;
 
         UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
@@ -1115,27 +1116,30 @@ public:
                 continue;
             }
 
-            if (ucp_worker_iface_get_attr(worker, rsc_index)->max_num_eps >=
-                est_num_eps) {
+            size_t max_num_eps =
+                    ucp_worker_iface_get_attr(worker, rsc_index)->max_num_eps;
+
+            if ((est_num_eps == 1) && (max_num_eps != UCS_ULUNITS_INF)) {
+                m_max_num_eps.insert(max_num_eps);
+            }
+
+            if (max_num_eps >= est_num_eps) {
                 EXPECT_TRUE(UCS_STATIC_BITMAP_GET(worker->scalable_tl_bitmap,
                                                   rsc_index));
-                return true;
+                has_scalable_tls = true;
             } else {
                 EXPECT_FALSE(UCS_STATIC_BITMAP_GET(worker->scalable_tl_bitmap,
                                                    rsc_index));
             }
         }
 
-        return false;
+        return has_scalable_tls;
     }
 
-    bool test_est_num_eps_fallback(size_t est_num_eps,
-                                   unsigned long &min_max_num_eps) {
+    bool test_est_num_eps_fallback(size_t est_num_eps) {
         size_t num_lanes = 0;
         bool res         = true;
         bool has_only_unscalable;
-
-        min_max_num_eps = UCS_ULUNITS_INF;
 
         UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
         modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
@@ -1168,10 +1172,6 @@ public:
                 res = false;
                 goto out;
             }
-
-            if (iface_attr.max_num_eps < min_max_num_eps) {
-                min_max_num_eps = iface_attr.max_num_eps;
-            }
         }
 
 out:
@@ -1188,6 +1188,9 @@ out:
         return res;
     }
 
+protected:
+    std::set<size_t> m_max_num_eps;
+
 private:
 
     /* The number of lanes activated for the case when "est_num_eps == 1" */
@@ -1195,26 +1198,15 @@ private:
 };
 
 UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
-    unsigned long test_min_max_eps, min_max_eps;
+    EXPECT_TRUE(test_est_num_eps_fallback(1));
 
-    test_est_num_eps_fallback(1, test_min_max_eps);
-
-    size_t prev_min_max_eps = 0;
-    while ((test_min_max_eps != UCS_ULUNITS_INF) &&
-           /* number of EPs was changed between iterations */
-           (test_min_max_eps != prev_min_max_eps)) {
-        if (test_min_max_eps > 1) {
-            EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
-                                                  min_max_eps));
+    for (auto max_num_eps : m_max_num_eps) {
+        if (max_num_eps > 1) {
+            EXPECT_TRUE(test_est_num_eps_fallback(max_num_eps - 1));
         }
 
-        EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps,
-                                              min_max_eps));
-
-        EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps + 1,
-                                              min_max_eps));
-        prev_min_max_eps = test_min_max_eps;
-        test_min_max_eps = min_max_eps;
+        EXPECT_TRUE(test_est_num_eps_fallback(max_num_eps));
+        EXPECT_TRUE(test_est_num_eps_fallback(max_num_eps + 1));
     }
 }
 
