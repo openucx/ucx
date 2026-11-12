@@ -164,6 +164,7 @@ uct_perf_rdu_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
 
     alloc_mem->mem_type = UCS_MEMORY_TYPE_RDU;
     alloc_mem->md       = perf->uct.md;
+    alloc_mem->length   = length;
 
     return UCS_OK;
 }
