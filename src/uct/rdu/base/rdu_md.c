@@ -15,11 +15,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/memory/memtype_cache.h>
-#include <limits.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <inttypes.h>
 
 /* Bounded length for the sysfs PCIe path of an RDU */
 #define UCT_RDU_PATH_MAX 1024
