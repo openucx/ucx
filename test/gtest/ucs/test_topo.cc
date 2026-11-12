@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 extern "C" {
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -57,6 +58,15 @@ topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
     *distance = ucs_topo_default_distance;
 }
 
+static int topo_test_sys_device_cmp(const void *elem1, const void *elem2,
+                                    void *UCS_V_UNUSED arg)
+{
+    const auto sys_dev1 = *static_cast<const ucs_sys_device_t*>(elem1);
+    const auto sys_dev2 = *static_cast<const ucs_sys_device_t*>(elem2);
+
+    return ucs_topo_sys_device_cmp(sys_dev1, sys_dev2);
+}
+
 class test_topo : public ucs::test {
 protected:
     std::vector<std::string> m_hcas, m_gpus, m_dmas;
@@ -67,6 +77,19 @@ protected:
     {
         auto path = get_sysfs_device_path(bdf);
         return ucs_topo_get_sysfs_dev(name.c_str(), path.c_str(), 0);
+    }
+
+    // Register a device, abort the test if it cannot be registered
+    ucs_sys_device_t
+    register_device_checked(const std::string &name, const std::string &bdf)
+    {
+        auto sys_dev = register_device(name, bdf);
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            UCS_TEST_ABORT("failed to register device " << name << " (" << bdf
+                                                        << ")");
+        }
+
+        return sys_dev;
     }
 
     void read_pcie_devices();
@@ -80,16 +103,13 @@ protected:
             std::string gpu_path = get_sysfs_device_path(gpu);
 
             for (const auto &dma : m_dmas) {
-                auto gpu_dev = register_device("gpu0", gpu);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+                auto gpu_dev = register_device_checked("gpu0", gpu);
 
                 ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
 
-                auto hca_dev = register_device("hca0", hca_bdf);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+                auto hca_dev = register_device_checked("hca0", hca_bdf);
 
-                auto dma_dev = register_device("dma", dma);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+                auto dma_dev = register_device_checked("dma", dma);
 
                 ASSERT_UCS_OK(
                         ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
@@ -104,6 +124,55 @@ protected:
                     return;
                 }
             }
+        }
+    }
+
+    // Read the PCIe devices, skip the test if there are not enough of them
+    void require_pcie_devices(size_t min_hcas)
+    {
+        read_pcie_devices();
+        if ((m_hcas.size() < min_hcas) || m_gpus.empty() || m_dmas.empty()) {
+            UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+        }
+    }
+
+    // MLOPart aliases: the same BDF with distinct user values. Appends mem_dev
+    // and its (num_mems - 1) aliases to mems
+    void register_mem_aliases(ucs_sys_device_t mem_dev, int num_mems,
+                              std::vector<ucs_sys_device_t> &mems)
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(mem_dev, &bus_id));
+        mems.push_back(mem_dev);
+
+        for (int i = 1; i < num_mems; ++i) {
+            ucs_sys_device_t alias;
+            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                    &bus_id, i, &alias));
+            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, alias);
+            mems.push_back(alias);
+        }
+    }
+
+    // Register the first num_planes HCAs as the planes of a multiplane NIC
+    void register_planes(int num_planes, std::vector<ucs_sys_device_t> &planes)
+    {
+        for (int i = 0; i < num_planes; ++i) {
+            auto name = "plane" + std::to_string(i);
+            planes.push_back(register_device_checked(name, m_hcas[i]));
+        }
+    }
+
+    // Same as require_pcie_devices(), and find a GPU and a sibling DMA engine
+    // for the first HCA, skip the test if there is none
+    void get_siblings_or_skip(size_t min_hcas, std::string &gpu_bdf,
+                              std::string &dma_bdf)
+    {
+        require_pcie_devices(min_hcas);
+        get_siblings(m_hcas[0], gpu_bdf, dma_bdf);
+        if (dma_bdf.empty()) {
+            UCS_TEST_SKIP_R("No sibling DMA device found");
         }
     }
 
@@ -168,6 +237,50 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_GE(ucs_topo_num_devices(), 2);
 }
 
+UCS_TEST_F(test_topo, sys_device_cmp) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    const ucs_sys_bus_id_t bus_id1     = {0, 1, 2, 0};
+    const ucs_sys_bus_id_t bus_id2     = {0, 2, 2, 0};
+    ucs_sys_device_t dev1, dev1_alias1, dev1_alias2, dev2, dev2_alias1;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id1, &dev1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id2, &dev2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value1,
+                                                                &dev1_alias1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value2,
+                                                                &dev1_alias2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id2,
+                                                                user_value1,
+                                                                &dev2_alias1));
+
+    /* Identical devices compare equal; BDF is the primary key. */
+    EXPECT_EQ(0, ucs_topo_sys_device_cmp(dev1, dev1));
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1, dev2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev2_alias1), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2_alias1, dev1_alias2), 0);
+
+    /* User value breaks BDF ties; the empty value sorts last. */
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias1, dev1_alias2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev1_alias2, dev1_alias1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev2_alias1, dev2), 0);
+
+    /* Validate sorting order. */
+    std::vector<ucs_sys_device_t> sys_devs = {dev2, dev1, dev2_alias1,
+                                              dev1_alias2, dev1_alias1};
+
+    ucs_qsort_r(sys_devs.data(), sys_devs.size(), sizeof(sys_devs[0]),
+                topo_test_sys_device_cmp, NULL);
+
+    const std::vector<ucs_sys_device_t> expected = {dev1_alias1, dev1_alias2,
+                                                    dev1, dev2_alias1, dev2};
+    EXPECT_EQ(expected, sys_devs);
+}
+
 UCS_TEST_F(test_topo, pci_id_equal) {
     const ucs_sys_pci_id_t pci_id0 = {0x15b3, 0x101b};
     const ucs_sys_pci_id_t pci_id1 = {0x15b3, 0x101b};
@@ -215,8 +328,7 @@ UCS_TEST_F(test_topo, pci_id) {
         UCS_TEST_SKIP_R("No PCI device with vendor and device IDs found");
     }
 
-    sys_dev = register_device("pci_device", bdf);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+    sys_dev = register_device_checked("pci_device", bdf);
     pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
     EXPECT_EQ(expected_vendor, pci_id.vendor);
     EXPECT_EQ(expected_device, pci_id.device);
@@ -252,6 +364,50 @@ UCS_TEST_F(test_topo, pci_id_invalid_sys_dev) {
             static_cast<ucs_sys_device_t>(num_devices));
     EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
     EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, device_flags) {
+    const unsigned num_devices = ucs_topo_num_devices();
+    ucs_sys_device_t sys_dev, other_sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xf1a6;
+    bus_id.bus      = 0x01;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &other_sys_dev));
+
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(sys_dev));
+
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_add_flags(sys_dev, UCS_TOPO_DEVICE_FLAG_DPU));
+    EXPECT_EQ(static_cast<unsigned>(UCS_TOPO_DEVICE_FLAG_DPU),
+              ucs_topo_sys_device_get_flags(sys_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(other_sys_dev));
+
+    /* Adding no flags keeps the existing ones */
+    ASSERT_UCS_OK(ucs_topo_sys_device_add_flags(sys_dev, 0));
+    EXPECT_EQ(static_cast<unsigned>(UCS_TOPO_DEVICE_FLAG_DPU),
+              ucs_topo_sys_device_get_flags(sys_dev));
+
+    ASSERT_LT(num_devices + 2, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices + 2);
+
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(UCS_SYS_DEVICE_ID_UNKNOWN));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(invalid_sys_dev));
+
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_add_flags(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                UCS_TOPO_DEVICE_FLAG_DPU));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_add_flags(invalid_sys_dev,
+                                                UCS_TOPO_DEVICE_FLAG_DPU));
+    }
 }
 
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
@@ -353,6 +509,50 @@ UCS_TEST_F(test_topo, get_distance) {
     char buf[128];
     UCS_TEST_MESSAGE << "distance: "
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
+}
+
+UCS_TEST_F(test_topo, get_distance_invalid_sys_dev) {
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xf1a8;
+    bus_id.bus      = 0x03;
+    bus_id.slot     = 0x1d;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+
+    const unsigned num_devices = ucs_topo_num_devices();
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev, invalid_sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(invalid_sys_dev, sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+}
+
+UCS_TEST_F(test_topo, get_distance_no_sysfs_entry) {
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_bus_id_t bus_id;
+
+    /* Fake bus ids have no sysfs entry, so the sysfs path lookup fails */
+    bus_id.domain   = 0xf1a7;
+    bus_id.bus      = 0x02;
+    bus_id.slot     = 0x1e;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev1));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev2));
+
+    const ucs::scoped_log_level enable_debug(UCS_LOG_LEVEL_DEBUG);
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
 }
 
 UCS_TEST_F(test_topo, provider_push_pop) {
@@ -496,6 +696,14 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     ASSERT_UCS_OK(
             ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
 
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_class(acc_hi,
+                                                UCS_TOPO_DEVICE_CLASS_LAST));
+    }
+
     /* Ordinals follow the bus id (BDF) order within the ACC class, regardless
      * of registration order. */
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
@@ -525,6 +733,80 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
               ucs_topo_sys_device_get_bdf_class_ordinal(
                       UCS_SYS_DEVICE_ID_UNKNOWN));
+}
+
+UCS_TEST_F(test_topo, device_bdf_ordinal_incomplete_class) {
+    ucs_sys_device_t acc_dev, acc_new, net_dev, isolated_acc_dev;
+    ucs_global_state_t *state;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xfefc;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+
+    bus_id.bus = 0x20;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_dev));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_dev, UCS_TOPO_DEVICE_CLASS_ACC));
+
+    bus_id.bus = 0x30;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &net_dev));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
+
+    /* Cache both class ordinals before marking the ACC class incomplete. */
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_device_class_mark_incomplete(
+                          UCS_TOPO_DEVICE_CLASS_UNKNOWN));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_device_class_mark_incomplete(
+                                                 UCS_TOPO_DEVICE_CLASS_LAST));
+    }
+
+    EXPECT_FALSE(
+            ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+
+    ASSERT_UCS_OK(
+            ucs_topo_device_class_mark_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+
+    EXPECT_TRUE(ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_FALSE(
+            ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_NET));
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    /* Class changes must not make ordinals available again. */
+    bus_id.bus = 0x10;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_new));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_new, UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_new));
+
+    /* Extracted topology state must include and isolate class availability. */
+    state = ucs_topo_extract_state();
+    ASSERT_TRUE(state != NULL);
+    EXPECT_FALSE(
+            ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+
+    bus_id.bus = 0x40;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &isolated_acc_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(isolated_acc_dev,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(isolated_acc_dev));
+
+    ucs_topo_restore_state(state);
+
+    EXPECT_TRUE(ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
 }
 
 UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {
@@ -715,35 +997,28 @@ UCS_TEST_F(test_topo, sibling_error) {
 UCS_TEST_F(test_topo, sibling) {
     constexpr int count = 3;
 
-    read_pcie_devices();
-    if ((m_hcas.size() < count) || (m_gpus.size() == 0) ||
-        (m_dmas.size() == 0)) {
-        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-    }
+    require_pcie_devices(count);
 
     std::string sibling_gpu, sibling_dma;
     get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
 
     std::vector<ucs_sys_device_t> hca_devs;
     for (int i = 0; i < count; ++i) {
-        hca_devs.push_back(
-                register_device("hca" + std::to_string(i), m_hcas[i]));
-        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_devs.back());
+        hca_devs.push_back(register_device_checked("hca" + std::to_string(i),
+                                                   m_hcas[i]));
     }
 
     auto dma = m_dmas[0];
     auto gpu = m_gpus[0];
     if (!sibling_dma.empty()) {
         dma = sibling_dma;
-        gpu = sibling_gpu;
+        gpu = std::move(sibling_gpu);
         UCS_TEST_MESSAGE << "Found sibling "
                          << "dma=" << dma << " gpu=" << gpu;
     }
 
-    auto dma_dev = register_device("dma", dma);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
-    auto gpu_dev = register_device("gpu0", gpu);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+    auto dma_dev = register_device_checked("dma", dma);
+    auto gpu_dev = register_device_checked("gpu0", gpu);
 
     // Link DMA with its HCA
     ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_devs[0], dma_dev));
@@ -772,33 +1047,18 @@ UCS_TEST_F(test_topo, sibling) {
 
 // Multiple GPUs with same HCA sibling can be seen with MPS MLOPart
 UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
-    static const uintptr_t user_value1 = 1;
-    static const uintptr_t user_value2 = 2;
-
-    read_pcie_devices();
-    if ((m_hcas.empty()) || (m_gpus.empty()) || (m_dmas.empty())) {
-        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-    }
-
     std::string sibling_gpu, sibling_dma;
-    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
-    if (sibling_dma.empty()) {
-        UCS_TEST_SKIP_R("No sibling DMA device found");
-    }
+    get_siblings_or_skip(1, sibling_gpu, sibling_dma);
 
-    auto hca_dev = register_device("hca0", m_hcas[0]);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
-    auto dma_dev = register_device("dma", sibling_dma);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
-    auto gpu_dev0 = register_device("gpu0", sibling_gpu);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev0);
+    auto hca_dev  = register_device_checked("hca0", m_hcas[0]);
+    auto dma_dev  = register_device_checked("dma", sibling_dma);
+    auto gpu_dev0 = register_device_checked("gpu0", sibling_gpu);
 
-    ucs_sys_bus_id_t gpu_bus_id;
-    ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev0, &gpu_bus_id));
-
-    ucs_sys_device_t gpu_dev1, gpu_dev2;
-    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
-            &gpu_bus_id, user_value1, &gpu_dev1));
+    std::vector<ucs_sys_device_t> gpu_devs;
+    register_mem_aliases(gpu_dev0, 3, gpu_devs);
+    ASSERT_EQ(3u, gpu_devs.size());
+    auto gpu_dev1 = gpu_devs[1];
+    auto gpu_dev2 = gpu_devs[2];
 
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev0));
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev1));
@@ -813,11 +1073,135 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     expect_sibling(gpu_dev0);
     expect_sibling(gpu_dev1);
 
-    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
-            &gpu_bus_id, user_value2, &gpu_dev2));
+    // Another memory alias, enabled after the auxiliary device was set
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev2));
 
     expect_sibling(gpu_dev0);
     expect_sibling(gpu_dev1);
     expect_sibling(gpu_dev2);
+}
+
+// Multiple network devices sharing a single auxiliary device, with multiple
+// memory devices behind it.
+class test_topo_multi_dev_sibling : public test_topo {
+protected:
+    static constexpr int num_planes = 3;
+    static constexpr int num_mems   = 2;
+
+    // Test both registration orders: memory devices first (matched by
+    // set_sys_dev_aux), or network devices first (matched by enable_aux_path)
+    void run_test(bool mem_first)
+    {
+        std::string sibling_gpu, sibling_dma;
+        get_siblings_or_skip(num_planes + 1, sibling_gpu, sibling_dma);
+
+        // Memory devices: the same GPU BDF with distinct user values
+        std::vector<ucs_sys_device_t> mems;
+        auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
+        register_mem_aliases(gpu_dev, num_mems, mems);
+
+        auto dma_dev = register_device_checked("dma", sibling_dma);
+
+        if (mem_first) {
+            for (auto mem : mems) {
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(mem));
+            }
+        }
+
+        // All planes report the same auxiliary device
+        std::vector<ucs_sys_device_t> planes;
+        register_planes(num_planes, planes);
+        for (auto plane : planes) {
+            ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+        }
+
+        // A device whose auxiliary device is not behind the GPU's bridge
+        auto other = register_device_checked("other", m_hcas[num_planes]);
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
+
+        if (!mem_first) {
+            for (auto mem : mems) {
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(mem));
+            }
+        }
+
+        // Every memory device is matched with every plane, and vice versa
+        for (auto mem : mems) {
+            EXPECT_TRUE(ucs_topo_device_has_sibling(mem));
+            for (auto plane : planes) {
+                EXPECT_TRUE(ucs_topo_is_sibling(plane, mem));
+                EXPECT_TRUE(ucs_topo_is_reachable(plane, mem));
+            }
+        }
+
+        for (auto plane : planes) {
+            EXPECT_TRUE(ucs_topo_device_has_sibling(plane));
+        }
+
+        // Skip if the other HCA happens to be behind the GPU's bridge as well
+        if (ucs_topo_is_sibling(other, mems[0])) {
+            UCS_TEST_SKIP_R("Other HCA is behind the GPU bridge");
+        }
+
+        EXPECT_FALSE(ucs_topo_device_has_sibling(other));
+        for (auto mem : mems) {
+            EXPECT_FALSE(ucs_topo_is_sibling(other, mem));
+            EXPECT_FALSE(ucs_topo_is_reachable(other, mem));
+        }
+    }
+};
+
+UCS_TEST_F(test_topo_multi_dev_sibling, mem_first)
+{
+    run_test(true);
+}
+
+UCS_TEST_F(test_topo_multi_dev_sibling, devs_first)
+{
+    run_test(false);
+}
+
+// A pairing must not outlive the role or the auxiliary device it was made for
+UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
+{
+    std::string sibling_gpu, sibling_dma;
+    get_siblings_or_skip(2, sibling_gpu, sibling_dma);
+
+    auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
+    auto dma_dev = register_device_checked("dma", sibling_dma);
+    std::vector<ucs_sys_device_t> planes;
+    register_planes(1, planes);
+    auto plane = planes[0];
+
+    // An auxiliary device which is not behind the GPU's bridge. This depends
+    // on the PCIe topology of the machine.
+    auto other = register_device_checked("other", m_hcas[1]);
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
+    if (ucs_topo_is_sibling(other, gpu_dev)) {
+        UCS_TEST_SKIP_R("Other HCA is behind the GPU bridge");
+    }
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    ASSERT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+
+    // Setting the same auxiliary device again keeps the pairing
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+
+    // Role flip DEV -> MEM: the memory device forgets the former DEV
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(plane));
+    EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+
+    // Role flip MEM -> DEV pairs it again
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+
+    // Moving the device to another auxiliary device drops the old pairing
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, other));
+    EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(plane));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
 }

@@ -173,6 +173,6 @@
     name: ucx-test-dl-gpu
     jjb_proj: "ucx-test-dl-gpu-oss"
     jjb_conf_file: ".ci/pipeline/test_dl_matrix.yaml"
-    jjb_description: "UCX GTest on DL cluster (GB300/aarch64). Do NOT edit via Web GUI!"
+    jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"

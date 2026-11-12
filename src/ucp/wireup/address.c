@@ -389,7 +389,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
 
     num_devices = 0;
     UCS_STATIC_BITMAP_AND_INPLACE(&current_tl_bitmap, context->tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &current_tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &current_tl_bitmap) {
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (!ucp_worker_iface_can_connect(iface_attr)) {
             continue;
@@ -1139,7 +1139,7 @@ static void *ucp_address_unpack_header(const void *ptr,
     if (*addr_version == UCP_OBJECT_VERSION_V1) {
         *addr_flags  = *addr_header >> UCP_ADDRESS_HEADER_SHIFT;
         /* With address v1 it is packed after devices */
-        *dst_version = 0;
+        *dst_version = UCP_VERSION_LEGACY;
         return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     }
 
@@ -1318,7 +1318,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         }
 
         flags_ptr = NULL;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &dev_tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &dev_tl_bitmap) {
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
 
@@ -1638,12 +1638,11 @@ static ucp_rsc_index_t ucp_address_get_remote_device_index(
 static void
 ucp_address_adjust_unpacked_md_index(ucp_unpacked_address_t *unpacked_address)
 {
-    /* Last version that still packs legacy bits in MD index field */
-    const unsigned max_legacy_api_version = 18u;
     size_t i;
 
     if ((unpacked_address->addr_version > UCP_OBJECT_VERSION_V1) ||
-        (unpacked_address->dst_version > max_legacy_api_version)) {
+        (unpacked_address->dst_version >=
+         UCP_MIN_DST_VERSION_ADDRESS_MD_INDEX)) {
         return;
     }
 
@@ -1853,12 +1852,15 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             }
 
             ucp_address_trace(unpack_flags,
-                              "unpack addr[%d] : sysdev %d paths %d eps %u"
-                              " tl_flags 0x%" PRIx64 " bw %.2f/nMBs"
+                              "unpack addr[%d] : %s md[%d] sysdev %d paths %d"
+                              " eps %u tl_flags 0x%" PRIx64 " bw %.2f/nMBs"
                               " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                               " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                               "/0x%" PRIx64,
-                              (int)(address - address_list), address->sys_dev,
+                              (int)(address - address_list),
+                              ucp_find_tl_name_by_csum(worker->context,
+                                                       address->tl_name_csum),
+                              address->md_index, address->sys_dev,
                               address->dev_num_paths, address->num_ep_addrs,
                               address->iface_attr.flags,
                               address->iface_attr.bandwidth / UCS_MBYTE,

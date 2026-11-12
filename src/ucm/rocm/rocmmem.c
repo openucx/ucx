@@ -10,52 +10,26 @@
 #include <ucm/rocm/rocmmem.h>
 
 #include <ucm/event/event.h>
+#include <ucm/mmap/mmap.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
+#include <ucm/bistro/bistro.h>
 #include <ucs/debug/assert.h>
-#include <ucm/util/sys.h>
-#include <ucs/sys/compiler.h>
-#include <ucs/sys/preprocessor.h>
-
-#include <sys/mman.h>
 
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
 
-UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
-                              HSA_STATUS_ERROR, hsa_amd_memory_pool_t,
-                              size_t, uint32_t, void**)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
-                              HSA_STATUS_ERROR, void*)
-
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_type)
-{
-    ucm_event_t event;
-
-    event.mem_type.address   = addr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = mem_type;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type)
-{
-    ucm_event_t event;
-
-    event.mem_type.address   = addr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = mem_type;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
-}
+/* Use the PTR variant so that ucm_orig_<fn> is a function pointer that bistro
+ * can redirect to the relocated (trampoline) original, allowing us to intercept
+ * callers that resolve the HSA symbol via dlopen/dlsym, which the reloc/GOT
+ * hook cannot see. */
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
+                                  HSA_STATUS_ERROR, hsa_amd_memory_pool_t,
+                                  size_t, uint32_t, void**)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
+                                  HSA_STATUS_ERROR, void*)
 
 static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
 {
@@ -122,94 +96,141 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     status = ucm_orig_hsa_amd_memory_pool_allocate(memory_pool, size, flags, ptr);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_memory_pool_allocate(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_UNKNOWN);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
     return status;
 }
 
-static ucm_reloc_patch_t patches[] = {
-    {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_allocate),
-     ucm_override_hsa_amd_memory_pool_allocate},
-    {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_free),
-     ucm_override_hsa_amd_memory_pool_free},
-    {NULL, NULL}
-};
+typedef struct {
+    ucm_reloc_patch_t patch;
+    void              **orig_func_ptr;
+} ucm_rocm_func_t;
+
+static ucm_rocm_func_t ucm_rocm_funcs[] =
+        {{{"hsa_amd_memory_pool_allocate",
+           ucm_override_hsa_amd_memory_pool_allocate},
+          (void**)&ucm_orig_hsa_amd_memory_pool_allocate},
+         {{"hsa_amd_memory_pool_free", ucm_override_hsa_amd_memory_pool_free},
+          (void**)&ucm_orig_hsa_amd_memory_pool_free},
+         {{NULL, NULL}, NULL}};
+
+
+static ucs_status_t
+ucm_rocm_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_hooks_p)
+{
+    ucm_rocm_func_t *func;
+    ucs_status_t status;
+    void *func_ptr;
+    int count;
+
+    if (*installed_hooks_p & UCS_BIT(mode)) {
+        return UCS_OK;
+    }
+
+    if (!(ucm_global_opts.rocm_hook_modes & UCS_BIT(mode))) {
+        /* Disabled by configuration */
+        ucm_debug("rocm memory hooks mode %s is disabled",
+                  ucm_mmap_hook_modes[mode]);
+        return UCS_OK;
+    }
+
+    count = 0;
+    for (func = ucm_rocm_funcs; func->patch.symbol != NULL; ++func) {
+        func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
+        if (func_ptr == NULL) {
+            /* Symbol not (yet) loaded - e.g. libhsa-runtime64 not mapped */
+            continue;
+        }
+
+        if (mode == UCM_MMAP_HOOK_BISTRO) {
+            status = ucm_bistro_patch(func_ptr, func->patch.value,
+                                      func->patch.symbol, func->orig_func_ptr,
+                                      NULL);
+        } else if (mode == UCM_MMAP_HOOK_RELOC) {
+            status = ucm_reloc_modify(&func->patch);
+        } else {
+            break;
+        }
+
+        if (status != UCS_OK) {
+            ucm_diag("failed to install %s hook for '%s'",
+                     ucm_mmap_hook_modes[mode], func->patch.symbol);
+            return status;
+        }
+
+        ucm_debug("installed %s hook for '%s'", ucm_mmap_hook_modes[mode],
+                  func->patch.symbol);
+        ++count;
+    }
+
+    *installed_hooks_p |= UCS_BIT(mode);
+    ucm_info("rocm memory hooks mode %s: installed %d hooks",
+             ucm_mmap_hook_modes[mode], count);
+    return UCS_OK;
+}
 
 static ucs_status_t ucm_rocmmem_install(int events)
 {
-    static int ucm_rocmmem_installed = 0;
+    static int installed_hooks           = 0;
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
-    ucm_reloc_patch_t *patch;
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status                  = UCS_OK;
+    ucs_status_t bistro_status, reloc_status;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
         goto out;
     }
 
-    /* TODO: check mem reloc */
+    if (!(ucm_global_opts.rocm_hook_modes & UCM_GPU_HOOK_MODES_MASK)) {
+        ucm_info("rocm memory hooks are disabled by configuration");
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
+    }
 
     pthread_mutex_lock(&install_mutex);
 
-    if (ucm_rocmmem_installed) {
-        goto out_unlock;
+    /* Install bistro first: it patches the HSA function body, so it catches
+     * callers regardless of how they resolved the symbol (GOT or dlsym). If
+     * bistro cannot patch (e.g. an unrelocatable prologue or W^X) */
+    bistro_status = ucm_rocm_install_hooks(UCM_MMAP_HOOK_BISTRO,
+                                              &installed_hooks);
+    if (bistro_status != UCS_OK) {
+        ucm_debug("failed to install rocm bistro hooks");
     }
 
-    for (patch = patches; patch->symbol != NULL; ++patch) {
-        status = ucm_reloc_modify(patch);
-        if (status != UCS_OK) {
-            ucm_warn("failed to install relocation table entry for '%s'", patch->symbol);
-            goto out_unlock;
+    /* Install reloc as well: it is harmless (the wrapper calls the bistro
+     * trampoline via ucm_orig_*, which bypasses the patch, so no double
+     * dispatch) and provides coverage where bistro is not installed. */
+    reloc_status = ucm_rocm_install_hooks(UCM_MMAP_HOOK_RELOC,
+                                             &installed_hooks);
+    if (reloc_status != UCS_OK) {
+        ucm_debug("failed to install rocm reloc hooks");
+    }
+
+    /* Success as long as at least one hooking mode was installed. */
+    if (installed_hooks & UCM_GPU_HOOK_MODES_MASK) {
+        status = UCS_OK;
+        if ((bistro_status != UCS_OK) || (reloc_status != UCS_OK)) {
+            ucm_warn("rocm hooks installed with one mechanism only (bistro: %d, "
+                     "reloc: %d)", bistro_status, reloc_status);
+        } else {
+            ucm_info("rocm hooks are ready");
         }
+    } else {
+        status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
+        ucm_diag("failed to install rocm hooks: status %d", status);
     }
 
-    ucm_info("rocm hooks are ready");
-    ucm_rocmmem_installed = 1;
-
-out_unlock:
     pthread_mutex_unlock(&install_mutex);
 out:
     return status;
 }
 
-static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
-                                    int prot, const char *path)
-{
-    static const char rocm_path_pattern[] = "/dev/dri";
-    ucm_event_handler_t *handler          = arg;
-    ucm_event_t event;
-
-    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, rocm_path_pattern, sizeof(rocm_path_pattern) - 1)) {
-        return 0;
-    }
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
-              UCS_PTR_BYTE_OFFSET(addr, length), path);
-
-    event.mem_type.address   = addr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
-
-    return 0;
-}
-
-static void ucm_rocmmem_get_existing_alloc(ucm_event_handler_t *handler)
-{
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_rocm_scan_regions_cb, handler);
-    }
-}
-
 static ucm_event_installer_t ucm_rocm_initializer = {
-    .install            = ucm_rocmmem_install,
-    .get_existing_alloc = ucm_rocmmem_get_existing_alloc
+    .install      = ucm_rocmmem_install,
+    .path_pattern = "/dev/dri"
 };
 
 UCS_STATIC_INIT {

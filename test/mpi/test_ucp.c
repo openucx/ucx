@@ -11,14 +11,14 @@
 
 #include <mpi.h>
 
-static ucp_context_h create_ucp_context()
+static ucp_context_h create_ucp_context(uint64_t features)
 {
     ucp_params_t params;
     ucp_config_t *config;
     ucp_context_h context;
 
     params.field_mask = UCP_PARAM_FIELD_FEATURES | UCP_PARAM_FIELD_NAME;
-    params.features   = UCP_FEATURE_RMA | UCP_FEATURE_WAKEUP;
+    params.features   = features;
     params.name       = "test_context";
     UCX_CHECK(ucp_config_read(NULL, NULL, &config));
     UCX_CHECK(ucp_init(&params, config, &context));
@@ -124,10 +124,10 @@ create_ucp_mem(void *buffer, size_t size, ucp_context_h context)
     return mem;
 }
 
-ucp_t create_ucp()
+ucp_t create_ucp(uint64_t features)
 {
     ucp_t ucp;
-    ucp.context = create_ucp_context();
+    ucp.context = create_ucp_context(features);
     ucp.worker  = create_ucp_worker(ucp.context);
     ucp.ep      = create_ucp_ep(ucp.worker);
     return ucp;

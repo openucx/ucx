@@ -174,6 +174,23 @@ check_nv_peer_mem() {
     fi
 }
 
+# UCM modules (libucm_cuda, libucm_rocm, ...) must not call into libucs: they
+# are loaded with dlopen and do not link libucs, so when UCX itself is loaded
+# with RTLD_LOCAL the symbol is not found, and lazy binding hides this until
+# the call runs. Run from the build directory.
+check_ucm_no_ucs_symbols() {
+    ucm_modules=$(find src/ucm -path '*/.libs/libucm_*.so*' -type f)
+    if [ -z "${ucm_modules}" ]; then
+        azure_log_error "No UCM modules found in $(pwd)/src/ucm"
+        exit 1
+    fi
+
+    if nm -D --undefined-only ${ucm_modules} | grep -E '\bU ucs_'; then
+        azure_log_error "UCM modules have undefined libucs symbols"
+        exit 1
+    fi
+}
+
 #
 # try load cuda modules if nvidia driver is installed
 #
@@ -188,8 +205,11 @@ try_load_cuda_env() {
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
 
-    # Check peer mem driver
-    [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    # Check peer mem driver. Required on Azure only; other clusters (dlcluster,
+    # funk) may provide GPUDirect RDMA through dmabuf without nvidia_peermem.
+    if [ "x$RUNNING_IN_AZURE" = "xyes" ]; then
+        [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    fi
 
     # Check number of available GPUs
     nvidia-smi -a || true
@@ -206,10 +226,11 @@ try_load_cuda_env() {
         have_cuda=yes
     fi
 
-    # Check gdrcopy
-    if [ -w "/dev/gdrdrv" ]
+    # Check gdrcopy. Load it inside the if so a missing module does not
+    # fail this function under set -e.
+    if [ -w "/dev/gdrdrv" ] && az_module_load dev/gdrcopy2.5.1_cuda13.0.2
     then
-        az_module_load dev/gdrcopy2.5.1_cuda13.0.2 && have_gdrcopy=yes
+        have_gdrcopy=yes
     fi
 }
 
@@ -262,7 +283,8 @@ check_release_build() {
         done
     fi
 
-    echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
+    # Split ##vso so the set -x trace is not parsed by the agent
+    printf '##%s[task.setvariable variable=Launch;isOutput=true]%s\n' vso "${launch}"
 }
 
 check_main_pipeline_status() {

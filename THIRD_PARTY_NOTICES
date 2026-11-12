@@ -1,0 +1,259 @@
+UCX Third-Party Notices
+=======================
+
+UCX is distributed under the BSD-3-Clause license in the LICENSE file. This
+document identifies separately licensed third-party source code included in
+the UCX source tree or referenced by a pinned Git submodule. It does not cover
+libraries and tools that users install separately and that are only detected,
+compiled against, or loaded at runtime.
+
+BSD-3-Clause components
+-----------------------
+
+UCX project sources
+  Files: UCX source files that refer to the top-level LICENSE
+  Copyright notices include:
+    2001-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+    2014-2019 UT-Battelle, LLC. All rights reserved.
+    2014-2015 The University of Houston System. All rights reserved.
+    2015-2016 The University of Tennessee and The University of Tennessee
+              Research Foundation. All rights reserved.
+    2016-2021 Arm Ltd. All rights reserved.
+    2016-2019 Los Alamos National Security, LLC. All rights reserved.
+    2016-2026 Advanced Micro Devices, Inc. All rights reserved.
+    2019 UChicago Argonne, LLC. All rights reserved.
+    2020-2023 Huawei Technologies Co., Ltd. All rights reserved.
+    2016-2020 Stony Brook University. All rights reserved.
+    2015 IBM. All rights reserved.
+    2019 Hiroyuki Sato. All rights reserved.
+    2020 Shanghai Zhaoxin Semiconductor Co., Ltd. All rights reserved.
+    2021 Broadcom Inc. and/or its subsidiaries. All rights reserved.
+    2021 NextSilicon Ltd. All rights reserved.
+    2022 Tactical Computing Labs, LLC. All rights reserved.
+    2018, 2023 Triad National Security, LLC. All rights reserved.
+    2023-2026 Intel Corporation. All rights reserved.
+    2023 Rivos Inc.
+    2024 Google, LLC. All rights reserved.
+    2025 Fujitsu Limited. All rights reserved.
+    2026 Zhixian Li. All rights reserved.
+    Oak Ridge National Laboratory. All rights reserved.
+  License: BSD-3-Clause
+
+inih
+  Files:
+    src/ucs/config/ini.c
+    src/ucs/config/ini.h
+  Upstream: https://github.com/benhoyt/inih
+  Copyright (C) 2009-2020, Ben Hoyt
+  License: BSD-3-Clause
+
+ThunderX2 optimized memcpy
+  File: src/ucs/arch/aarch64/memcpy_thunderx2.S
+  Copyright (c) 2018, Marvell Technology Group Ltd.
+  License: Apache-2.0 OR BSD-3-Clause
+
+  UCX redistributes this file under the BSD-3-Clause alternative.
+
+NVIDIA DOCA GPUNetIO
+  Git submodule: external/gpunetio
+  Upstream: https://github.com/NVIDIA-DOCA/gpunetio
+  Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  License: BSD-3-Clause
+
+The BSD-3-Clause license applicable to the sources and components above
+follows:
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+
+  3. Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+qsort_r BSD license
+-------------------
+
+qsort_r
+  Files:
+    src/ucs/algorithm/qsort_r.c
+    src/ucs/algorithm/qsort_r.h
+  Copyright (c) 1992, 1993 The Regents of the University of California.
+  License: BSD-3-Clause
+
+The license distributed with qsort_r follows:
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+
+  4. Neither the name of the University nor the names of its contributors may
+     be used to endorse or promote products derived from this software without
+     specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS" AND ANY
+  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+GoogleTest BSD license
+----------------------
+
+GoogleTest
+  Files: test/gtest/common/googletest/
+  Upstream: https://github.com/google/googletest
+  Copyright 2005-2015, Google Inc., as identified in the individual files.
+  License: BSD-3-Clause
+
+The license distributed with GoogleTest follows:
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+  * Neither the name of Google Inc. nor the names of its contributors may be
+    used to endorse or promote products derived from this software without
+    specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+MIT component
+-------------
+
+khash
+  File: src/ucs/datastruct/khash.h
+  Upstream: https://github.com/attractivechaos/klib
+  Copyright (c) 2008, 2009, 2011 by Attractive Chaos
+  License: MIT
+
+The MIT license applicable to khash follows:
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to
+  deal in the Software without restriction, including without limitation the
+  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+  sell copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+  IN THE SOFTWARE.
+
+SGLIB component
+---------------
+
+SGLIB 1.0.3
+  File: src/ucs/datastruct/sglib.h
+  Upstream: http://www.xref-tech.com/sglib
+  Copyright (C) 2003-2005 Marian Vittek
+
+The license conditions distributed with SGLIB follow:
+
+  You can use a verbatim copy (including this copyright notice) of sglib
+  freely in any project, commercial or not. You can also use derivative forms
+  freely under terms of Open Source Software license or under terms of GNU
+  Public License. If you need to use a derivative form in a commercial
+  project, or you need sglib under any other license conditions, contact the
+  author.
+
+Autoconf Archive component
+--------------------------
+
+Doxygen Autoconf macro
+  File: config/m4/ax_prog_doxygen.m4
+  Upstream: https://www.gnu.org/software/autoconf-archive/ax_prog_doxygen.html
+  Copyright (c) 2009 Oren Ben-Kiki
+  Copyright (C) 2014-2015 UT-Battelle, LLC. All rights reserved.
+  License: FSF All Permissive License
+
+Doxygen Automake rules
+  File: docs/doxygen/doxygen.am
+  Copyright (c) 2009 Oren Ben-Kiki
+  Copyright (C) 2014-2015 UT-Battelle, LLC. All rights reserved.
+  License: BSD-3-Clause and FSF All Permissive License
+
+The BSD-3-Clause license is reproduced above. The FSF All Permissive License
+distributed with these files follows:
+
+  Copying and distribution of this file, with or without modification, are
+  permitted in any medium without royalty provided the copyright notice and
+  this notice are preserved. This file is offered as-is, without any warranty.
+
+Public-domain components
+------------------------
+
+dlmalloc 2.8.6
+  Files:
+    src/ucm/ptmalloc286/malloc.c
+    src/ucm/ptmalloc286/malloc-2.8.6.h
+  Author: Doug Lea
+  License: Public domain
+
+The source states:
+
+  This is a version (aka dlmalloc) of malloc/free/realloc written by Doug Lea
+  and released to the public domain, as explained at
+  http://creativecommons.org/publicdomain/zero/1.0/.
+
+Quickselect routine
+  File: src/tools/perf/lib/libperf.c
+  Author: Nicolas Devillard
+  Copyright year: 1998
+  License: Public domain
+
+The source states that the Quickselect routine is based on the algorithm in
+"Numerical Recipes in C", Second Edition, and that the implementation by
+Nicolas Devillard is in the public domain.

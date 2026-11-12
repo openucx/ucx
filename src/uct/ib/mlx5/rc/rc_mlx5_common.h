@@ -347,6 +347,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct {
         ucs_mpool_t                    atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t        mmio_mode;
+        uct_ib_mlx5_bf_copy_mode_t     bf_copy_mode;
         uint16_t                       bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
     struct {
@@ -696,8 +697,8 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                                    void *data, size_t length, size_t valid_length,
-                                    char *buffer, size_t max);
+                                    void *data, size_t length, char *buffer,
+                                    size_t max);
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -36,6 +36,51 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
             return UCS_ERR_NO_MEMORY;
         }
         *iov_p = iov;
+    }
+
+    return UCS_OK;
+}
+
+static void ucp_perf_test_free_sgl_mem(ucx_perf_context_t *perf)
+{
+    free(perf->ucp.sgl.buffers);
+    free(perf->ucp.sgl.lengths);
+    free(perf->ucp.sgl.memhs);
+    free(perf->ucp.sgl.remote_addrs);
+    free(perf->ucp.sgl.rkeys);
+}
+
+static ucs_status_t ucp_perf_test_alloc_sgl_mem(ucx_perf_context_t *perf)
+{
+    const ucx_perf_params_t *params = &perf->params;
+    size_t count                    = params->msg_size_cnt;
+    size_t total;
+
+    perf->ucp.sgl.buffers      = NULL;
+    perf->ucp.sgl.lengths      = NULL;
+    perf->ucp.sgl.memhs        = NULL;
+    perf->ucp.sgl.remote_addrs = NULL;
+    perf->ucp.sgl.rkeys        = NULL;
+
+    if (UCP_PERF_DATATYPE_SGL != params->ucp.send_datatype) {
+        return UCS_OK;
+    }
+
+    total                      = count * params->thread_count;
+    perf->ucp.sgl.buffers      = malloc(total *
+                                        sizeof(*perf->ucp.sgl.buffers));
+    perf->ucp.sgl.lengths      = malloc(total *
+                                        sizeof(*perf->ucp.sgl.lengths));
+    perf->ucp.sgl.memhs        = malloc(total * sizeof(*perf->ucp.sgl.memhs));
+    perf->ucp.sgl.remote_addrs = malloc(total *
+                                        sizeof(*perf->ucp.sgl.remote_addrs));
+    perf->ucp.sgl.rkeys        = malloc(total * sizeof(*perf->ucp.sgl.rkeys));
+    if ((perf->ucp.sgl.buffers == NULL) || (perf->ucp.sgl.lengths == NULL) ||
+        (perf->ucp.sgl.memhs == NULL) || (perf->ucp.sgl.remote_addrs == NULL) ||
+        (perf->ucp.sgl.rkeys == NULL)) {
+        ucs_error("failed to allocate SGL arrays of %zu elements", total);
+        ucp_perf_test_free_sgl_mem(perf);
+        return UCS_ERR_NO_MEMORY;
     }
 
     return UCS_OK;
@@ -142,11 +187,7 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     ucs_status_t status;
     size_t buffer_size;
 
-    if (params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
+    buffer_size = ucx_perf_get_thread_buffer_size(params);
 
     /* Allocate send buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
@@ -219,8 +260,16 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_send_iov_buffers;
     }
 
+    /* Allocate SGL datatype memory */
+    status = ucp_perf_test_alloc_sgl_mem(perf);
+    if (UCS_OK != status) {
+        goto err_free_recv_iov_buffers;
+    }
+
     return UCS_OK;
 
+err_free_recv_iov_buffers:
+    free(perf->ucp.recv_iov);
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
 err_free_am_hdr:
@@ -239,6 +288,7 @@ err:
 
 void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
+    ucp_perf_test_free_sgl_mem(perf);
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
     free(perf->ucp.am_hdr);
@@ -296,11 +346,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     unsigned flags;
     size_t buffer_size;
 
-    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) && params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
+    buffer_size = ucx_perf_get_thread_buffer_size(params);
 
     /* TODO use params->alignment  */
 
@@ -309,7 +355,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     switch (perf->params.command) {
     case UCX_PERF_CMD_PUT:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
-        if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
             flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
         }
         break;
@@ -383,6 +429,7 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 
 void ucx_perf_global_init()
 {
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     static ucx_perf_allocator_t host_allocator = {
         .name             = "host",
         .default_mem_type = UCS_MEMORY_TYPE_HOST,
@@ -412,12 +459,16 @@ void ucx_perf_global_init()
 
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
-    ucx_perf_allocator_register(&host_allocator);
-    ucx_perf_allocator_register(&rdma_allocator);
+    UCS_INIT_ONCE(&init_once) {
+        ucx_perf_allocator_register(&host_allocator);
+        ucx_perf_allocator_register(&rdma_allocator);
 
-    /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
-     * alloc hooks, which are using dlsym() to get pointer to original function,
-     * do not work. Need to use bistro for memtype hooks to fix it.
-     */
-    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
+        /*
+         * FIXME Memtype allocator modules must be loaded to global scope,
+         * otherwise alloc hooks, which are using dlsym() to get pointer to
+         * original function, do not work. Need to use bistro for memtype hooks
+         * to fix it.
+         */
+        UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
+    }
 }

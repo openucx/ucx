@@ -32,8 +32,6 @@ typedef struct {
  * packed in the worker address */
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
-#define UCP_RELEASE_LEGACY 0
-
 #define UCP_WIREUP_UCT_EVENT_CAP_FLAGS \
     (UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV)
 
@@ -53,6 +51,7 @@ enum {
     UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+    UCP_WIREUP_MSG_LANES_ADDR_ACK,
 
     UCP_WIREUP_MSG_LAST
 };
@@ -153,10 +152,35 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct ucp_wireup_msg_lanes_info_t {
-    ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
-    ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
-    /* packed addresses follow */
+    /* Lanes the sender asked about. Empty in a REQUEST, which answers nothing.
+     * When the token trailer is present, these are also the RX-token lanes. */
+    ucp_lane_map_t         requested_lane_map;
+    /* Lanes whose addresses are carried here. When the token trailer is
+     * present, these are also the TX-token lanes. */
+    ucp_lane_map_t         provided_lane_map;
+    /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
+     * UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN and above), then packed addresses
+     * follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
+
+
+/*
+ * Token trailer of a LANES_ADDR message. Both peers decide whether it is part
+ * of the message by the release version of the remote peer, kept in
+ * ucp_ep_config_key_t::dst_version, so no flag is needed on the wire.
+ */
+typedef struct ucp_wireup_msg_tokens_info_t {
+    /* Exchange generation, echoed by the peer in its answers, to be matched
+     * against the tokens once they are carried. Starts from 1, so that 0 tells
+     * the receiver the message came without a trailer at all. */
+    uint32_t request_id;
+    /* uint8_t tx_lengths[popcount(provided_lane_map)] followed by the TX
+     * tokens, then uint8_t rx_lengths[popcount(requested_lane_map)] followed by
+     * the RX tokens, then the packed addresses. A zero length means that lane
+     * has no token. TX tokens belong to provided lanes and RX tokens to
+     * requested lanes. */
+} UCS_S_PACKED ucp_wireup_msg_tokens_info_t;
+
 
 typedef struct {
     double          score;
@@ -259,13 +283,47 @@ uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 unsigned ucp_wireup_eps_progress(void *arg);
 
 
+/* One lane's token in a LANES_ADDR trailer. Indexed by lane, not by the
+ * position in the length array. A zero length means the lane has no token. */
+typedef struct ucp_wireup_lane_token {
+    const void *token;
+    uint8_t     len;
+} ucp_wireup_lane_token_t;
+
+
 /**
- * Send a LANES_ADDR_REQUEST/REPLY wireup message over the AM lane, packing
- * addresses for the lanes in @a provided_lane_map.
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
+ * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
+ * exchange and is echoed by the peer. @a rx_tokens supplies the RX section,
+ * indexed by lane; NULL sends an empty one. The TX section is the snapshotted
+ * token of each provided lane that was published for @a request_id.
  */
-void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
-                                    ucp_lane_map_t requested_lane_map,
-                                    ucp_lane_map_t provided_lane_map);
+void ucp_wireup_send_lanes_addr_msg(
+        ucp_ep_h ep, uint8_t msg_type, ucp_lane_map_t requested_lane_map,
+        ucp_lane_map_t provided_lane_map, uint32_t request_id,
+        const ucp_wireup_lane_token_t *rx_tokens);
+
+
+/* Drop @a lanes from a parked LANES_ADDR reply. The reply is sent once
+ * nothing is waiting. */
+void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/* Drop a LANES_ADDR reply that is still waiting for error completions. */
+void ucp_wireup_tf_reply_discard(ucp_ep_h ep);
+
+
+/* Parse one token section into per-lane slots. @a slots may be NULL to only
+ * measure the section, which is what @ref ucp_wireup_skip_token_section does.
+ * gtest feeds both helpers crafted buffers. */
+ucs_status_t
+ucp_wireup_read_token_section(ucp_lane_map_t lane_map, const void *section,
+                              size_t avail, size_t *consumed_p,
+                              ucp_wireup_lane_token_t *slots);
+
+ucs_status_t
+ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
+                              size_t avail, size_t *consumed_p);
 
 
 /**
