@@ -40,9 +40,24 @@ extern "C" {
 
 
 #define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, knem, cma, \
-                   posix, sysv, xpmem, cuda_cpy, cuda_ipc, rocm_cpy, rocm_ipc, \
-                   ze_cpy, ib, rdu, ugni, gdr_copy, sockcm, rdmacm)
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
+                   knem, \
+                   cma, \
+                   posix, \
+                   sysv, \
+                   xpmem, \
+                   cuda_cpy, \
+                   cuda_ipc, \
+                   rocm_cpy, \
+                   rocm_ipc, \
+                   ze_cpy, \
+                   ib, \
+                   rdu, \
+                   ugni, \
+                   gdr_copy, \
+                   sockcm, \
+                   rdmacm \
+                   )
 
 void* test_md::alloc_thread(void *arg)
 {
