@@ -55,6 +55,12 @@ typedef ucs_topo_group_array_t ucs_topo_groups_t;
  * Criterion used to place GPUs and NICs into topology groups.
  */
 typedef enum {
+    /**
+     * @ref UCS_TOPO_GROUP_BY_PCI_SWITCH on x86_64, otherwise
+     * @ref UCS_TOPO_GROUP_BY_NUMA
+     */
+    UCS_TOPO_GROUP_BY_AUTO,
+
     /** One group per NUMA node */
     UCS_TOPO_GROUP_BY_NUMA,
 

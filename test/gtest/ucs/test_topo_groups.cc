@@ -551,6 +551,29 @@ UCS_TEST_F(test_topo_groups, pci_switch_no_shared_switch) {
     expect_groups(expected_groups);
 }
 
+UCS_TEST_F(test_topo_groups, group_by_auto) {
+    const ucs_sys_device_t gpu0 = add_switch_device(
+            "gpu0", UCS_TOPO_DEVICE_CLASS_ACC, 0);
+    const ucs_sys_device_t nic0 = add_switch_device(
+            "nic0", UCS_TOPO_DEVICE_CLASS_NET, 0);
+    const ucs_sys_device_t gpu1 = add_switch_device(
+            "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, 1);
+    const ucs_sys_device_t nic1 = add_switch_device(
+            "nic1", UCS_TOPO_DEVICE_CLASS_NET, 1);
+#if defined(__x86_64__)
+    std::vector<numa_devices> expected_groups = {{0, {{gpu0}}, {{nic0}}},
+                                                 {0, {{gpu1}}, {{nic1}}}};
+#else
+    std::vector<numa_devices> expected_groups = {
+        {0, {{gpu0}, {gpu1}}, {{nic0}, {nic1}}}};
+#endif
+
+    sort_expected_result(expected_groups);
+
+    ASSERT_UCS_OK(build(nullptr, UCS_TOPO_GROUP_BY_AUTO));
+    expect_groups(expected_groups);
+}
+
 UCS_TEST_F(test_topo_groups, pci_switch_nic_only_group) {
     std::vector<physical_device> nics = {
         {add_switch_device("nic0", UCS_TOPO_DEVICE_CLASS_NET, 0)},

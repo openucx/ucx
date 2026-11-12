@@ -133,6 +133,12 @@ static const char *ucp_gpu_nic_assignment_group_by_names[] = {
     [UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_LAST]       = NULL
 };
 
+static const ucs_topo_group_by_t ucp_gpu_nic_assignment_topo_group_by[] = {
+    [UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_AUTO]       = UCS_TOPO_GROUP_BY_AUTO,
+    [UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA]       = UCS_TOPO_GROUP_BY_NUMA,
+    [UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH] = UCS_TOPO_GROUP_BY_PCI_SWITCH
+};
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -3054,23 +3060,9 @@ ucp_context_gpu_nic_assignment_get_group_by(ucp_context_h context)
     ucp_gpu_nic_assignment_group_by_t group_by =
             context->config.ext.gpu_nic_assignment_group_by;
 
-    if (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_AUTO) {
-#if defined(__x86_64__)
-        group_by = UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH;
-#else
-        group_by = UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA;
-#endif
-    }
-
-    ucs_assertv((group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA) ||
-                (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH),
-                "group_by=%d", group_by);
     ucs_debug("gpu-nic assignment group by %s",
               ucp_gpu_nic_assignment_group_by_names[group_by]);
-
-    return (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH) ?
-                   UCS_TOPO_GROUP_BY_PCI_SWITCH :
-                   UCS_TOPO_GROUP_BY_NUMA;
+    return ucp_gpu_nic_assignment_topo_group_by[group_by];
 }
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)

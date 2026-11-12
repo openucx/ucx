@@ -545,7 +545,16 @@ ucs_topo_groups_build_groups(const ucs_topo_sys_device_info_t *devices,
                              ucs_topo_pci_bridge_depth_func_t pci_bridge_depth,
                              ucs_topo_groups_t *groups)
 {
+    if (group_by == UCS_TOPO_GROUP_BY_AUTO) {
+#if defined(__x86_64__)
+        group_by = UCS_TOPO_GROUP_BY_PCI_SWITCH;
+#else
+        group_by = UCS_TOPO_GROUP_BY_NUMA;
+#endif
+    }
+
     if (group_by == UCS_TOPO_GROUP_BY_PCI_SWITCH) {
+        ucs_debug("grouping gpus and nics by pci switch");
         return ucs_topo_groups_build_groups_by_pci_switch(devices, inventory,
                                                           pci_bridge_depth,
                                                           groups);
@@ -553,6 +562,7 @@ ucs_topo_groups_build_groups(const ucs_topo_sys_device_info_t *devices,
 
     ucs_assertv(group_by == UCS_TOPO_GROUP_BY_NUMA, "group_by=%d",
                 (int)group_by);
+    ucs_debug("grouping gpus and nics by numa node");
     return ucs_topo_groups_build_groups_by_numa(devices, inventory, groups);
 }
 
