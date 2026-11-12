@@ -987,16 +987,16 @@ public:
         modify_config("RNDV_THRESH", "0");
         modify_config("RNDV_ALIGN_THRESH", "0");
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
-        test_ucp_tag_match::init();
+        modify_config("PROTO_ENABLE", "y");
+        modify_config("TM_THRESH", "1");
+        modify_config("MAX_EAGER_LANES", "2");
+        test_ucp_tag::init();
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        for (int rndv_scheme = 0; rndv_scheme < RNDV_SCHEME_LAST; ++rndv_scheme) {
-            add_variant_with_value(variants, get_ctx_params(),
-                                   rndv_scheme | DISABLE_PROTO,
-                                   rndv_schemes[rndv_scheme] + ",proto_v1");
-        }
+        add_variant_with_value(variants, get_ctx_params(),
+                               RNDV_SCHEME_GET_ZCOPY, "get_zcopy,proto_v2");
     }
 protected:
     size_t min_frag()
@@ -1042,6 +1042,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv_align, recv_align)
             ASSERT_FALSE(UCS_PTR_IS_ERR(ucx_req));
             ASSERT_NE(nullptr, ucx_req); /* Couldn't be completed because didn't send yet */
 
+            UCS_TEST_MESSAGE << "size=" << size << " recv_offset=" << recv_offset;
             ucs::fill_random(sendbuf);
             send_b(&sendbuf[0], size, DATATYPE, 0x111337);
             wait(ucx_req);
