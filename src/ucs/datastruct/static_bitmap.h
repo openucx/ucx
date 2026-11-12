@@ -165,6 +165,18 @@ BEGIN_C_DECLS
 
 
 /**
+ * Find last set bit in the bitmap. If the bitmap is all zero, the result is
+ * the total number of bits in the bitmap.
+ *
+ * @param _bitmap  Find the set bit in this bitmap.
+ *
+ * @return Index of the last bit set to 1.
+ */
+#define UCS_STATIC_BITMAP_FLS(_bitmap) \
+    UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, ucs_bitmap_bits_fls)
+
+
+/**
  * Count the number of bits set to 1 in the bitmap.
  *
  * @param _bitmap   Count set bits in this bitmap.

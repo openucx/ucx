@@ -192,7 +192,8 @@ UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
                                                 packed after device address or
                                                 number of paths (if present) */
 
-/* Mask for iface and endpoint address length */
+/* Mask for iface address length, ep lane and unified mode resource index.
+ * The ep lane byte does not use the HAS_EP_ADDR bit */
 #define UCP_ADDRESS_IFACE_LEN_MASK   (UCS_MASK(8) ^ \
                                       (UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
                                        UCP_ADDRESS_FLAG_LAST))
@@ -820,6 +821,14 @@ static int ucp_address_pack_iface_attr(const ucp_worker_iface_t *wiface,
          * Just send rsc index, so the remote peer could fetch iface attributes
          * from its local iface. Also send latency overhead, because it
          * depends on device NUMA locality. */
+
+        /* Verify that the maximal resource index fits in the mask */
+        UCS_STATIC_ASSERT(UCP_ADDRESS_UNIFIED_MAX_RESOURCES ==
+                          (UCP_ADDRESS_IFACE_LEN_MASK + 1));
+
+        ucs_assertv(rsc_index < UCP_ADDRESS_UNIFIED_MAX_RESOURCES,
+                    "rsc_index=%u", rsc_index);
+
         unified            = ptr;
         unified->rsc_index = rsc_index;
         lat_ovh            = ucp_wireup_iface_lat_distance_v1(wiface);
@@ -1416,6 +1425,10 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
                     ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
                     ptr = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
+
+                    /* Verify that the maximal lane index fits in the mask */
+                    UCS_STATIC_ASSERT(UCP_MAX_LANES <=
+                                      (UCP_ADDRESS_IFACE_LEN_MASK + 1));
 
                     /* pack ep lane index, and save the pointer for lane index
                      * of last ep in 'ep_last_ptr' to set UCP_ADDRESS_FLAG_LAST.
