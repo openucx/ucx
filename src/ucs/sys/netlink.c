@@ -779,6 +779,7 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     iter = kh_put(ucs_netlink_route_cache, &ucs_netlink_route_cache, key,
                   &khret);
     if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to put route lookup in the cache");
         status = UCS_ERR_NO_MEMORY;
         goto out_unlock;
     }
