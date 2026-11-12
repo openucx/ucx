@@ -67,6 +67,7 @@ steps:
               --gtest_filter=dcx/test_ucp_tag_match_rndv_align.recv_align/2 2>&1) || status=$?
           printf '%s\n' "${output}"
           echo "BF3 probe exit status ${status}"
+          printf '%s\n' "${output}" | sed -n 's/.*gtest(+\(0x[[:xdigit:]]*\)).*/\1/p' | addr2line -a -C -f -i -e ./test/gtest/gtest
           test "${status}" -eq 0
           [[ "${output}" == *"[==========] Running 1 test"* ]]
           [[ "${output}" == *"get_zcopy,proto_v2"* ]]
