@@ -2186,23 +2186,15 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
 
 class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
 public:
-    static void get_cuda_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants,
-                             UCS_BIT(UCS_MEMORY_TYPE_CUDA));
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        static const char *op_names[] = {"put", "get"};
-        add_variant_values(variants, get_cuda_variants, UCS_BIT(SGL_OP_PUT),
-                           op_names);
-    }
-
     test_ucp_rma_sgl_contig() {
-        modify_config("PROTOS", "put/sgl/contig,put/rndv,rndv/*");
+        modify_config("PROTOS", UCP_MEM_IS_HOST(src_mem_type()) ?
+                                "put/sgl/contig,put/offload/*" :
+                                "put/sgl/contig,put/rndv,rndv/*");
     }
 
     virtual void init() override {
-        if (mem_buffer::cuda_mem_is_gdr_capable()) {
+        if (!UCP_MEM_IS_HOST(src_mem_type()) &&
+            mem_buffer::cuda_mem_is_gdr_capable()) {
             m_env.push_back(
                     new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         }
@@ -2213,7 +2205,11 @@ public:
 
 protected:
     virtual void check_posted_request(ucs_status_ptr_t sptr) override {
-        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+            return;
+        }
+
         const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
         EXPECT_STREQ("put/sgl/contig", req->send.proto_config->proto->name);
     }
