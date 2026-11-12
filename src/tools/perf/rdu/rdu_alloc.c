@@ -8,89 +8,52 @@
 #endif
 
 #include <tools/perf/lib/libperf_int.h>
+#include <uct/rdu/base/uct_rdu_devmem.h>
 
 #include <ucs/sys/compiler.h>
 #include <ucs/debug/log.h>
 #include <ucs/memory/memtype_cache.h>
 
-#include <dlfcn.h>
 #include <pthread.h>
 #include <string.h>
 
 
 /*
- * RDU memory is allocated with the SambaNova rdu_devmem runtime, which is
- * loaded at run time, as the RDU memory domain does, so the module builds
- * without the runtime installed. The functions are called through pointers,
+ * RDU memory is allocated with the SambaNova rdu_devmem runtime, which the RDU
+ * memory domain loads at run time. The functions are called through pointers,
  * which the UCM hooks don't intercept, so the allocator updates the memory
  * type cache as the hooks do. RDU memory is mapped to the host address space,
  * so it is copied and set with the host functions.
  */
 
-/* Memory kinds of rdu_malloc() */
-#define UCX_PERF_RDU_MEM_HBM 0
-#define UCX_PERF_RDU_MEM_DDR 1
-
-typedef int (*ucx_perf_rdu_init_func_t)(void);
-typedef void *(*ucx_perf_rdu_malloc_func_t)(uint32_t rdu_id, size_t size,
-                                            int mem_kind);
-typedef void (*ucx_perf_rdu_free_func_t)(uint32_t rdu_id, void *ptr);
-typedef void (*ucx_perf_rdu_foreach_cb_t)(const void *address, size_t size,
-                                          uint32_t rdu_id, void *arg);
-typedef void (*ucx_perf_rdu_foreach_func_t)(ucx_perf_rdu_foreach_cb_t cb,
-                                            void *arg);
-
-typedef struct {
-    const void *address;
-    size_t     size;
-} ucx_perf_rdu_find_alloc_t;
-
-
 static pthread_once_t ucx_perf_rdu_init_once = PTHREAD_ONCE_INIT;
 static ucs_status_t ucx_perf_rdu_init_status = UCS_ERR_NO_DEVICE;
-static ucx_perf_rdu_malloc_func_t ucx_perf_rdu_malloc_func;
-static ucx_perf_rdu_free_func_t ucx_perf_rdu_free_func;
-static ucx_perf_rdu_foreach_func_t ucx_perf_rdu_foreach_func;
+static const uct_rdu_devmem_ops_t *ucx_perf_rdu_ops;
 static uint32_t ucx_perf_rdu_id;
 
 
 static void ucx_perf_rdu_do_init(void)
 {
-    static const char *libs[] = UCX_RDU_DEVMEM_LIBS;
-    ucx_perf_rdu_init_func_t init_func;
-    void *handle = NULL;
-    unsigned i;
+    const uct_rdu_devmem_ops_t *ops = uct_rdu_devmem_get();
     int ret;
 
-    for (i = 0; (i < ucs_static_array_size(libs)) && (handle == NULL); ++i) {
-        handle = dlopen(libs[i], RTLD_NOW | RTLD_GLOBAL);
-    }
-
-    if (handle == NULL) {
-        ucs_error("failed to load the rdu_devmem runtime: %s", dlerror());
+    if (ops == NULL) {
+        ucs_error("failed to load the rdu_devmem runtime");
         return;
     }
 
-    init_func = (ucx_perf_rdu_init_func_t)dlsym(handle, "rdu_devmem_init");
-    ucx_perf_rdu_malloc_func  = (ucx_perf_rdu_malloc_func_t)dlsym(handle,
-                                                                  "rdu_malloc");
-    ucx_perf_rdu_free_func    = (ucx_perf_rdu_free_func_t)dlsym(handle,
-                                                                "rdu_free");
-    ucx_perf_rdu_foreach_func = (ucx_perf_rdu_foreach_func_t)
-            dlsym(handle, "rdu_foreach_alloc");
-    if ((init_func == NULL) || (ucx_perf_rdu_malloc_func == NULL) ||
-        (ucx_perf_rdu_free_func == NULL) ||
-        (ucx_perf_rdu_foreach_func == NULL)) {
-        ucs_error("the rdu_devmem runtime is missing required symbols");
+    if ((ops->init == NULL) || (ops->malloc == NULL) || (ops->free == NULL)) {
+        ucs_error("the rdu_devmem runtime is missing allocation functions");
         return;
     }
 
-    ret = init_func();
+    ret = ops->init();
     if (ret != 0) {
         ucs_error("rdu_devmem_init() failed: %d", ret);
         return;
     }
 
+    ucx_perf_rdu_ops         = ops;
     ucx_perf_rdu_init_status = UCS_OK;
 }
 
@@ -123,7 +86,7 @@ ucx_perf_rdu_alloc(size_t length, int mem_kind, void **address_p)
 {
     void *address;
 
-    address = ucx_perf_rdu_malloc_func(ucx_perf_rdu_id, length, mem_kind);
+    address = ucx_perf_rdu_ops->malloc(ucx_perf_rdu_id, length, mem_kind);
     if (address == NULL) {
         ucs_error("rdu_malloc(rdu=%u, length=%zu, kind=%d) failed",
                   ucx_perf_rdu_id, length, mem_kind);
@@ -132,16 +95,6 @@ ucx_perf_rdu_alloc(size_t length, int mem_kind, void **address_p)
 
     *address_p = address;
     return UCS_OK;
-}
-
-static void ucx_perf_rdu_find_alloc_cb(const void *address, size_t size,
-                                       uint32_t rdu_id, void *arg)
-{
-    ucx_perf_rdu_find_alloc_t *find = arg;
-
-    if (address == find->address) {
-        find->size = size;
-    }
 }
 
 static ucs_status_t
@@ -165,29 +118,28 @@ ucx_perf_rdu_mem_alloc(size_t length, int mem_kind, void **address_p)
 static ucs_status_t ucx_perf_rdu_hbm_mem_alloc(const ucx_perf_context_t *perf,
                                                size_t length, void **address_p)
 {
-    return ucx_perf_rdu_mem_alloc(length, UCX_PERF_RDU_MEM_HBM, address_p);
+    return ucx_perf_rdu_mem_alloc(length, UCT_RDU_DEVMEM_MEM_HBM, address_p);
 }
 
 static ucs_status_t ucx_perf_rdu_ddr_mem_alloc(const ucx_perf_context_t *perf,
                                                size_t length, void **address_p)
 {
-    return ucx_perf_rdu_mem_alloc(length, UCX_PERF_RDU_MEM_DDR, address_p);
+    return ucx_perf_rdu_mem_alloc(length, UCT_RDU_DEVMEM_MEM_DDR, address_p);
 }
 
 static void ucx_perf_rdu_mem_free(const ucx_perf_context_t *perf, void *address)
 {
-    ucx_perf_rdu_find_alloc_t find = {address, 0};
+    const void *base;
+    size_t length;
 
     /* Remove the buffer from the memory type cache, as the rdu_free() hook
      * does, since the runtime reuses the address range */
-    if (ucs_memtype_cache_global_instance != NULL) {
-        ucx_perf_rdu_foreach_func(ucx_perf_rdu_find_alloc_cb, &find);
-        if (find.size != 0) {
-            ucs_memtype_cache_remove(address, find.size);
-        }
+    if ((ucs_memtype_cache_global_instance != NULL) &&
+        uct_rdu_devmem_find_alloc(address, &base, &length)) {
+        ucs_memtype_cache_remove(base, length);
     }
 
-    ucx_perf_rdu_free_func(ucx_perf_rdu_id, address);
+    ucx_perf_rdu_ops->free(ucx_perf_rdu_id, address);
 }
 
 static ucs_status_t
@@ -206,7 +158,7 @@ uct_perf_rdu_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
                                  flags, UCS_MEMORY_TYPE_RDU, &alloc_mem->memh);
     if (status != UCS_OK) {
         ucs_error("failed to register memory");
-        ucx_perf_rdu_free_func(ucx_perf_rdu_id, alloc_mem->address);
+        ucx_perf_rdu_ops->free(ucx_perf_rdu_id, alloc_mem->address);
         return status;
     }
 
@@ -220,7 +172,7 @@ static ucs_status_t uct_perf_rdu_hbm_alloc(const ucx_perf_context_t *perf,
                                            size_t length, unsigned flags,
                                            uct_allocated_memory_t *alloc_mem)
 {
-    return uct_perf_rdu_alloc_reg_mem(perf, length, UCX_PERF_RDU_MEM_HBM, flags,
+    return uct_perf_rdu_alloc_reg_mem(perf, length, UCT_RDU_DEVMEM_MEM_HBM, flags,
                                       alloc_mem);
 }
 
@@ -228,7 +180,7 @@ static ucs_status_t uct_perf_rdu_ddr_alloc(const ucx_perf_context_t *perf,
                                            size_t length, unsigned flags,
                                            uct_allocated_memory_t *alloc_mem)
 {
-    return uct_perf_rdu_alloc_reg_mem(perf, length, UCX_PERF_RDU_MEM_DDR, flags,
+    return uct_perf_rdu_alloc_reg_mem(perf, length, UCT_RDU_DEVMEM_MEM_DDR, flags,
                                       alloc_mem);
 }
 
@@ -244,7 +196,7 @@ static void uct_perf_rdu_free(const ucx_perf_context_t *perf,
         ucs_error("failed to deregister memory");
     }
 
-    ucx_perf_rdu_free_func(ucx_perf_rdu_id, alloc_mem->address);
+    ucx_perf_rdu_ops->free(ucx_perf_rdu_id, alloc_mem->address);
 }
 
 static void ucx_perf_rdu_memcpy(void *dst, ucs_memory_type_t dst_mem_type,

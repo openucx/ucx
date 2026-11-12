@@ -26,10 +26,9 @@
 
 
 typedef struct {
-    const void *address; /* Address to look up */
     const void *base; /* Start of the allocation containing the address */
     size_t     length; /* Length of the allocation containing the address */
-} uct_rdu_find_alloc_ctx_t;
+} uct_rdu_alloc_t;
 
 
 static ucs_config_field_t uct_rdu_md_config_table[] =
@@ -115,18 +114,6 @@ uct_rdu_md_get_sys_dev(uct_rdu_md_t *md, uint32_t rdu_id)
     return sys_dev;
 }
 
-static void
-uct_rdu_find_alloc_cb(const void *va, size_t size, uint32_t rdu_id, void *arg)
-{
-    uct_rdu_find_alloc_ctx_t *ctx = arg;
-
-    if ((ctx->address >= va) &&
-        (ctx->address < UCS_PTR_BYTE_OFFSET(va, size))) {
-        ctx->base   = va;
-        ctx->length = size;
-    }
-}
-
 static void uct_rdu_md_close(uct_md_h uct_md)
 {
     ucs_free(uct_md);
@@ -172,7 +159,7 @@ uct_rdu_md_detect_memory_type(uct_md_h md, const void *address, size_t length,
  */
 static void
 uct_rdu_md_memtype_cache_update(const void *address, size_t length,
-                                const uct_rdu_find_alloc_ctx_t *alloc,
+                                const uct_rdu_alloc_t *alloc,
                                 ucs_sys_device_t sys_dev)
 {
     ucs_memory_info_t mem_info;
@@ -207,7 +194,7 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
                                       uct_md_mem_attr_v2_t *mem_attr)
 {
     uct_rdu_md_t *md               = ucs_derived_of(uct_md, uct_rdu_md_t);
-    uct_rdu_find_alloc_ctx_t alloc = {address, address, length};
+    uct_rdu_alloc_t alloc          = {address, length};
     uint64_t dmabuf_offset         = 0;
     int dmabuf_fd                  = UCT_DMABUF_FD_INVALID;
     uct_rdu_devmem_status_t status;
@@ -223,7 +210,7 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
     sys_dev = uct_rdu_md_get_sys_dev(md, rdu_id);
 
     /* Report the whole allocation, if the runtime knows it */
-    uct_rdu_devmem_foreach_alloc(uct_rdu_find_alloc_cb, &alloc);
+    uct_rdu_devmem_find_alloc(address, &alloc.base, &alloc.length);
 
     uct_rdu_md_memtype_cache_update(address, length, &alloc, sys_dev);
 

@@ -24,6 +24,12 @@ typedef enum {
     UCT_RDU_DEVMEM_ENOTSUPPORTED = 4 /* the driver cannot export dma-buf */
 } uct_rdu_devmem_status_t;
 
+/* Memory kinds of rdu_malloc() */
+typedef enum {
+    UCT_RDU_DEVMEM_MEM_HBM = 0,
+    UCT_RDU_DEVMEM_MEM_DDR = 1
+} uct_rdu_devmem_mem_kind_t;
+
 /* Callback for rdu_foreach_alloc(): invoked once per live RDU allocation. */
 typedef void (*uct_rdu_devmem_foreach_cb_t)(const void *address, size_t size,
                                             uint32_t rdu_id, void *arg);
@@ -38,6 +44,11 @@ typedef struct uct_rdu_devmem_ops {
     uct_rdu_devmem_status_t (*dmabuf_export)(const void *address, size_t size,
                                              int *fd_p, uint64_t *offset_p);
     bool (*dmabuf_export_supported)(void);
+    /* Used only to allocate memory, as perftest does; the memory domain only
+     * looks up memory which the application allocated */
+    int (*init)(void);
+    void *(*malloc)(uint32_t rdu_id, size_t size, int mem_kind);
+    void (*free)(uint32_t rdu_id, void *address);
 } uct_rdu_devmem_ops_t;
 
 /*
@@ -51,6 +62,13 @@ const uct_rdu_devmem_ops_t *uct_rdu_devmem_get(void);
  * is decided once, when the runtime library is loaded, and does not change.
  */
 int uct_rdu_devmem_dmabuf_supported(void);
+
+/*
+ * Find the RDU allocation which contains an address. Return nonzero and set
+ * the start and length of the allocation if the runtime knows it.
+ */
+int uct_rdu_devmem_find_alloc(const void *address, const void **base_p,
+                              size_t *length_p);
 
 /*
  * Thin wrappers so call sites stay SDK-agnostic: they dispatch through the
