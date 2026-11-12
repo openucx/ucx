@@ -1310,6 +1310,7 @@ run_rc_verbs_nosrq_gtest() {
 		UCX_RC_VERBS_SRQ_ENABLE=n \
 		UCX_RC_VERBS_RX_CQ_LEN=262144 \
 		UCX_RC_VERBS_RX_MAX_WR=64 \
+		UCX_RC_VERBS_RNR_RETRY_COUNT=6 \
 		GTEST_FILTER="$gtest_filter" \
 		make -C test/gtest test
 }
