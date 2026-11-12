@@ -605,17 +605,17 @@ protected:
 };
 
 #define EXPLICIT_REG(_base, _off, _size, _type, _flags) \
-    ucs_memtype_cache_register(UCS_PTR_BYTE_OFFSET(_base, _off), _size, _type, \
-                               UCS_SYS_DEVICE_ID_UNKNOWN, _flags)
+    ucs_memtype_map_register(UCS_PTR_BYTE_OFFSET(_base, _off), _size, _type, \
+                             UCS_SYS_DEVICE_ID_UNKNOWN, _flags)
 
 #define EXPLICIT_UNREG(_base, _off, _size) \
-    ucs_memtype_cache_unregister(UCS_PTR_BYTE_OFFSET(_base, _off), _size)
+    ucs_memtype_map_unregister(UCS_PTR_BYTE_OFFSET(_base, _off), _size)
 
 UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x10000);
 
-    ASSERT_TRUE(ucs_memtype_cache_is_explicit());
+    ASSERT_TRUE(ucs_memtype_map_is_enabled());
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 5);
 
     /* The real bounds of the registration are reported */
@@ -817,13 +817,13 @@ UCS_TEST_F(test_memtype_explicit, unaligned_range) {
 
 /* Explicit mode requires the cache to be enabled and UCM events to be off */
 UCS_TEST_F(test_memtype_explicit, mode_selection) {
-    EXPECT_TRUE(ucs_memtype_cache_is_explicit());
+    EXPECT_TRUE(ucs_memtype_map_is_enabled());
 
     modify_config("MEMTYPE_CACHE", "n");
-    EXPECT_FALSE(ucs_memtype_cache_is_explicit());
+    EXPECT_FALSE(ucs_memtype_map_is_enabled());
     modify_config("MEMTYPE_CACHE", "y");
-    EXPECT_TRUE(ucs_memtype_cache_is_explicit());
+    EXPECT_TRUE(ucs_memtype_map_is_enabled());
 
     ucm_global_opts.enable_events = 1;
-    EXPECT_FALSE(ucs_memtype_cache_is_explicit());
+    EXPECT_FALSE(ucs_memtype_map_is_enabled());
 }

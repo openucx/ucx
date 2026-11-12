@@ -445,16 +445,16 @@ static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
-/* Add the memory of a user memory handle to the memory type cache, if the cache
- * holds only explicitly registered memory */
+/* Add the memory of a user memory handle to the memtype map, if the map is used
+ * instead of the event-driven memtype cache */
 static void
-ucp_memh_memtype_cache_register(ucp_context_h context, ucp_mem_h memh)
+ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
 {
     ucp_memory_info_t mem_info;
 
     ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
 
-    if (!ucs_memtype_cache_is_explicit()) {
+    if (!ucs_memtype_map_is_enabled()) {
         return;
     }
 
@@ -467,19 +467,19 @@ ucp_memh_memtype_cache_register(ucp_context_h context, ucp_mem_h memh)
                           ucp_memh_length(memh), &mem_info);
     }
 
-    ucs_memtype_cache_register(ucp_memh_address(memh), ucp_memh_length(memh),
-                               mem_info.type, mem_info.sys_dev,
-                               mem_info.flags);
+    ucs_memtype_map_register(ucp_memh_address(memh), ucp_memh_length(memh),
+                             mem_info.type, mem_info.sys_dev,
+                             mem_info.flags);
 }
 
-static void ucp_memh_memtype_cache_unregister(ucp_mem_h memh)
+static void ucp_memh_memtype_map_unregister(ucp_mem_h memh)
 {
     /* Imported memhs are not registered, but their range can match a local
      * registration, which unregister may wrongly remove */
-    if (ucs_memtype_cache_is_explicit() &&
+    if (ucs_memtype_map_is_enabled() &&
         !(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
-        ucs_memtype_cache_unregister(ucp_memh_address(memh),
-                                     ucp_memh_length(memh));
+        ucs_memtype_map_unregister(ucp_memh_address(memh),
+                                   ucp_memh_length(memh));
     }
 }
 
@@ -493,7 +493,7 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_assert(ucp_memh_is_user_memh(memh));
 
     /* Remove the memory from the cache before it is released */
-    ucp_memh_memtype_cache_unregister(memh);
+    ucp_memh_memtype_map_unregister(memh);
 
     mem.address = ucp_memh_address(memh);
     mem.length  = ucp_memh_length(memh);
@@ -1010,7 +1010,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     ucs_assert(ucp_memh_is_user_memh(memh));
-    ucp_memh_memtype_cache_register(context, memh);
+    ucp_memh_memtype_map_register(context, memh);
     return UCS_OK;
 
 err_put_rcache:

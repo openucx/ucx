@@ -69,8 +69,8 @@ void ucs_memtype_cache_cleanup(void);
  *
  * @return UCS_OK              - an element was found and the memory info is valid.
  * @return UCS_ERR_NO_ELEM     - an element was not found.
- * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled, or it holds
- *                               only explicit registrations and none of them
+ * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled, or the
+ *                               memtype map is used and no registration in it
  *                               contains the range.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
@@ -107,22 +107,23 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
 
 
 /**
- * Check if the memtype cache holds only explicitly registered memory, which is
- * the case when it is enabled with UCX_MEMTYPE_CACHE=y while UCM events are
- * disabled (UCX_MEM_EVENTS=n).
+ * Check if the memtype map is used instead of the event-driven memtype cache.
+ * This is the case when memtype caching is enabled with UCX_MEMTYPE_CACHE=y
+ * while UCM events are disabled (UCX_MEM_EVENTS=n). The map holds only memory
+ * which was registered explicitly.
  *
  * @return 1 if memory must be registered explicitly, 0 otherwise.
  */
-int ucs_memtype_cache_is_explicit(void);
+int ucs_memtype_map_is_enabled(void);
 
 
 /**
- * Register memory with a known lifetime in the explicit memtype cache. Must be
- * called only if @ref ucs_memtype_cache_is_explicit returns 1.
+ * Register memory with a known lifetime in the memtype map. Must be called only
+ * if @ref ucs_memtype_map_is_enabled returns 1.
  *
  * Every call adds a separate entry, so a range may be registered more than once
  * and ranges may overlap. Overlapping registrations must describe the same
- * memory. The caller must call @ref ucs_memtype_cache_unregister with the same
+ * memory. The caller must call @ref ucs_memtype_map_unregister with the same
  * range once per registration, before the memory is released, since without
  * UCM events the cache cannot detect that it became invalid.
  *
@@ -132,25 +133,25 @@ int ucs_memtype_cache_is_explicit(void);
  * @param [in]  sys_dev         System device of the range.
  * @param [in]  mem_flags       UCS memory flags of the range.
  */
-void ucs_memtype_cache_register(const void *address, size_t size,
-                                ucs_memory_type_t mem_type,
-                                ucs_sys_device_t sys_dev, uint8_t mem_flags);
+void ucs_memtype_map_register(const void *address, size_t size,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, uint8_t mem_flags);
 
 
 /**
  * Remove one registration of exactly this range, which was added by
- * @ref ucs_memtype_cache_register. Ranges that are not registered are ignored.
- * Must be called only if @ref ucs_memtype_cache_is_explicit returns 1.
+ * @ref ucs_memtype_map_register. Ranges that are not registered are ignored.
+ * Must be called only if @ref ucs_memtype_map_is_enabled returns 1.
  *
  * @param [in]  address         Start address passed to register.
  * @param [in]  size            Size passed to register.
  */
-void ucs_memtype_cache_unregister(const void *address, size_t size);
+void ucs_memtype_map_unregister(const void *address, size_t size);
 
 
 /**
  * Find if global memtype_cache is empty. Without a cache instance (the cache is
- * disabled, or it holds only explicit registrations) it returns 0, since the
+ * disabled, or the memtype map is used) it returns 0, since the
  * memory may not be host.
  *
  * @return 1 if empty 0 if otherwise.

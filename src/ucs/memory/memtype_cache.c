@@ -24,8 +24,8 @@
 
 
 static ucs_spinlock_t ucs_memtype_cache_global_instance_lock;
-static ucs_spinlock_t ucs_memtype_cache_explicit_lock;
-static ucs_interval_map_t ucs_memtype_cache_explicit_map;
+static ucs_spinlock_t ucs_memtype_map_lock;
+static ucs_interval_map_t ucs_memtype_map;
 static int ucs_memtype_cache_failed                    = 0;
 ucs_memtype_cache_t *ucs_memtype_cache_global_instance = NULL;
 
@@ -51,17 +51,18 @@ struct ucs_memtype_cache_region {
 };
 
 
-/* Explicit registration of a range, used when UCM events are disabled */
+/* Registration of a range in the memtype map, used when UCM events are
+ * disabled */
 typedef struct {
     ucs_interval_map_node_t super;     /**< Registered range, must be first */
     ucs_list_link_t         list;      /**< Used to release the entries */
     ucs_memory_type_t       mem_type;  /**< Memory type */
     ucs_sys_device_t        sys_dev;   /**< System device index */
     uint8_t                 mem_flags; /**< UCS memory flags */
-} ucs_memtype_cache_entry_t;
+} ucs_memtype_map_entry_t;
 
-#define UCS_MEMTYPE_CACHE_ENTRY_FMT "%p [0x%lx..0x%lx] %s dev %s flags 0x%x"
-#define UCS_MEMTYPE_CACHE_ENTRY_ARG(_entry) \
+#define UCS_MEMTYPE_MAP_ENTRY_FMT "%p [0x%lx..0x%lx] %s dev %s flags 0x%x"
+#define UCS_MEMTYPE_MAP_ENTRY_ARG(_entry) \
             (_entry), (_entry)->super.start, (_entry)->super.end, \
             ucs_memory_type_names[(_entry)->mem_type], \
             ucs_topo_sys_device_get_name((_entry)->sys_dev), \
@@ -69,10 +70,10 @@ typedef struct {
 
 /* Context of a search for an entry registered with exactly the same range */
 typedef struct {
-    uint64_t                  start;
-    uint64_t                  end;
-    ucs_memtype_cache_entry_t *entry;
-} ucs_memtype_cache_find_ctx_t;
+    uint64_t                start;
+    uint64_t                end;
+    ucs_memtype_map_entry_t *entry;
+} ucs_memtype_map_find_ctx_t;
 
 
 static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t);
@@ -80,7 +81,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t);
 
 UCS_CLASS_DEFINE(ucs_memtype_cache_t, void);
 
-int ucs_memtype_cache_is_explicit(void)
+int ucs_memtype_map_is_enabled(void)
 {
     return (ucs_global_opts.enable_memtype_cache == UCS_YES) &&
            !ucm_global_opts.enable_events;
@@ -91,10 +92,10 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
     ucs_memtype_cache_t *memtype_cache = NULL;
     ucs_status_t status;
 
-    /* Explicit registrations are kept apart from the event-driven cache, which
-     * is not created in that mode */
+    /* Registrations are kept in the memtype map, apart from the event-driven
+     * cache, which is not created in that mode */
     if ((ucs_global_opts.enable_memtype_cache == UCS_NO) ||
-        ucs_memtype_cache_is_explicit()) {
+        ucs_memtype_map_is_enabled()) {
         return NULL;
     }
 
@@ -378,36 +379,36 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
     }
 }
 
-static void ucs_memtype_cache_find_exact_cb(ucs_interval_map_node_t *node,
-                                            void *arg)
+static void ucs_memtype_map_find_exact_cb(ucs_interval_map_node_t *node,
+                                          void *arg)
 {
-    ucs_memtype_cache_find_ctx_t *ctx = arg;
+    ucs_memtype_map_find_ctx_t *ctx = arg;
 
     if ((node->start == ctx->start) && (node->end == ctx->end)) {
-        ctx->entry = ucs_derived_of(node, ucs_memtype_cache_entry_t);
+        ctx->entry = ucs_derived_of(node, ucs_memtype_map_entry_t);
     }
 }
 
-/* The explicit cache lock must be held. Callbacks must not modify the map, so
+/* The memtype map lock must be held. Callbacks must not modify the map, so
  * the entry is only returned here */
-static ucs_memtype_cache_entry_t *
-ucs_memtype_cache_find_exact(uint64_t start, uint64_t end)
+static ucs_memtype_map_entry_t *
+ucs_memtype_map_find_exact(uint64_t start, uint64_t end)
 {
-    ucs_memtype_cache_find_ctx_t ctx = {start, end, NULL};
+    ucs_memtype_map_find_ctx_t ctx = {start, end, NULL};
 
-    ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map,
+    ucs_interval_map_foreach_overlapping(&ucs_memtype_map,
                                          start, end,
-                                         ucs_memtype_cache_find_exact_cb,
+                                         ucs_memtype_map_find_exact_cb,
                                          &ctx);
     return ctx.entry;
 }
 
-static void ucs_memtype_cache_check_overlap_cb(ucs_interval_map_node_t *node,
-                                               void *arg)
+static void ucs_memtype_map_check_overlap_cb(ucs_interval_map_node_t *node,
+                                             void *arg)
 {
-    const ucs_memtype_cache_entry_t *new_entry = arg;
-    const ucs_memtype_cache_entry_t *entry     =
-            ucs_derived_of(node, ucs_memtype_cache_entry_t);
+    const ucs_memtype_map_entry_t *new_entry = arg;
+    const ucs_memtype_map_entry_t *entry     =
+            ucs_derived_of(node, ucs_memtype_map_entry_t);
 
     ucs_assertv_always(entry->mem_type == new_entry->mem_type,
                        "overlapping registrations of %s and %s memory",
@@ -415,14 +416,14 @@ static void ucs_memtype_cache_check_overlap_cb(ucs_interval_map_node_t *node,
                        ucs_memory_type_names[new_entry->mem_type]);
 }
 
-void ucs_memtype_cache_register(const void *address, size_t size,
-                                ucs_memory_type_t mem_type,
-                                ucs_sys_device_t sys_dev, uint8_t mem_flags)
+void ucs_memtype_map_register(const void *address, size_t size,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, uint8_t mem_flags)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
-    ucs_memtype_cache_entry_t *entry;
+    ucs_memtype_map_entry_t *entry;
 
-    ucs_assert(ucs_memtype_cache_is_explicit());
+    ucs_assert(ucs_memtype_map_is_enabled());
     ucs_assertv((size > 0) && (size <= UINTPTR_MAX - start) &&
                 (mem_type < UCS_MEMORY_TYPE_LAST),
                 "address=%p size=%zu mem_type=%d", address, size, mem_type);
@@ -439,66 +440,66 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     entry->sys_dev   = sys_dev;
     entry->mem_flags = mem_flags;
 
-    ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
+    ucs_spin_lock(&ucs_memtype_map_lock);
     if (UCS_ENABLE_ASSERT) {
-        ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map,
+        ucs_interval_map_foreach_overlapping(&ucs_memtype_map,
                                              start, start + size,
-                                             ucs_memtype_cache_check_overlap_cb,
+                                             ucs_memtype_map_check_overlap_cb,
                                              entry);
     }
-    ucs_interval_map_insert(&ucs_memtype_cache_explicit_map, &entry->super,
+    ucs_interval_map_insert(&ucs_memtype_map, &entry->super,
                             start, start + size);
-    ucs_trace("memtype_cache: register " UCS_MEMTYPE_CACHE_ENTRY_FMT,
-              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
-    ucs_spin_unlock(&ucs_memtype_cache_explicit_lock);
+    ucs_trace("memtype_map: register " UCS_MEMTYPE_MAP_ENTRY_FMT,
+              UCS_MEMTYPE_MAP_ENTRY_ARG(entry));
+    ucs_spin_unlock(&ucs_memtype_map_lock);
 }
 
-void ucs_memtype_cache_unregister(const void *address, size_t size)
+void ucs_memtype_map_unregister(const void *address, size_t size)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
-    ucs_memtype_cache_entry_t *entry;
+    ucs_memtype_map_entry_t *entry;
 
-    ucs_assert(ucs_memtype_cache_is_explicit());
+    ucs_assert(ucs_memtype_map_is_enabled());
     ucs_assertv((size > 0) && (size <= UINTPTR_MAX - start),
                 "address=%p size=%zu", address, size);
 
-    ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
-    entry = ucs_memtype_cache_find_exact(start, start + size);
+    ucs_spin_lock(&ucs_memtype_map_lock);
+    entry = ucs_memtype_map_find_exact(start, start + size);
     if (entry != NULL) {
-        ucs_interval_map_remove(&ucs_memtype_cache_explicit_map, &entry->super);
+        ucs_interval_map_remove(&ucs_memtype_map, &entry->super);
     }
-    ucs_spin_unlock(&ucs_memtype_cache_explicit_lock);
+    ucs_spin_unlock(&ucs_memtype_map_lock);
 
     if (entry == NULL) {
-        ucs_trace("memtype_cache: unregister [0x%lx..0x%lx] not found", start,
+        ucs_trace("memtype_map: unregister [0x%lx..0x%lx] not found", start,
                   start + size);
         return;
     }
 
-    ucs_trace("memtype_cache: unregister " UCS_MEMTYPE_CACHE_ENTRY_FMT,
-              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
+    ucs_trace("memtype_map: unregister " UCS_MEMTYPE_MAP_ENTRY_FMT,
+              UCS_MEMTYPE_MAP_ENTRY_ARG(entry));
     ucs_free(entry);
 }
 
 static ucs_status_t
-ucs_memtype_cache_lookup_explicit(uint64_t start, size_t size,
-                                  ucs_memory_info_t *mem_info)
+ucs_memtype_map_lookup(uint64_t start, size_t size,
+                       ucs_memory_info_t *mem_info)
 {
-    const ucs_memtype_cache_entry_t *entry;
+    const ucs_memtype_map_entry_t *entry;
     ucs_interval_map_node_t *node;
     ucs_status_t status;
 
     /* A racing registration is not visible yet, same as a miss */
-    if ((ucs_interval_map_count(&ucs_memtype_cache_explicit_map) == 0) ||
+    if ((ucs_interval_map_count(&ucs_memtype_map) == 0) ||
         (size > UINTPTR_MAX - start)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
+    ucs_spin_lock(&ucs_memtype_map_lock);
     /* Any registration containing the whole range may be returned, so with
      * nested ones the base address and length may be of either; partial
      * overlaps are misses */
-    node = ucs_interval_map_find_containing(&ucs_memtype_cache_explicit_map,
+    node = ucs_interval_map_find_containing(&ucs_memtype_map,
                                             start, start + ucs_max(size, 1));
     if (node == NULL) {
         ucs_trace("memtype_cache: [0x%lx..0x%lx] not contained in a "
@@ -506,7 +507,7 @@ ucs_memtype_cache_lookup_explicit(uint64_t start, size_t size,
         status = UCS_ERR_UNSUPPORTED;
     } else {
         entry                  = ucs_derived_of(node,
-                                                ucs_memtype_cache_entry_t);
+                                                ucs_memtype_map_entry_t);
         mem_info->base_address = (void*)node->start;
         mem_info->alloc_length = node->end - node->start;
         mem_info->type         = entry->mem_type;
@@ -514,41 +515,41 @@ ucs_memtype_cache_lookup_explicit(uint64_t start, size_t size,
         mem_info->mem_flags    = entry->mem_flags;
         status                 = UCS_OK;
     }
-    ucs_spin_unlock(&ucs_memtype_cache_explicit_lock);
+    ucs_spin_unlock(&ucs_memtype_map_lock);
 
     return status;
 }
 
-static void ucs_memtype_cache_explicit_release_cb(ucs_interval_map_node_t *node,
-                                                  void *arg)
+static void ucs_memtype_map_release_cb(ucs_interval_map_node_t *node,
+                                       void *arg)
 {
-    ucs_memtype_cache_entry_t *entry =
-            ucs_derived_of(node, ucs_memtype_cache_entry_t);
+    ucs_memtype_map_entry_t *entry =
+            ucs_derived_of(node, ucs_memtype_map_entry_t);
 
-    ucs_debug("memtype_cache: leftover registration "
-              UCS_MEMTYPE_CACHE_ENTRY_FMT,
-              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
+    ucs_debug("memtype_map: leftover registration "
+              UCS_MEMTYPE_MAP_ENTRY_FMT,
+              UCS_MEMTYPE_MAP_ENTRY_ARG(entry));
     ucs_list_add_tail(arg, &entry->list);
 }
 
-static void ucs_memtype_cache_explicit_cleanup(void)
+static void ucs_memtype_map_cleanup(void)
 {
-    ucs_memtype_cache_entry_t *entry;
+    ucs_memtype_map_entry_t *entry;
     UCS_LIST_HEAD(entry_list);
 
-    ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map, 0,
+    ucs_interval_map_foreach_overlapping(&ucs_memtype_map, 0,
                                          UINT64_MAX,
-                                         ucs_memtype_cache_explicit_release_cb,
+                                         ucs_memtype_map_release_cb,
                                          &entry_list);
 
     while (!ucs_list_is_empty(&entry_list)) {
-        entry = ucs_list_extract_head(&entry_list, ucs_memtype_cache_entry_t,
+        entry = ucs_list_extract_head(&entry_list, ucs_memtype_map_entry_t,
                                       list);
-        ucs_interval_map_remove(&ucs_memtype_cache_explicit_map, &entry->super);
+        ucs_interval_map_remove(&ucs_memtype_map, &entry->super);
         ucs_free(entry);
     }
 
-    ucs_spinlock_destroy(&ucs_memtype_cache_explicit_lock);
+    ucs_spinlock_destroy(&ucs_memtype_map_lock);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
@@ -562,8 +563,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     ucs_status_t status;
 
     if (memtype_cache == NULL) {
-        /* The registry is empty unless explicit mode is enabled */
-        return ucs_memtype_cache_lookup_explicit(start, size, mem_info);
+        /* The memtype map is empty unless it is enabled */
+        return ucs_memtype_map_lookup(start, size, mem_info);
     }
 
     ucs_spin_lock(&memtype_cache->lock);
@@ -653,14 +654,14 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
 void ucs_memtype_cache_global_init()
 {
     ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
-    ucs_spinlock_init(&ucs_memtype_cache_explicit_lock, 0);
-    ucs_interval_map_init(&ucs_memtype_cache_explicit_map);
+    ucs_spinlock_init(&ucs_memtype_map_lock, 0);
+    ucs_interval_map_init(&ucs_memtype_map);
 }
 
 void ucs_memtype_cache_cleanup()
 {
     ucs_spinlock_destroy(&ucs_memtype_cache_global_instance_lock);
-    ucs_memtype_cache_explicit_cleanup();
+    ucs_memtype_map_cleanup();
 
     if (ucs_memtype_cache_global_instance) {
         UCS_CLASS_DELETE(ucs_memtype_cache_t, ucs_memtype_cache_global_instance);
