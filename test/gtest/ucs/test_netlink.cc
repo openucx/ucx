@@ -268,6 +268,7 @@ UCS_TEST_F(test_netlink, route_get) {
 }
 
 UCS_TEST_F(test_netlink, kernel_route_matches) {
+    unsigned lo_index      = if_nametoindex("lo");
     unsigned num_defaults  = 0;
     struct sockaddr_in sin = {};
     struct if_nameindex *ifs, *ifp;
@@ -275,11 +276,12 @@ UCS_TEST_F(test_netlink, kernel_route_matches) {
     uint8_t best_prefix_len;
     ucs_status_t status;
 
+    ASSERT_NE(0u, lo_index);
+
     sin.sin_family = AF_INET;
     ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
-    status = ucs_netlink_kernel_route_matches(if_nametoindex("lo"),
-                                              (struct sockaddr*)&sin, NULL,
-                                              &best_prefix_len);
+    status = ucs_netlink_kernel_route_matches(lo_index, (struct sockaddr*)&sin,
+                                              NULL, &best_prefix_len);
     if (status == UCS_ERR_UNSUPPORTED) {
         UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
     }
