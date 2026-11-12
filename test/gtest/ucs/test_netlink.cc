@@ -212,6 +212,8 @@ UCS_TEST_F(test_netlink, route_get) {
 
     ASSERT_UCS_OK(status);
     EXPECT_EQ(RTN_LOCAL, route.type);
+    ASSERT_EQ(1, route.num_oifs);
+    EXPECT_EQ(static_cast<int>(lo_index), route.oifs[0]);
 
     ASSERT_UCS_OK(ucs_netlink_route_get((struct sockaddr*)&sin,
                                         (struct sockaddr*)&sin, lo_index,

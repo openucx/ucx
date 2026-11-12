@@ -21,12 +21,18 @@ typedef enum {
 } ucs_netlink_route_check_t;
 
 
+/* Maximal number of output interfaces of a route reported by the kernel */
+#define UCS_NETLINK_ROUTE_MAX_OIFS 16
+
+
 /**
  * Routing table entry selected by the kernel for a destination address.
  */
 typedef struct {
     uint8_t type;       /**< Route type, e.g. RTN_UNICAST or RTN_LOCAL */
     uint8_t prefix_len; /**< Destination prefix length of the entry */
+    uint8_t num_oifs;   /**< Number of live output interfaces */
+    int     oifs[UCS_NETLINK_ROUTE_MAX_OIFS]; /**< Output interface indexes */
 } ucs_netlink_route_t;
 
 /**
@@ -167,7 +173,8 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
  * Check whether the kernel routes a destination address through a network
  * interface. As in @ref ucs_netlink_route_matches with
  * UCS_NETLINK_ROUTE_CHECK_RELAXED, a default route is accepted only if the
- * routing domain of the interface has no more specific route.
+ * routing domain of the interface has no more specific route through another
+ * interface.
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.

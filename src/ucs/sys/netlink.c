@@ -579,11 +579,40 @@ ucs_netlink_route_req_add_addr(ucs_netlink_route_req_t *req, size_t *len_p,
     return UCS_OK;
 }
 
+static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
+{
+    if (route->num_oifs >= UCS_NETLINK_ROUTE_MAX_OIFS) {
+        ucs_debug("route has more than %d output interfaces, ignoring %d",
+                  UCS_NETLINK_ROUTE_MAX_OIFS, if_index);
+        return;
+    }
+
+    route->oifs[route->num_oifs++] = if_index;
+}
+
+static int
+ucs_netlink_route_has_oif(const ucs_netlink_route_t *route, int if_index)
+{
+    unsigned i;
+
+    for (i = 0; i < route->num_oifs; ++i) {
+        if (route->oifs[i] == if_index) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static ucs_status_t
 ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
 {
     ucs_netlink_route_t *route = arg;
     const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    int len                    = RTM_PAYLOAD(nlh);
+    const struct rtnexthop *nh;
+    const struct rtattr *rta;
+    int nh_len;
 
     if (nlh->nlmsg_type != RTM_NEWROUTE) {
         return UCS_INPROGRESS;
@@ -591,6 +620,26 @@ ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
 
     route->type       = rt_msg->rtm_type;
     route->prefix_len = rt_msg->rtm_dst_len;
+    route->num_oifs   = 0;
+
+    for (rta = RTM_RTA(rt_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if (rta->rta_type == RTA_OIF) {
+            ucs_netlink_route_add_oif(route, *(const int*)RTA_DATA(rta));
+        } else if (rta->rta_type == RTA_MULTIPATH) {
+            /* A fib match reply lists all the nexthops of the route, including
+             * the ones the kernel does not use. RTNH_OK() reads the nexthop
+             * length before checking the remaining length. */
+            nh_len = RTA_PAYLOAD(rta);
+            for (nh = RTA_DATA(rta);
+                 (nh_len >= (int)sizeof(*nh)) && RTNH_OK(nh, nh_len);
+                 nh_len -= RTNH_ALIGN(nh->rtnh_len), nh = RTNH_NEXT(nh)) {
+                if (!(nh->rtnh_flags & (RTNH_F_DEAD | RTNH_F_LINKDOWN))) {
+                    ucs_netlink_route_add_oif(route, nh->rtnh_ifindex);
+                }
+            }
+        }
+    }
+
     return UCS_OK;
 }
 
@@ -763,7 +812,8 @@ ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
             sa_remote, NULL,
             ucs_max(ucs_netlink_get_vrf_master_index(if_index), 0),
             &best_route);
-    if ((status == UCS_OK) && (best_route.prefix_len > 0)) {
+    if ((status == UCS_OK) && (best_route.prefix_len > 0) &&
+        !ucs_netlink_route_has_oif(&best_route, if_index)) {
         *best_prefix_len_p = best_route.prefix_len;
         return UCS_ERR_UNREACHABLE;
     }
