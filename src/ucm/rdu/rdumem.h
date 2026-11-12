@@ -9,6 +9,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+
+/*
+ * Names of the runtime library, found through the dynamic loader search path:
+ * the versioned SONAME first, then the unversioned name of older runtimes
+ */
+#define UCM_RDU_DEVMEM_LIBS \
+    { \
+        "librdu_devmem.so.1", "librdu_devmem.so" \
+    }
+
+
 /*
  * Allocation entry points of the SambaNova rdu_devmem runtime
  * (librdu_devmem.so).  The runtime header is not needed to build: the

@@ -12,12 +12,10 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/init_once.h>
+#include <ucm/rdu/rdumem.h>
 #include <dlfcn.h>
 
-/* Names of the runtime library, found through the dynamic loader search path:
- * the versioned SONAME first, then the unversioned name of older runtimes */
-static const char *uct_rdu_devmem_libs[] = {"librdu_devmem.so.1",
-                                            "librdu_devmem.so"};
+static const char *uct_rdu_devmem_libs[] = UCM_RDU_DEVMEM_LIBS;
 
 static ucs_init_once_t uct_rdu_devmem_init_once = UCS_INIT_ONCE_INITIALIZER;
 static uct_rdu_devmem_ops_t uct_rdu_devmem_ops;

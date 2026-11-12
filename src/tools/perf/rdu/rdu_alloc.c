@@ -12,6 +12,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/debug/log.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucm/rdu/rdumem.h>
 
 #include <dlfcn.h>
 #include <pthread.h>
@@ -56,7 +57,7 @@ static uint32_t ucx_perf_rdu_id;
 
 static void ucx_perf_rdu_do_init(void)
 {
-    static const char *libs[] = {"librdu_devmem.so.1", "librdu_devmem.so"};
+    static const char *libs[] = UCM_RDU_DEVMEM_LIBS;
     ucx_perf_rdu_init_func_t init_func;
     void *handle = NULL;
     unsigned i;
