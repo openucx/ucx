@@ -11,6 +11,10 @@
 # See file LICENSE for terms.
 #
 
+EXTRA_DIST = \
+	ucs/ucx.conf \
+	ucs/ucx_test.conf
+
 if HAVE_GTEST
 
 # Set default configuration for running tests
@@ -54,10 +58,6 @@ VALGRIND_ARGS = \
 	$(VALGRIND_EXTRA_ARGS)
 
 noinst_PROGRAMS = gtest
-
-EXTRA_DIST = \
-	ucs/ucx.conf \
-	ucs/ucx_test.conf
 
 gtestdir  = $(includedir)
 gtest_LDADD = \
