@@ -1763,7 +1763,6 @@ ucp_wireup_add_fast_lanes_a2a(const ucp_wireup_select_params_t *select_params,
 {
     int found_lane         = 0;
     double max_bw          = 0;
-    double lane_bw         = 0;
     ucp_worker_h worker    = select_params->ep->worker;
     ucp_context_h context  = worker->context;
     const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
@@ -1795,13 +1794,12 @@ ucp_wireup_add_fast_lanes_a2a(const ucp_wireup_select_params_t *select_params,
 
     /* Compare each element to max BW and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = sinfo->bandwidth;
-        if (lane_bw < (max_bw * max_ratio)) {
+        if (sinfo->bandwidth < (max_bw * max_ratio)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
                             &context->tl_rscs[sinfo->rsc_index].tl_rsc),
-                      lane_bw, max_ratio, max_bw);
+                      sinfo->bandwidth, max_ratio, max_bw);
             break;
 
             /* The rest won't be added, loop continues for logging */
@@ -1868,20 +1866,17 @@ static int ucp_wireup_add_fast_lanes_pairwise(
     int found_lane                     = 0;
     ucp_context_h UCS_V_UNUSED context = worker->context;
     ucs_status_t status;
-    double lane_bw;
     const ucp_wireup_select_info_t *sinfo;
 
     /* Compare each element to min_lane_bw and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = sinfo->bandwidth;
-
-        if (lane_bw < min_lane_bw) {
+        if (sinfo->bandwidth < min_lane_bw) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f MB/s lower than %.2f MB/s,"
                       " dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
                               &context->tl_rscs[sinfo->rsc_index].tl_rsc),
-                      lane_bw / UCS_MBYTE, min_lane_bw / UCS_MBYTE);
+                      sinfo->bandwidth / UCS_MBYTE, min_lane_bw / UCS_MBYTE);
             continue;
         }
 
