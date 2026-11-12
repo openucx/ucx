@@ -15,6 +15,9 @@ extern "C" {
 #include <ucm/event/event.h>
 }
 
+#include <exception>
+#include <memory>
+
 class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
     test_memtype_cache() {
@@ -559,11 +562,24 @@ protected:
         void *ptr;
 
         {
-            mem_buffer b(buf_size, GetParam());
+            std::unique_ptr<mem_buffer> buffer;
+            std::exception_ptr alloc_error;
+
+            try {
+                buffer.reset(new mem_buffer(buf_size, GetParam()));
+            } catch (...) {
+                alloc_error = std::current_exception();
+            }
 
             /* Allocate in all threads before any thread releases its buffer,
-             * since a released address range may be allocated again */
+             * since a released address range may be allocated again. Every
+             * thread reaches the barrier, also if its allocation failed. */
             barrier();
+            if (alloc_error) {
+                std::rethrow_exception(alloc_error);
+            }
+
+            mem_buffer &b = *buffer;
 
             test_memtype_cache::init();
 
