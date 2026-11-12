@@ -1,0 +1,108 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+job: ucx-wirecompat-repro
+failFast: false
+timeout_minutes: 120
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+runs_on_dockers:
+  - name: cx8-ib
+    arch: x86_64
+    url: harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+    tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true"
+    annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network"}]
+    limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}"
+    requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+  - name: cx7-roce
+    arch: x86_64
+    url: harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+    tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true"
+    annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2"}]
+    limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}"
+    requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+matrix:
+  axes:
+    arch: [x86_64]
+taskName: '${name}/${arch}'
+env:
+  UCX_HANDLE_ERRORS: bt
+  UCX_CM_REUSEADDR: "y"
+  UCX_LOG_LEVEL: info
+  UCX_WARN_UNUSED_ENV_VARS: "n"
+steps:
+  - name: Build and reproduce worker-address compatibility
+    parallel: false
+    timeout: 110
+    run: |
+      set -euo pipefail
+      ulimit -c 0
+      test -w "${WORKSPACE}"
+      case "$(readlink -f "${WORKSPACE}")" in /labhome/shasson|/labhome/shasson/*) exit 1;; esac
+      gcc --version | head -1
+      git rev-parse HEAD
+      build_wire() (
+          cd "$1"
+          ./autogen.sh
+          mkdir build-wire
+          cd build-wire
+          ../contrib/configure-release --enable-assertions --without-java --without-go --prefix="${PWD}/install"
+          make -s -j10
+          make install
+          gcc -Iinstall/include -Linstall/lib -Wl,-rpath-link,"${PWD}/install/lib" -o install/ucp_hworld ../examples/ucp_hello_world.c -lm -lucs -lucp
+      )
+      build_wire "${WORKSPACE}"
+      devices=$(LD_LIBRARY_PATH="${WORKSPACE}/build-wire/install/lib" ./build-wire/install/bin/ucx_info -d)
+      printf '%s\n' "${devices}"
+      [[ "${devices}" == *"Transport: rc_mlx5"* ]]
+      for revision in v1.14.0:ae505b93582b10ce15c29a546a86c168e2e36216 v1.18.0:693d02837894b9c346c9f91b105e4aff6f259c09; do
+          IFS=: read -r tag revision <<< "${revision}"
+          git clone --depth 1 --branch "${tag}" https://github.com/openucx/ucx.git "${WORKSPACE}/repro-${tag}"
+          git -C "${WORKSPACE}/repro-${tag}" rev-parse HEAD
+          test "$(git -C "${WORKSPACE}/repro-${tag}" rev-parse HEAD)" = "${revision}"
+          build_wire "${WORKSPACE}/repro-${tag}"
+      done
+      python3 - <<'PY'
+      import os, signal, subprocess, time
+      from contextlib import suppress
+      from pathlib import Path
+      root = Path(os.environ["WORKSPACE"])
+      current = root / "build-wire/install"
+      failed = False
+      for index, (tag, tls, reverse) in enumerate((tag, tls, rev) for tag in ("v1.14.0", "v1.18.0") for tls in (None, "^sm") for rev in (False, True)):
+          legacy = root / ("repro-" + tag) / "build-wire/install"
+          prefixes = (current, legacy) if reverse else (legacy, current)
+          env = os.environ.copy()
+          env.pop("UCX_TLS", None)
+          if tls is not None: env["UCX_TLS"] = tls
+          envs = [dict(env, LD_LIBRARY_PATH=str(prefix / "lib")) for prefix in prefixes]
+          exe, port, procs = str(legacy / "ucp_hworld"), 12200 + index, []
+          print("CASE", tag, tls or "default", "server/client", *prefixes, "port", port, flush=True)
+          try:
+              for prefix, process_env in zip(prefixes, envs):
+                  subprocess.run([str(prefix / "bin/ucx_info"), "-v"], env=process_env, check=True)
+                  subprocess.run(["ldd", exe], env=process_env, check=True)
+              procs.append(subprocess.Popen(["stdbuf", "-oL", exe, "-p", str(port)], env=envs[0], start_new_session=True))
+              ready = time.monotonic() + 20
+              while procs[0].poll() is None and time.monotonic() < ready:
+                  if any(line.split()[1].endswith(":%04X" % port) and line.split()[3] == "0A" for line in Path("/proc/net/tcp").read_text().splitlines()[1:]): break
+                  time.sleep(0.1)
+              else: raise RuntimeError("server did not listen")
+              deadline = time.monotonic() + 30
+              procs.append(subprocess.Popen(["stdbuf", "-oL", exe, "-p", str(port), "-n", "127.0.0.1"], env=envs[1], start_new_session=True))
+              for proc in reversed(procs):
+                  if proc.wait(timeout=max(0.1, deadline - time.monotonic())) != 0: raise RuntimeError("peer failed")
+          except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+              failed = True
+              print("CASE FAILED", error, flush=True)
+          finally:
+              for proc in procs:
+                  with suppress(ProcessLookupError):
+                      if proc.poll() is None: os.killpg(proc.pid, signal.SIGKILL)
+              for proc in procs: print("PEER", proc.pid, "RC", proc.wait(), flush=True)
+      raise SystemExit(1 if failed else 0)
+      PY

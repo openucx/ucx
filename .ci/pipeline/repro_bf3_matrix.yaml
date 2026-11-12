@@ -47,6 +47,7 @@ steps:
     timeout: 80
     run: |
       set -euo pipefail
+      ulimit -c 0
       test -w "${WORKSPACE}"
       test "$(readlink -f "${WORKSPACE}")" != /labhome/shasson
       case "$(readlink -f "${WORKSPACE}")" in /labhome/shasson/*) exit 1;; esac
