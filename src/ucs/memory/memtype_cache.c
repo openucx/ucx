@@ -428,10 +428,10 @@ void ucs_memtype_map_register(const void *address, size_t size,
                 (mem_type < UCS_MEMORY_TYPE_LAST),
                 "address=%p size=%zu mem_type=%d", address, size, mem_type);
 
-    entry = ucs_malloc(sizeof(*entry), "memtype_cache_entry");
+    entry = ucs_malloc(sizeof(*entry), "memtype_map_entry");
     if (entry == NULL) {
         /* The range is not cached, so lookups of it miss */
-        ucs_warn("failed to allocate memtype cache entry for [0x%lx..0x%lx] %s",
+        ucs_warn("failed to allocate memtype map entry for [0x%lx..0x%lx] %s",
                  start, start + size, ucs_memory_type_names[mem_type]);
         return;
     }
@@ -502,7 +502,7 @@ ucs_memtype_map_lookup(uint64_t start, size_t size,
     node = ucs_interval_map_find_containing(&ucs_memtype_map,
                                             start, start + ucs_max(size, 1));
     if (node == NULL) {
-        ucs_trace("memtype_cache: [0x%lx..0x%lx] not contained in a "
+        ucs_trace("memtype_map: [0x%lx..0x%lx] not contained in a "
                   "registration", start, start + size);
         status = UCS_ERR_UNSUPPORTED;
     } else {

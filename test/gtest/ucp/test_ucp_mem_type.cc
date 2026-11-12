@@ -270,6 +270,73 @@ UCS_TEST_P(test_ucp_memtype_explicit, map_allocate) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_explicit, self_cuda,
                               "self,cuda_copy")
 
+/* Transfers from and to memory which is cached by ucp_mem_map(), where the
+ * operations get no memory handle, so the protocols look the memory up */
+class test_ucp_memtype_explicit_xfer : public test_ucp_memtype_explicit {
+public:
+    virtual void init() {
+        test_ucp_memtype_explicit::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+protected:
+    static const uint64_t SEED = 0x2222222222222222lu;
+
+    void send_recv(void *send_ptr, void *recv_ptr, size_t length) {
+        ucp_request_param_t param;
+
+        param.op_attr_mask = 0;
+        mem_buffer::pattern_fill(send_ptr, length, SEED, mem_type());
+        mem_buffer::pattern_fill(recv_ptr, length, 0, mem_type());
+
+        void *rreq = ucp_tag_recv_nbx(receiver().worker(), recv_ptr, length, 1,
+                                      1, &param);
+        void *sreq = ucp_tag_send_nbx(sender().ep(), send_ptr, length, 1,
+                                      &param);
+        EXPECT_UCS_OK(request_wait(sreq));
+        EXPECT_UCS_OK(request_wait(rreq));
+
+        mem_buffer::pattern_check(recv_ptr, length, SEED, mem_type());
+    }
+};
+
+/* Send a rendezvous size message from an offset inside a mapped buffer, without
+ * passing the memory handle, and then send again after the buffers are
+ * unmapped, which falls back to the memory type detection */
+UCS_TEST_P(test_ucp_memtype_explicit_xfer, tag_send_from_mapped_buffer,
+           "RNDV_THRESH=0")
+{
+    static const size_t size   = 256 * UCS_KBYTE;
+    static const size_t offset = 4 * UCS_KBYTE;
+    const size_t length        = size - (2 * offset);
+    ucs_memory_info_t info;
+    ucp_mem_h send_memh, recv_memh;
+
+    mem_buffer send_buf(size, mem_type());
+    mem_buffer recv_buf(size, mem_type());
+    void *send_ptr = UCS_PTR_BYTE_OFFSET(send_buf.ptr(), offset);
+    void *recv_ptr = UCS_PTR_BYTE_OFFSET(recv_buf.ptr(), offset);
+
+    ASSERT_UCS_OK(map(send_buf.ptr(), size, &send_memh));
+    ASSERT_UCS_OK(map(recv_buf.ptr(), size, &recv_memh));
+
+    /* The lookup of a range inside the buffer reports the mapped range */
+    ASSERT_UCS_OK(lookup(send_ptr, length, &info));
+    EXPECT_EQ(mem_type(), info.type);
+    EXPECT_EQ(send_buf.ptr(), info.base_address);
+    EXPECT_EQ(size, info.alloc_length);
+
+    send_recv(send_ptr, recv_ptr, length);
+
+    unmap(send_memh);
+    unmap(recv_memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(send_ptr, length, &info));
+
+    send_recv(send_ptr, recv_ptr, length);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_explicit_xfer, all, "all")
+
 /*
  * The CUDA_COPY_DMABUF, ROCM_COPY_DMABUF and ZE_COPY_DMABUF settings decide
  * whether the GPU memory domains provide a DMA-BUF that the network memory
