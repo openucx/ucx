@@ -2031,13 +2031,17 @@ static int ucp_wireup_add_bw_lanes_pairwise(
         ucp_lane_index_t excl_lane, ucp_wireup_select_context_t *select_ctx,
         unsigned allow_extra_path)
 {
-    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucp_ep_h ep                               = select_params->ep;
-    ucp_context_h context                     = ep->worker->context;
-    double min_lane_bw                        = 0;
+    ucp_ep_h ep           = select_params->ep;
+    ucp_context_h context = ep->worker->context;
+    double min_lane_bw    = 0;
+    ucp_wireup_select_info_t sinfo_buffer[UCP_MAX_LANES];
+    ucp_proto_select_info_array_t sinfo_array;
     double max_ratio, max_bw;
     int skip_slow_lanes, found_lane;
 
+    /* At most max_lanes, which does not exceed UCP_MAX_LANES, are selected */
+    ucs_array_init_fixed(&sinfo_array, sinfo_buffer,
+                         ucs_static_array_size(sinfo_buffer));
     max_ratio       = 1. / context->config.ext.multi_lane_max_ratio;
     skip_slow_lanes = (select_params->address->dst_version >=
                        UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES);
@@ -2065,8 +2069,6 @@ static int ucp_wireup_add_bw_lanes_pairwise(
                                                     &sinfo_array,
                                                     bw_info->criteria.lane_type,
                                                     min_lane_bw, select_ctx);
-
-    ucs_array_cleanup_dynamic(&sinfo_array);
     return found_lane;
 }
 
