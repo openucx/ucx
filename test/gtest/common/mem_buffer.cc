@@ -137,8 +137,6 @@ constexpr size_t mem_buffer_rdu_max_allocs = 1024;
 /* Number of live allocations made by the tests */
 std::atomic<size_t> mem_buffer_rdu_num_allocs(0);
 
-/* -1: not checked, 0: not supported, 1: supported */
-int mem_buffer_rdu_status = -1;
 rdu_malloc_func_t mem_buffer_rdu_malloc;
 rdu_free_func_t mem_buffer_rdu_free;
 
@@ -147,18 +145,12 @@ rdu_free_func_t mem_buffer_rdu_free;
  * functions are called from a helper library through the relocation table, as
  * done by applications linked with the runtime, so UCM can intercept them.
  */
-bool mem_buffer_rdu_init()
+bool mem_buffer_rdu_do_init()
 {
     static const char *libs[] = {"librdu_devmem.so.1", "librdu_devmem.so"};
     rdu_init_func_t init_func;
     void *runtime = NULL;
     void *helper;
-
-    if (mem_buffer_rdu_status != -1) {
-        return mem_buffer_rdu_status == 1;
-    }
-
-    mem_buffer_rdu_status = 0;
 
     for (size_t i = 0; (i < ucs_static_array_size(libs)) && (runtime == NULL);
          ++i) {
@@ -184,8 +176,15 @@ bool mem_buffer_rdu_init()
         return false;
     }
 
-    mem_buffer_rdu_status = 1;
     return true;
+}
+
+/* Tests may check for RDU support from several threads, so initialize once */
+bool mem_buffer_rdu_init()
+{
+    static const bool supported = mem_buffer_rdu_do_init();
+
+    return supported;
 }
 
 } // namespace
