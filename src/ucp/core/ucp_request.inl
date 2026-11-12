@@ -527,6 +527,35 @@ ucp_request_send_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
     return ucp_request_send_buffer_reg(req, md_map, 0);
 }
 
+/* Whether every buffer of the request has a memory handle on the MD of the
+ * lane, after a successful ucp_request_send_reg_lane() */
+static UCS_F_ALWAYS_INLINE int
+ucp_request_send_lane_has_memh(const ucp_request_t *req, ucp_lane_index_t lane)
+{
+    const ucp_ep_h ep = req->send.ep;
+    ucp_md_map_t md_map;
+    size_t iov_it;
+
+    if (!(ucp_ep_md_attr(ep, lane)->flags & UCT_MD_FLAG_NEED_MEMH)) {
+        return 1;
+    }
+
+    md_map = UCS_BIT(ucp_ep_md_index(ep, lane));
+    if (UCP_DT_IS_CONTIG(req->send.datatype)) {
+        return ucp_memh_is_zero_length(req->send.state.dt.dt.contig.memh) ||
+               (req->send.state.dt.dt.contig.memh->md_map & md_map);
+    }
+
+    for (iov_it = 0; iov_it < req->send.state.dt.dt.iov.iovcnt; ++iov_it) {
+        if (!ucp_memh_is_zero_length(req->send.state.dt.dt.iov.memhs[iov_it]) &&
+            !(req->send.state.dt.dt.iov.memhs[iov_it]->md_map & md_map)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
     ucp_request_memory_dereg(req->send.datatype, &req->send.state.dt, req);

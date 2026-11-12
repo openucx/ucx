@@ -618,34 +618,6 @@ ucp_request_send_start_bcopy(ucp_request_t *req, size_t length,
     }
 }
 
-/* Whether every buffer of the request has a memory handle on the send lane's
- * MD, after a successful ucp_request_send_reg_lane() */
-static int ucp_request_send_lane_has_memh(const ucp_request_t *req)
-{
-    const ucp_ep_h ep = req->send.ep;
-    ucp_md_map_t md_map;
-    size_t iov_it;
-
-    if (!(ucp_ep_md_attr(ep, req->send.lane)->flags & UCT_MD_FLAG_NEED_MEMH)) {
-        return 1;
-    }
-
-    md_map = UCS_BIT(ucp_ep_md_index(ep, req->send.lane));
-    if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-        return ucp_memh_is_zero_length(req->send.state.dt.dt.contig.memh) ||
-               (req->send.state.dt.dt.contig.memh->md_map & md_map);
-    }
-
-    for (iov_it = 0; iov_it < req->send.state.dt.dt.iov.iovcnt; ++iov_it) {
-        if (!ucp_memh_is_zero_length(req->send.state.dt.dt.iov.memhs[iov_it]) &&
-            !(req->send.state.dt.dt.iov.memhs[iov_it]->md_map & md_map)) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
                                     size_t dt_count, size_t priv_iov_count,
@@ -682,7 +654,8 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             return status;
         }
 
-        if (ucs_unlikely(!ucp_request_send_lane_has_memh(req))) {
+        if (ucs_unlikely(!ucp_request_send_lane_has_memh(req,
+                                                         req->send.lane))) {
             /* Registration succeeds without the lane's MD when that MD cannot
              * reach the memory, and zcopy would post a NULL memory handle. */
             ucp_trace_req(req, "no memh for lane[%d], falling back to bcopy",
