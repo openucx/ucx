@@ -25,6 +25,7 @@
 
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
                        ucs_sys_device_t);
+
 typedef struct {
     ucs_numa_node_t numa_node;
     size_t          group_idx;

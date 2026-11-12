@@ -80,7 +80,8 @@ typedef enum {
 
 /**
  * Get the depth of the deepest PCIe bridge shared by two system devices, below
- * the PCI root.
+ * the PCI root. Called with the topology lock held, so it must not take the
+ * lock.
  *
  * @param [in] sys_dev1  First system device.
  * @param [in] sys_dev2  Second system device.
