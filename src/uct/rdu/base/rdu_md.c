@@ -115,18 +115,11 @@ uct_rdu_md_get_sys_dev(uct_rdu_md_t *md, uint32_t rdu_id)
 
     ucs_debug("rdu_md: rdu %u is %s, sys_dev %u", rdu_id, path, sys_dev);
 
-    /* Mark the RDU as an accelerator, as the GPU memory domains do, so UCP
-     * takes it into account when it assigns the closest NICs. The RDUs are
-     * found one by one, when their memory is first queried, and the runtime
-     * does not report how many there are, so the accelerator list is never
-     * known to be complete */
-    if ((ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC) !=
-         UCS_OK) ||
-        (ucs_topo_device_class_mark_incomplete(UCS_TOPO_DEVICE_CLASS_ACC) !=
-         UCS_OK)) {
-        ucs_debug("rdu_md: failed to set the device class of rdu %u", rdu_id);
-    }
-
+    /* The RDU is not marked as an accelerator: the RDUs are found one by one,
+     * when their memory is first queried, so the accelerator list would either
+     * be renumbered as RDUs are found, or have to be marked incomplete, which
+     * disables the NIC assignment of the GPUs in the same process. The NICs of
+     * an RDU are selected with UCX_NET_DEVICES */
     md->sys_dev[rdu_id] = sys_dev;
     return sys_dev;
 }
