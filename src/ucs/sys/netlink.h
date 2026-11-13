@@ -182,9 +182,11 @@ void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
  *                               same address family as the destination, or
  *                               NULL.
  * @param [in]  if_index         Optional outgoing interface index, or 0.
- *                               When it is set, the kernel considers only
- *                               routes through this interface, or the routes
- *                               of its VRF when it is a VRF device.
+ *                               When it is set, the kernel prefers routes
+ *                               through this interface, or uses the routes of
+ *                               its VRF when it is a VRF device. An IPv6
+ *                               lookup with a source address can still select
+ *                               a route through another interface.
  * @param [out] route_p          Filled with the selected routing table entry.
  *
  * @return UCS_OK if a route was found, UCS_ERR_UNREACHABLE if the kernel has

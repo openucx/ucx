@@ -66,7 +66,7 @@ typedef struct {
 
 typedef struct {
     uint64_t dst[2]; /* IPv4 or IPv6 address */
-    uint64_t src[2];
+    uint64_t src[2]; /* IPv4 or IPv6 address */
     int      if_index;
     int      family;
 } ucs_netlink_route_key_t;
@@ -596,27 +596,45 @@ static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
     route->oifs[route->num_oifs++] = if_index;
 }
 
-/* Check whether a route is not through an interface, but through another
- * interface of the routing domain of a VRF device, or out of any VRF if -1.
- * When some output interfaces were not stored, the interface can be one of
- * them, so the route is not considered to be through another interface. */
-static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
-                                              int if_index, int vrf_index)
+/* Check whether a route can be through an interface. When the output
+ * interfaces are not reported, or some of them were not stored, the interface
+ * can be one of them. */
+static int ucs_netlink_route_has_oif(const ucs_netlink_route_t *route,
+                                     int if_index)
 {
-    int is_via_domain_oif = 0;
     unsigned i;
+
+    if ((route->num_oifs == 0) || route->is_oifs_truncated) {
+        return 1;
+    }
 
     for (i = 0; i < route->num_oifs; ++i) {
         if (route->oifs[i] == if_index) {
-            return 0;
-        }
-
-        if (ucs_netlink_get_vrf_master_index(route->oifs[i]) == vrf_index) {
-            is_via_domain_oif = 1;
+            return 1;
         }
     }
 
-    return is_via_domain_oif && !route->is_oifs_truncated;
+    return 0;
+}
+
+/* Check whether a route is not through an interface, but through another
+ * interface of the routing domain of a VRF device, or out of any VRF if -1 */
+static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
+                                              int if_index, int vrf_index)
+{
+    unsigned i;
+
+    if (ucs_netlink_route_has_oif(route, if_index)) {
+        return 0;
+    }
+
+    for (i = 0; i < route->num_oifs; ++i) {
+        if (ucs_netlink_get_vrf_master_index(route->oifs[i]) == vrf_index) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static ucs_status_t
@@ -820,8 +838,18 @@ ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
     *best_prefix_len_p = 0;
 
     status = ucs_netlink_route_get(sa_remote, sa_local, if_index, &route);
-    if ((status != UCS_OK) || (route.prefix_len > 0)) {
+    if (status != UCS_OK) {
         return status;
+    }
+
+    /* An IPv6 lookup with a source address can select a route through another
+     * interface */
+    if (!ucs_netlink_route_has_oif(&route, if_index)) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    if (route.prefix_len > 0) {
+        return UCS_OK;
     }
 
     /* The lookup is done without the source address, because per-source
