@@ -6,6 +6,10 @@
 # See file LICENSE for terms.
 #
 
+EXTRA_DIST = \
+	test_cuda_get_symbol_address.cu \
+	uct_info/uct_info.c
+
 SUBDIRS = profiling
 
 SUBDIRS += iodemo
