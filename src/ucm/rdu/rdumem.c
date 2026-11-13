@@ -70,7 +70,8 @@ static void *ucm_rdu_dlsym(const char *symbol, int *lib_loaded_p)
     for (i = 0;
          (i < ucs_static_array_size(ucm_rdu_devmem_libs)) && (func_ptr == NULL);
          ++i) {
-        dl = dlopen(ucm_rdu_devmem_libs[i], RTLD_LAZY | RTLD_NOLOAD);
+        dl = dlopen(ucm_rdu_devmem_libs[i],
+                    RTLD_LAZY | RTLD_NOLOAD | RTLD_NODELETE);
         if (dl != NULL) {
             *lib_loaded_p = 1;
             func_ptr      = dlsym(dl, symbol);
