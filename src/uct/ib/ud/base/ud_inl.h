@@ -69,14 +69,18 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_skb_release(uct_ud_send_skb_t *skb, int is_inline)
+uct_ud_skb_release(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb, int is_inline)
 {
     ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
-    if (is_inline) {
-        ucs_mpool_put_inline(skb);
+    if (UCT_UD_PSN_COMPARE(skb->tx_sn, <=, iface->tx.comp_sn)) {
+        if (is_inline) {
+            ucs_mpool_put_inline(skb);
+        } else {
+            ucs_mpool_put(skb);
+        }
     } else {
-        ucs_mpool_put(skb);
+        ucs_queue_push(&iface->tx.skb_pending_free, &skb->queue);
     }
 }
 
