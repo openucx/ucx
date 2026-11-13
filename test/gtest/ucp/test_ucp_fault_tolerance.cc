@@ -451,19 +451,17 @@ protected:
 
         if (!(op_mask & TEST_OP_WIREUP)) {
             flush_workers();
+
+            UCS_TEST_MESSAGE << "Attempting " << op_str
+                             << " operation before failure injection...";
+            ucs_status_t status = do_am_send_and_wait(
+                    sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+                    op_mask & TEST_OP_FLUSH);
+            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                      << ucs_status_string(status);
         }
 
         std::vector<ucp_lane_index_t> am_bw_lanes = get_lanes(op_mask);
-
-        UCS_TEST_MESSAGE << "Attempting " << op_str
-                         << " operation before failure injection...";
-        if (expect_completed(op_mask, failure_side, [&]() {
-                return do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                           am_msg_size(),
-                                           op_mask & TEST_OP_FLUSH);
-            })) {
-            return;
-        }
 
         ucs_status_t status;
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
@@ -557,10 +555,6 @@ protected:
         const size_t size        = rma_msg_size();
         const std::string op_str = op_name(op_mask);
 
-        if (!(op_mask & TEST_OP_WIREUP)) {
-            flush_workers();
-        }
-
         std::vector<ucp_lane_index_t> rma_bw_lanes = get_lanes(op_mask);
 
         mem_buffer lbuf(size, UCS_MEMORY_TYPE_HOST);
@@ -574,13 +568,16 @@ protected:
             rbuf.pattern_fill(m_seed);
         }
 
-        UCS_TEST_MESSAGE << "Attempting " << op_str
-                         << " operation before failure injection...";
-        if (expect_completed(op_mask, failure_side, [&]() {
-                return do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                       op_mask, lbuf, rbuf, rkey.get(), size);
-            })) {
-            return;
+        if (!(op_mask & TEST_OP_WIREUP)) {
+            flush_workers();
+
+            UCS_TEST_MESSAGE << "Attempting " << op_str
+                             << " operation before failure injection...";
+            ucs_status_t status = do_rma_and_wait(
+                    sender().ep(0, INJECTED_EP_INDEX), op_mask, lbuf, rbuf,
+                    rkey.get(), size);
+            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                      << ucs_status_string(status);
         }
 
         ucs_status_t status;
@@ -1246,8 +1243,12 @@ bool test_ucp_fault_tolerance::wireup_op_failed(unsigned op_mask,
         return false;
     }
 
-    ASSERT_NE(UCS_INPROGRESS, status)
+    /* ASSERT_* returns void and cannot be used in this bool function. */
+    EXPECT_NE(UCS_INPROGRESS, status)
             << "operation timed out during wireup";
+    if (status == UCS_INPROGRESS) {
+        return true;
+    }
 
     deadline = ucs::get_deadline();
     while ((m_total_err_count == 0) && (ucs_get_time() < deadline)) {
@@ -1255,14 +1256,14 @@ bool test_ucp_fault_tolerance::wireup_op_failed(unsigned op_mask,
     }
 
     if (failure_side == FAILURE_SIDE_INITIATOR) {
-        ASSERT_EQ(1, m_initiator_err_count)
+        EXPECT_EQ(1, m_initiator_err_count)
                 << "Error callback invoked " << m_initiator_err_count
                 << " times";
-        ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
+        EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
                 << "Error callback invoked " << m_total_err_count
                 << " times";
     } else {
-        ASSERT_NE(0u, m_total_err_count)
+        EXPECT_NE(0u, m_total_err_count)
                 << "Error callback was not invoked";
     }
 
