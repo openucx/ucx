@@ -98,6 +98,7 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
         status = ucp_config_read(NULL, NULL, &config);
         if (status != UCS_OK) {
             JNU_ThrowExceptionByStatus(env, status);
+            return 0;
         }
 
         jucx_map_apply_config(env, config, &config_map);
@@ -107,12 +108,13 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
     ucp_params.name = "jucx";
 
     status = ucp_init(&ucp_params, config, &ucp_context);
-    if (status != UCS_OK) {
-        JNU_ThrowExceptionByStatus(env, status);
-    }
-
     if (config != NULL) {
         ucp_config_release(config);
+    }
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+        return 0;
     }
 
     return (native_ptr)ucp_context;
@@ -174,6 +176,7 @@ Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
     ucs_status_t status = ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
     }
 
     ucp_mem_attr_t attr = {0};
@@ -183,7 +186,9 @@ Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
 
     status = ucp_mem_query(memh, &attr);
     if (status != UCS_OK) {
+        ucp_mem_unmap((ucp_context_h)ucp_context_ptr, memh);
         JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
     }
 
     // Construct UcpMemory class
@@ -210,6 +215,7 @@ Java_org_openucx_jucx_ucp_UcpContext_queryMemTypesNative(JNIEnv *env, jclass cls
     ucs_status_t status = ucp_context_query((ucp_context_h)ucp_context_ptr, &params);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return 0;
     }
 
     return params.memory_types;

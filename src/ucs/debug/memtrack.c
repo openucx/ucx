@@ -311,6 +311,11 @@ static void ucs_memtrack_vfs_read(void *obj, ucs_string_buffer_t *strb,
     FILE *f;
 
     f = open_memstream(&buffer, &size);
+    if (f == NULL) {
+        ucs_string_buffer_appendf(strb, "<failed to create memory stream>");
+        return;
+    }
+
     ucs_memtrack_dump(f);
     fclose(f);
 
