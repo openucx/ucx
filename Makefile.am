@@ -71,6 +71,7 @@ EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-release-mt
 EXTRA_DIST += contrib/configure-prof
+EXTRA_DIST += contrib/configure-opt
 EXTRA_DIST += contrib/buildrpm.sh
 EXTRA_DIST += contrib/lsan.supp
 EXTRA_DIST += contrib/valgrind.supp
