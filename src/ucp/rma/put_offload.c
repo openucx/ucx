@@ -17,6 +17,9 @@
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
 
+
+extern ucp_proto_t ucp_put_am_bcopy_proto;
+
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
@@ -646,8 +649,26 @@ ucp_proto_put_sgl_contig_add_variant(
         return;
     }
 
-    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_AUTO, 20, perf, NULL,
-                               0);
+    ucp_proto_select_add_proto(init_params,
+                               (proto->cfg_thresh == UCS_MEMUNITS_INF) ?
+                                       UCS_MEMUNITS_INF : UCS_MEMUNITS_AUTO,
+                               0, perf, NULL, 0);
+}
+
+static int ucp_proto_put_sgl_contig_has_native(
+        const ucp_proto_init_params_t *init_params)
+{
+    const ucp_proto_select_init_protocols_t *protos = init_params->ctx;
+    const ucp_proto_init_elem_t *elem;
+
+    ucs_array_for_each(elem, &protos->protocols) {
+        if (ucp_proto_id_field(elem->proto_id, fallback_class) &
+            UCP_PROTO_CLASS_RMA_FALLBACK) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 /* Fallback for memory without a direct SGL path: send each element as a
@@ -664,7 +685,8 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         (select_param->dt_class != UCP_DATATYPE_SGL) ||
-        (init_params->rkey_config_key == NULL)) {
+        (init_params->rkey_config_key == NULL) ||
+        ucp_proto_put_sgl_contig_has_native(init_params)) {
         return;
     }
 
@@ -683,7 +705,8 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
     /* Elements are selected again at send time, variants only model their
      * perf */
     ucs_array_for_each(proto, &proto_init->protocols) {
-        if (!(ucp_proto_id_field(proto->proto_id, flags) &
+        if ((ucp_protocols[proto->proto_id] != &ucp_put_am_bcopy_proto) &&
+            !(ucp_proto_id_field(proto->proto_id, flags) &
               UCP_PROTO_FLAG_INVALID)) {
             ucp_proto_put_sgl_contig_add_variant(init_params, proto);
         }
