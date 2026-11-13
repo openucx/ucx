@@ -189,10 +189,10 @@ static void create_gold_data(size_t size)
 }
 
 ucs_log_func_rc_t
-ucx_errors_and_warnings_counter(const char *file, unsigned line,
-                                const char *function, ucs_log_level_t level,
-                                const ucs_log_component_config_t *comp_conf,
-                                const char *format, va_list ap)
+test_cuda_errors_and_warnings_counter(
+        const char *file, unsigned line, const char *function,
+        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
+        const char *format, va_list ap)
 {
     if ((level == UCS_LOG_LEVEL_ERROR) || (level == UCS_LOG_LEVEL_WARN)) {
         ++total_ucx_errors_and_warnings;
@@ -628,7 +628,7 @@ int test_cuda_init(int argc, char **argv, init_params_h *init_params_p)
 
     create_gold_data(SIZE_L);
 
-    ucs_log_push_handler(ucx_errors_and_warnings_counter);
+    ucs_log_push_handler(test_cuda_errors_and_warnings_counter);
 
     return 0;
 

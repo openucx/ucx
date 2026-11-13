@@ -50,10 +50,10 @@ void test_cuda_cleanup(const init_params_h init_params);
 
 
 ucs_log_func_rc_t
-ucx_errors_and_warnings_counter(const char *file, unsigned line,
-                                const char *function, ucs_log_level_t level,
-                                const ucs_log_component_config_t *comp_conf,
-                                const char *format, va_list ap);
+test_cuda_errors_and_warnings_counter(
+        const char *file, unsigned line, const char *function,
+        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
+        const char *format, va_list ap);
 
 
 unsigned test_cuda_get_errors_and_warnings(void);

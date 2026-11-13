@@ -1029,12 +1029,12 @@ run_mpi_tests() {
 					env LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH} \
 					./test/mpi/test_cuda_ipc_overlap || overlap_status=$?
 				if [ "$overlap_status" -eq 77 ]; then
-					log_warning "CUDA IPC overlap regression skipped"
+					echo "CUDA IPC overlap regression skipped"
 				elif [ "$overlap_status" -ne 0 ]; then
 					return "$overlap_status"
 				fi
 			else
-				log_warning "CUDA IPC overlap regression unavailable, skipping"
+				echo "CUDA IPC overlap regression unavailable, skipping"
 			fi
 
 			# test_rma_cuda and test_ucp_rkey_destroy are not run: they fail

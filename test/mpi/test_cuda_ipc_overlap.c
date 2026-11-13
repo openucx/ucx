@@ -91,7 +91,7 @@ static int open_ipc(ipc_context_t *ipc)
     return 1;
 }
 
-static int check_ipc(int rank, CUdeviceptr ptr)
+static int check_legacy_ipc(int rank, CUdeviceptr ptr)
 {
     CUipcMemHandle handle;
     CUdeviceptr mapped;
@@ -124,14 +124,16 @@ static int check_ipc(int rank, CUdeviceptr ptr)
     return 0;
 }
 
-static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
-                     CUdeviceptr recv, size_t size, unsigned char value,
-                     unsigned char *host)
+static ucs_status_t transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
+                             CUdeviceptr recv, size_t size, unsigned char value,
+                             unsigned char *host)
 {
     uct_md_mkey_pack_params_t pack_params = {0};
+    ucs_status_t status                  = UCS_OK;
     uct_mem_h memh;
     uct_rkey_bundle_t rkey;
     void *mapped;
+    int rkey_valid;
 
     if (rank == 0) {
         CUDA_CHECK(cuMemsetD8(send, value, size));
@@ -145,24 +147,36 @@ static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
     MPI_Bcast(ipc->rkey_buffer, ipc->rkey_size, MPI_BYTE, 0, MPI_COMM_WORLD);
     if (rank == 1) {
         /* Count diagnostics only while importing the remote mapping. */
-        ucs_log_push_handler(ucx_errors_and_warnings_counter);
-        UCX_CHECK(uct_rkey_unpack(ipc->component, ipc->rkey_buffer, &rkey));
-        UCX_CHECK(uct_rkey_ptr(ipc->component, &rkey, send, &mapped));
-        ucs_log_pop_handler();
-        CUDA_CHECK(cuMemcpyDtoD(recv, (CUdeviceptr)mapped, size));
-        memset(host, value, size);
-        if (test_cuda_check_buffer(recv, host, size) != 0) {
-            fprintf(stderr, "data mismatch in %zu-byte transfer\n", size);
-            MPI_Abort(MPI_COMM_WORLD, 1);
+        ucs_log_push_handler(test_cuda_errors_and_warnings_counter);
+        status     = uct_rkey_unpack(ipc->component, ipc->rkey_buffer, &rkey);
+        rkey_valid = (status == UCS_OK);
+        if (rkey_valid) {
+            status = uct_rkey_ptr(ipc->component, &rkey, send, &mapped);
         }
-        UCX_CHECK(uct_rkey_release(ipc->component, &rkey));
+
+        ucs_log_pop_handler();
+
+        if (status == UCS_OK) {
+            CUDA_CHECK(cuMemcpyDtoD(recv, (CUdeviceptr)mapped, size));
+            memset(host, value, size);
+            if (test_cuda_check_buffer(recv, host, size) != 0) {
+                fprintf(stderr, "data mismatch in %zu-byte transfer\n", size);
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+        }
+
+        if (rkey_valid) {
+            UCX_CHECK(uct_rkey_release(ipc->component, &rkey));
+        }
     }
 
     /* The sender must not free an allocation until its receiver is done. */
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Bcast(&status, sizeof(status), MPI_BYTE, 1, MPI_COMM_WORLD);
     if (rank == 0) {
         UCX_CHECK(uct_md_mem_dereg(ipc->md, memh));
     }
+
+    return status;
 }
 
 int main(int argc, char **argv)
@@ -176,6 +190,7 @@ int main(int argc, char **argv)
     MPI_Comm local_comm;
     unsigned char *host;
     CUresult result;
+    ucs_status_t status;
     int rank, size, local_size, available, all_available, iteration, ret;
     int device_count = 0;
 
@@ -231,11 +246,6 @@ int main(int argc, char **argv)
     CUDA_CHECK(cuDevicePrimaryCtxRetain(&context, device));
     CUDA_CHECK(cuCtxPushCurrent(context));
     CUDA_CHECK(cuMemAlloc(&recv, 2 * BLOCK_SIZE));
-    ret = check_ipc(rank, recv);
-    if (ret != 0) {
-        goto out_free_recv;
-    }
-
     host = malloc(2 * BLOCK_SIZE);
     if (host == NULL) {
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -257,7 +267,24 @@ int main(int argc, char **argv)
             CUDA_CHECK(cuMemAlloc(&upper, BLOCK_SIZE));
         }
 
-        transfer(&ipc, rank, old, recv, BLOCK_SIZE, iteration + 1, host);
+        status = transfer(&ipc, rank, old, recv, BLOCK_SIZE, iteration + 1,
+                          host);
+        if ((iteration == 0) && (status == UCS_ERR_UNREACHABLE)) {
+            /* Unpack also reports unexpected import errors as unreachable.
+             * Diagnose unsupported legacy IPC only after UCT has failed. */
+            ret = check_legacy_ipc(rank, old);
+            if (ret == 77) {
+                if (rank == 0) {
+                    CUDA_CHECK(cuMemFree(old));
+                    CUDA_CHECK(cuMemFree(lower));
+                    CUDA_CHECK(cuMemFree(upper));
+                }
+
+                goto out_free_ipc;
+            }
+        }
+
+        UCX_CHECK(status);
 
         if (rank == 0) {
             CUDA_CHECK(cuMemFree(old));
@@ -267,8 +294,8 @@ int main(int argc, char **argv)
                         ((replacement + 2 * BLOCK_SIZE) > old);
         }
 
-        transfer(&ipc, rank, replacement, recv, 2 * BLOCK_SIZE, iteration + 101,
-                 host);
+        UCX_CHECK(transfer(&ipc, rank, replacement, recv, 2 * BLOCK_SIZE,
+                           iteration + 101, host));
         if (rank == 0) {
             CUDA_CHECK(cuMemFree(replacement));
             CUDA_CHECK(cuMemFree(upper));
@@ -296,7 +323,6 @@ out_free_ipc:
     }
 
     free(host);
-out_free_recv:
     CUDA_CHECK(cuMemFree(recv));
     MPI_Finalize();
     CUDA_CHECK(cuCtxPopCurrent(NULL));
