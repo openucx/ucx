@@ -7,8 +7,6 @@
 #ifndef TEST_CUDA_COMMON_H
 #define TEST_CUDA_COMMON_H
 
-#include <ucs/debug/log_def.h>
-
 #include <cuda.h>
 #include <mpi.h>
 #include <stdio.h>
@@ -47,18 +45,5 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
 
 
 void test_cuda_cleanup(const init_params_h init_params);
-
-
-ucs_log_func_rc_t
-test_cuda_errors_and_warnings_counter(
-        const char *file, unsigned line, const char *function,
-        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
-        const char *format, va_list ap);
-
-
-unsigned test_cuda_get_errors_and_warnings(void);
-
-
-int test_cuda_check_buffer(CUdeviceptr dptr, const void *expected, size_t size);
 
 #endif

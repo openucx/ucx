@@ -11,6 +11,8 @@
 #include "test_cuda_check_def.h"
 #include "test_cuda_common.h"
 
+#include <ucs/debug/log_def.h>
+
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -189,21 +191,16 @@ static void create_gold_data(size_t size)
 }
 
 ucs_log_func_rc_t
-test_cuda_errors_and_warnings_counter(
-        const char *file, unsigned line, const char *function,
-        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
-        const char *format, va_list ap)
+ucx_errors_and_warnings_counter(const char *file, unsigned line,
+                                const char *function, ucs_log_level_t level,
+                                const ucs_log_component_config_t *comp_conf,
+                                const char *format, va_list ap)
 {
     if ((level == UCS_LOG_LEVEL_ERROR) || (level == UCS_LOG_LEVEL_WARN)) {
         ++total_ucx_errors_and_warnings;
     }
 
     return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
-unsigned test_cuda_get_errors_and_warnings(void)
-{
-    return total_ucx_errors_and_warnings;
 }
 
 static alloc_mem_t alloc_mem_alloc(size_t size)
@@ -386,7 +383,7 @@ static xfer_params_t init_xfer_params(const test_params_t *params,
     return xfer_params;
 }
 
-int test_cuda_check_buffer(CUdeviceptr dptr, const void *expected, size_t size)
+static int check_result(CUdeviceptr dptr, size_t size)
 {
     void *h_buffer;
     int ret;
@@ -398,7 +395,7 @@ int test_cuda_check_buffer(CUdeviceptr dptr, const void *expected, size_t size)
     }
 
     cuda_memcpy(h_buffer, (void*)dptr, size);
-    ret = memcmp(h_buffer, expected, size);
+    ret = memcmp(h_buffer, gold_data, size);
     free(h_buffer);
     return ret;
 }
@@ -409,7 +406,7 @@ static int check_and_free_mem(const test_params_t *params,
 {
     int ret;
 
-    ret = test_cuda_check_buffer(alloc_mem_recv->ptr, gold_data, params->size);
+    ret = check_result(alloc_mem_recv->ptr, params->size);
     params->allocator_send->free(alloc_mem_send);
     params->allocator_recv->free(alloc_mem_recv);
     return ret;
@@ -628,7 +625,7 @@ int test_cuda_init(int argc, char **argv, init_params_h *init_params_p)
 
     create_gold_data(SIZE_L);
 
-    ucs_log_push_handler(test_cuda_errors_and_warnings_counter);
+    ucs_log_push_handler(ucx_errors_and_warnings_counter);
 
     return 0;
 

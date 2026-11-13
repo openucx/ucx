@@ -1020,23 +1020,6 @@ run_mpi_tests() {
 						./test/mpi/test_mpi_cuda
 			fi
 
-			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_cuda_ipc_overlap ]
-			then
-				echo "==== Running CUDA IPC overlap regression ===="
-				local overlap_status=0
-				# MPI may prepend its own library directory when starting ranks.
-				${MPIRUN} -np 2 -x UCX_LOG_LEVEL=warn \
-					env LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH} \
-					./test/mpi/test_cuda_ipc_overlap || overlap_status=$?
-				if [ "$overlap_status" -eq 77 ]; then
-					echo "CUDA IPC overlap regression skipped"
-				elif [ "$overlap_status" -ne 0 ]; then
-					return "$overlap_status"
-				fi
-			else
-				echo "CUDA IPC overlap regression unavailable, skipping"
-			fi
-
 			# test_rma_cuda and test_ucp_rkey_destroy are not run: they fail
 			# on the CI GPU hosts
 

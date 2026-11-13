@@ -22,7 +22,6 @@ noinst_LTLIBRARIES    = libtest_memhooks.la
 
 if HAVE_CUDA
 noinst_PROGRAMS      += test_mpi_cuda \
-                        test_cuda_ipc_overlap \
                         test_rma_cuda \
                         test_ucp_rkey_destroy
 
@@ -65,14 +64,6 @@ test_mpi_cuda_CFLAGS   = $(BASE_CFLAGS)
 test_mpi_cuda_LDFLAGS  = $(CUDA_LDFLAGS)
 test_mpi_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
                          libtest_cuda_common.la
-
-test_cuda_ipc_overlap_SOURCES  = test_cuda_ipc_overlap.c
-test_cuda_ipc_overlap_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
-test_cuda_ipc_overlap_CFLAGS   = $(BASE_CFLAGS)
-test_cuda_ipc_overlap_LDFLAGS  = $(CUDA_LDFLAGS)
-test_cuda_ipc_overlap_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
-                                 $(top_builddir)/src/uct/libuct.la \
-                                 libtest_cuda_common.la
 
 test_rma_cuda_SOURCES  = test_rma_cuda.c
 test_rma_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)

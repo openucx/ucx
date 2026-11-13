@@ -11,6 +11,7 @@
 #include "cuda_vmm_mem_buffer.h"
 
 #include <cuda_runtime.h>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -739,4 +740,178 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->num_regions);
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
+}
+
+/* Exercise production cache operations with only driver open/close mocked. */
+class test_cuda_ipc_cache_overlap : public test_cuda_ipc_cache_lru {
+protected:
+    void init() override
+    {
+        static const uct_cuda_ipc_cache_ops_t ops = {open, close};
+
+        test_cuda_ipc_cache_lru::init();
+        create_cache(ULONG_MAX, SIZE_MAX);
+        ASSERT_NE(nullptr, m_cache);
+        m_cache->ops   = &ops;
+        m_self        = this;
+        m_open_status = UCS_OK;
+    }
+
+    void cleanup() override
+    {
+        if (m_cache != nullptr) {
+            uct_cuda_ipc_destroy_cache(m_cache, 1);
+            m_cache = nullptr;
+        }
+
+        EXPECT_TRUE(m_mappings.empty());
+        m_self = nullptr;
+        test_cuda_ipc_cache_lru::cleanup();
+    }
+
+    void seed(size_t index)
+    {
+        auto region = insert_region(index);
+        /* Keep unrelated mappings referenced despite global eviction limits. */
+        m_mappings.insert(region->mapped_addr);
+    }
+
+    ucs_status_t put(uintptr_t address, size_t length, uint64_t buffer_id = 99)
+    {
+        uct_cuda_ipc_extended_rkey_t key = {};
+        void *mapped                   = nullptr;
+        ucs_status_t status;
+
+        key.super.d_bptr         = address;
+        key.super.b_len          = length;
+        key.super.ph.buffer_id   = buffer_id;
+        key.super.ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
+        status = uct_cuda_ipc_cache_put_region(m_cache, &key, 0, &mapped,
+                                                UCS_LOG_LEVEL_ERROR);
+        EXPECT_EQ((status == UCS_OK) ? (void*)address : nullptr, mapped);
+        return status;
+    }
+
+    void check_cache(unsigned long count, size_t size)
+    {
+        EXPECT_EQ(count, m_cache->num_regions);
+        EXPECT_EQ(count, m_cache->pgtable.num_regions);
+        EXPECT_EQ(count, ucs_list_length(&m_cache->lru_list));
+        EXPECT_EQ(count, m_mappings.size());
+        EXPECT_EQ(size, m_cache->total_size);
+    }
+
+    static ucs_status_t open(uct_cuda_ipc_extended_rkey_t *key, CUdevice,
+                             CUdeviceptr *mapped, ucs_log_level_t)
+    {
+        ucs_status_t status = m_self->m_open_status;
+
+        m_self->m_events += 'o';
+        m_self->m_open_status = UCS_OK;
+        if (status == UCS_OK) {
+            *mapped = key->super.d_bptr;
+            EXPECT_TRUE(m_self->m_mappings.insert((void*)*mapped).second);
+        }
+
+        return status;
+    }
+
+    static ucs_status_t close(uct_cuda_ipc_cache_region_t *region)
+    {
+        m_self->m_events += 'c';
+        EXPECT_EQ(1ul, m_self->m_mappings.erase(region->mapped_addr));
+        return UCS_OK;
+    }
+
+    static ucs_status_t open_with_conflict(uct_cuda_ipc_extended_rkey_t *key,
+                                           CUdevice cu_dev, CUdeviceptr *mapped,
+                                           ucs_log_level_t log_level)
+    {
+        ucs_status_t status = open(key, cu_dev, mapped, log_level);
+
+        /* Force insertion to fail after import has succeeded. */
+        m_self->seed(0);
+        return status;
+    }
+
+    static test_cuda_ipc_cache_overlap *m_self;
+    std::set<void*> m_mappings;
+    std::string m_events;
+    ucs_status_t m_open_status;
+};
+
+test_cuda_ipc_cache_overlap *test_cuda_ipc_cache_overlap::m_self;
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, lower_overlap)
+{
+    seed(1);
+    seed(2);
+    /* The driver accepts the open even if an old mapping remains. Checking
+     * call order must still reject invalidation delayed until insert fails. */
+    EXPECT_UCS_OK(put(BASE_ADDR + 3 * REGION_SIZE / 2, REGION_SIZE));
+    EXPECT_EQ("co", m_events);
+    EXPECT_TRUE(pgtable_has(2));
+    check_cache(2, 2 * REGION_SIZE);
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, aligned_overlap)
+{
+    seed(1);
+    EXPECT_UCS_OK(put(BASE_ADDR + 2 * REGION_SIZE - 1, 2));
+    EXPECT_EQ("co", m_events);
+    auto region = ucs_pgtable_lookup(&m_cache->pgtable,
+                                     BASE_ADDR + 2 * REGION_SIZE - 1);
+    ASSERT_NE(nullptr, region);
+    EXPECT_EQ(BASE_ADDR + 2 * REGION_SIZE - UCS_PGT_ADDR_ALIGN, region->start);
+    EXPECT_EQ(BASE_ADDR + 2 * REGION_SIZE + UCS_PGT_ADDR_ALIGN, region->end);
+    check_cache(1, 2);
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, cache_hit)
+{
+    seed(0);
+    EXPECT_UCS_OK(put(BASE_ADDR, REGION_SIZE, 0));
+    EXPECT_TRUE(m_events.empty());
+    check_cache(1, REGION_SIZE);
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, failed_open)
+{
+    seed(1);
+    seed(2);
+    m_open_status = UCS_ERR_INVALID_PARAM;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              put(BASE_ADDR + 3 * REGION_SIZE / 2, REGION_SIZE));
+    EXPECT_EQ("co", m_events);
+    EXPECT_FALSE(pgtable_has(1));
+    EXPECT_TRUE(pgtable_has(2));
+    check_cache(1, REGION_SIZE);
+    EXPECT_UCS_OK(put(BASE_ADDR + 3 * REGION_SIZE / 2, REGION_SIZE));
+    check_cache(2, 2 * REGION_SIZE);
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, purge_retry)
+{
+    seed(1);
+    seed(2);
+    m_open_status = UCS_ERR_ALREADY_EXISTS;
+    EXPECT_UCS_OK(put(BASE_ADDR + 3 * REGION_SIZE / 2, REGION_SIZE));
+    EXPECT_EQ("coco", m_events);
+    EXPECT_FALSE(pgtable_has(2));
+    check_cache(1, REGION_SIZE);
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_overlap, insert_failure)
+{
+    static const uct_cuda_ipc_cache_ops_t ops = {open_with_conflict, close};
+
+    seed(2);
+    m_cache->ops = &ops;
+    scoped_log_handler slh(hide_errors_logger);
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS, put(BASE_ADDR + UCS_PGT_ADDR_ALIGN,
+                                          2 * UCS_PGT_ADDR_ALIGN));
+    EXPECT_EQ("oc", m_events);
+    EXPECT_TRUE(pgtable_has(0));
+    EXPECT_TRUE(pgtable_has(2));
+    check_cache(2, 2 * REGION_SIZE);
 }
