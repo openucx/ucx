@@ -306,9 +306,13 @@ ucp_address_get_device(ucp_context_h context, ucp_rsc_index_t rsc_index,
     const ucp_tl_resource_desc_t *tl_rsc = context->tl_rscs;
     ucp_address_packed_device_t *dev;
 
+    /* Group by device name rather than dev_index: resources sharing a system
+     * device (e.g. TCP interfaces on the same NIC) have the same dev_index but
+     * different device addresses */
     for (dev = devices; dev < devices + *num_devices_p; ++dev) {
         if ((tl_rsc[rsc_index].md_index == tl_rsc[dev->rsc_index].md_index) &&
-            (tl_rsc[rsc_index].dev_index == tl_rsc[dev->rsc_index].dev_index)) {
+            !strcmp(tl_rsc[rsc_index].tl_rsc.dev_name,
+                    tl_rsc[dev->rsc_index].tl_rsc.dev_name)) {
             goto out;
         }
     }
@@ -1139,7 +1143,7 @@ static void *ucp_address_unpack_header(const void *ptr,
     if (*addr_version == UCP_OBJECT_VERSION_V1) {
         *addr_flags  = *addr_header >> UCP_ADDRESS_HEADER_SHIFT;
         /* With address v1 it is packed after devices */
-        *dst_version = 0;
+        *dst_version = UCP_VERSION_LEGACY;
         return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     }
 
@@ -1638,12 +1642,11 @@ static ucp_rsc_index_t ucp_address_get_remote_device_index(
 static void
 ucp_address_adjust_unpacked_md_index(ucp_unpacked_address_t *unpacked_address)
 {
-    /* Last version that still packs legacy bits in MD index field */
-    const unsigned max_legacy_api_version = 18u;
     size_t i;
 
     if ((unpacked_address->addr_version > UCP_OBJECT_VERSION_V1) ||
-        (unpacked_address->dst_version > max_legacy_api_version)) {
+        (unpacked_address->dst_version >=
+         UCP_MIN_DST_VERSION_ADDRESS_MD_INDEX)) {
         return;
     }
 

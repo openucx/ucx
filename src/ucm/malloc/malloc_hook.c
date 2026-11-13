@@ -369,9 +369,18 @@ static void *ucm_memalign(size_t alignment, size_t size, const void *caller)
 
 static void* ucm_calloc(size_t nmemb, size_t size)
 {
-    void *ptr = ucm_malloc_impl(nmemb * size, "calloc");
+    size_t total_size;
+    void *ptr;
+
+    if (ucs_unlikely((size != 0) && (nmemb > (SIZE_MAX / size)))) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    total_size = nmemb * size;
+    ptr        = ucm_malloc_impl(total_size, "calloc");
     if (ptr != NULL) {
-        memset(ptr, 0, nmemb * size);
+        memset(ptr, 0, total_size);
     }
     return ptr;
 }

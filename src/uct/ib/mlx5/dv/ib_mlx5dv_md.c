@@ -32,11 +32,6 @@
      UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
 
 
-static uint32_t uct_ib_mlx5_flush_rkey_make()
-{
-    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
-}
-
 ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
@@ -1001,8 +996,9 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     strict_order_mr =
             uct_ib_md_is_strict_order_mr_required(&md->super, params);
-    status = uct_ib_mlx5_devx_memh_alloc(md, length, flags, strict_order_mr,
-                                         sizeof(memh->mrs[0]), &memh);
+    status = uct_ib_mlx5_devx_memh_alloc(
+            md, length, uct_ib_md_memh_alloc_flags(&md->super, params),
+            strict_order_mr, sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
     }
@@ -2000,7 +1996,7 @@ err_dereg_mr:
     uct_ib_dereg_mr(md->flush_mr);
     md->flush_mr = NULL;
 err:
-    md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
+    md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
 ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
@@ -3440,7 +3436,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     md->direct_nic_sys_dev =
             uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
-    md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
+    md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;
