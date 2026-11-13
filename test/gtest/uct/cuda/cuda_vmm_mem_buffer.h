@@ -83,7 +83,9 @@ public:
         prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
         prop.location.type                   = location_type;
         prop.allocFlags.gpuDirectRDMACapable = gdr_capable;
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
         prop.allocFlags.usage                = usage;
+#endif
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
         if (location_type == CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
             prop.location.localized.deviceId         = (unsigned char)device;
