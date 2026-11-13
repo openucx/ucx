@@ -4,10 +4,10 @@
  */
 
 /* AVX2 NT buffer-transfer implementation.  Defines the inline helpers and
- * forward kernels used when AVX is enabled: NT_DEST streams destination stores
- * and issues an sfence, while NT_SOURCE uses regular stores without a fence.
- * The bridge macros at the end bind these kernels to the generic dispatcher
- * hooks in cpu.c. */
+ * forward kernels used when AVX is enabled without AVX512BW: NT_DEST streams
+ * destination stores and issues an sfence, while NT_SOURCE uses regular stores
+ * without a fence.  The bridge macros at the end bind these kernels to the
+ * generic dispatcher hooks in cpu.c. */
 
 /* Copy a sub-cache-line remainder with overlapping stores.
  * len in [1,63]; dst is 64B-aligned; src may be unaligned. */
