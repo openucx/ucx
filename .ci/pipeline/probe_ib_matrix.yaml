@@ -1,0 +1,63 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe
+
+failFast: false
+timeout_minutes: 60
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+runs_on_dockers:
+  - {
+      name: "hca-roce",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+    probe: [s0, s1, s2, s3]
+
+taskName: '${name}/${arch}/noshm/${probe}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 45
+    run: |
+      set -x
+      echo "==== probe=noshm/${probe}"
+      df -h /dev/shm
+      mount | grep -E " /dev/shm " || true
+
+      ./autogen.sh
+      mkdir -p build-test && cd build-test
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java \
+          --enable-gtest --without-valgrind
+      make -j10 -s
+      make -j10 -s -C test/gtest gtest
+
+      export UCX_HANDLE_ERRORS=bt
+      export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
+      export GTEST_SHARD_INDEX=${probe#s}
+      export GTEST_TOTAL_SHARDS=4
+      export GTEST_FILTER='rc_mlx5/*:rc_verbs/*:dc_mlx5/*:ud_verbs/*:ud_mlx5/*:dcx/*:ud/*:udx/*:rc/*:rcx/*:shm_ib/*:-*test_uct_peer_failure_multiple*'
+      ( set +x; while sleep 60; do df -h /dev/shm | tail -1; done ) &
+      mon_pid=$!
+      make -C test/gtest test && rc=0 || rc=$?
+      kill ${mon_pid} || true
+      df -h /dev/shm
+      echo "==== RESULT probe=noshm/${probe} rc=${rc}"
+      exit ${rc}
