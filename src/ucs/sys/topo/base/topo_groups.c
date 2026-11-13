@@ -456,11 +456,11 @@ static ucs_status_t ucs_topo_groups_add_unmatched_gpus(
 static void
 ucs_topo_groups_remove_groups_without_nics(ucs_topo_groups_t *groups)
 {
-    size_t group_idx, num_groups;
     ucs_topo_group_t *group;
+    size_t num_groups;
 
     num_groups = 0;
-    ucs_array_for_each_index(group, group_idx, groups) {
+    ucs_array_for_each(group, groups) {
         if (ucs_array_is_empty(&group->nics)) {
             ucs_topo_release_group(group);
         } else {
@@ -478,10 +478,11 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
         ucs_topo_pci_bridge_depth_func_t pci_bridge_depth,
         ucs_topo_groups_t *groups)
 {
-    const size_t num_gpus = ucs_array_length(&inventory->gpus);
-    const size_t num_nics = ucs_array_length(&inventory->nics);
-    unsigned *depths      = NULL, *switch_depths = NULL;
-    size_t *gpu_groups    = NULL;
+    const size_t num_gpus   = ucs_array_length(&inventory->gpus);
+    const size_t num_nics   = ucs_array_length(&inventory->nics);
+    unsigned *depths        = NULL;
+    unsigned *switch_depths = NULL;
+    size_t *gpu_groups      = NULL;
     ucs_topo_group_t unmatched;
     ucs_status_t status;
 
