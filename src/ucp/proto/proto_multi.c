@@ -770,8 +770,9 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_proto_multi_lane_priv_t *lpriv;
     const uct_iface_attr_v2_t *attr_v2;
+    const ucp_proto_select_param_t *select_param;
     uint64_t v2_cap_flags;
-    int sgl_is_put;
+    int sgl_is_put, sgl_is_get;
     size_t min_length;
     size_t max_frag, min_end_offset, min_chunk;
     uint32_t weight_sum;
@@ -782,6 +783,10 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     v2_cap_flags        = params->first.tl_v2_cap_flags |
                           params->middle.tl_v2_cap_flags;
     sgl_is_put          = v2_cap_flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    select_param        = params->super.super.select_param;
+    sgl_is_get          = (select_param->dt_class == UCP_DATATYPE_SGL) &&
+                          (ucp_proto_select_op_id(select_param) ==
+                           UCP_OP_ID_GET);
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
                                                       selection->lane_map);
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
@@ -875,6 +880,10 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
+
+        lpriv->min_sgl_frag   = sgl_is_get ?
+                ucp_proto_common_get_iface_attr(&params->super.super,
+                                                lane)->cap.get.min_zcopy : 0;
 
         if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
