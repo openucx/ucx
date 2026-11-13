@@ -1,1 +1,3 @@
-usr/lib/ucx/*rdu*
+usr/lib/ucx/libucm_rdu.*
+usr/lib/ucx/libuct_rdu.*
+usr/lib/ucx/libucx_perftest_rdu.*
