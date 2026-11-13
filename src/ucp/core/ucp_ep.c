@@ -1875,6 +1875,8 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
               old_uct_ep, wireup_ep_uct);
     ucp_ep_set_lane(ep, lane, wireup_ep_uct);
     uct_ep_destroy(old_uct_ep);
+    /* Flush still names the endpoint this proxy replaced. */
+    ++ep->ext->lane_generation;
     return UCS_OK;
 }
 
@@ -2192,9 +2194,8 @@ static void ucp_ep_recovery_lane_ready(ucp_ep_h ep, ucp_lane_index_t lane)
 
     /* Consumed here, including when this lane cannot become ready yet.
      * A stale success would skip arming the next probe. */
-    if (arg != NULL) {
-        ucp_ep_recovery_reset_probe(&arg->probe[lane]);
-    }
+    ucs_assert(arg != NULL);
+    ucp_ep_recovery_reset_probe(&arg->probe[lane]);
 
     /* A probe can finish after connect failed. That lane stays failed. */
     if ((wireup_ep == NULL) ||
@@ -2204,8 +2205,7 @@ static void ucp_ep_recovery_lane_ready(ucp_ep_h ep, ucp_lane_index_t lane)
 
     if (!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)) {
         /* Not connected, so this success must not end the round. */
-        if ((arg != NULL) &&
-            (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK)) {
+        if (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK) {
             arg->state = UCP_EP_RECOVERY_STATE_PROBING;
         }
 
@@ -2219,11 +2219,8 @@ static void ucp_ep_recovery_lane_ready(ucp_ep_h ep, ucp_lane_index_t lane)
                             UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
     ucs_debug("ep %p: recovered p2p-lane[%d] via rsc[%d]", ep, lane,
               ucp_ep_get_rsc_index(ep, lane));
-    /* Rebuild schedules this only when the probe already finished. An
-     * asynchronous probe has to switch the proxy on after it completes. */
-    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
-                              ucp_wireup_eps_progress, ep);
-    ucp_worker_signal_internal(ep->worker);
+    /* An asynchronous probe has to switch the proxy on after it completes. */
+    ucp_wireup_eps_progress_sched(ep);
 }
 
 static ucs_status_t
@@ -2276,6 +2273,14 @@ ucp_ep_recovery_rebuild_p2p_lane(
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
     ucs_assert(wireup_ep != NULL);
     probe = &ucp_ep_recovery_arg(ep)->probe[lane];
+
+    /* Already connected, and not ready. A later message may name a new peer
+     * address, which this latch would ignore. Start recovery over instead. */
+    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) &&
+        !(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)) {
+        ucp_ep_recovery_arg(ep)->restart_lanes |= UCS_BIT(lane);
+        return UCS_INPROGRESS;
+    }
 
     /* Connect with the address in hand. FAILED stays set until the probe
      * succeeds, including when that success is already known here. */
@@ -2542,9 +2547,28 @@ static void ucp_ep_recovery_probe_failed(ucp_ep_h ep, ucp_lane_index_t lane)
         ucp_wireup_ep_destroy_next_ep(wireup_ep);
     }
 
-    if ((arg != NULL) && (arg->probe[lane].comp.count == 0)) {
-        ucp_ep_recovery_reset_probe(&arg->probe[lane]);
-    }
+    ucs_assert(arg != NULL);
+    ucs_assert(arg->probe[lane].comp.count == 0);
+    ucp_ep_recovery_reset_probe(&arg->probe[lane]);
+}
+
+/* A later exchange cannot connect over the latched endpoint. Drop it and
+ * start this lane's recovery from the beginning. */
+static void ucp_ep_recovery_restart_lane(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
+
+    ucs_assert(arg != NULL);
+    ucs_assert(ucp_ep_recovery_probe_status(&arg->probe[lane]) !=
+               UCS_INPROGRESS);
+
+    ucs_diag("ep %p: lane %d is connected but not ready, restarting recovery",
+             ep, lane);
+    ucp_ep_recovery_probe_failed(ep, lane);
+    arg->restart_lanes &= ~UCS_BIT(lane);
+    /* Already published. Clear it so the new round includes this lane. */
+    arg->sent_lanes &= ~UCS_BIT(lane);
+    ucp_ep_set_lanes_failed(ep, UCS_BIT(lane), UCS_ERR_UNREACHABLE);
 }
 
 int ucp_ep_recovery_progress(ucp_ep_h ep)
@@ -2590,6 +2614,25 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     }
 
     ucs_assert(arg->retries_left > 0);
+
+    if (arg->restart_lanes != 0) {
+        ucp_lane_map_t restart = arg->restart_lanes;
+
+        ucs_for_each_bit(lane, restart) {
+            if (ucp_ep_recovery_probe_status(&arg->probe[lane]) ==
+                UCS_INPROGRESS) {
+                continue;
+            }
+
+            ucp_ep_recovery_restart_lane(ep, lane);
+            ret = 1;
+            goto done;
+        }
+
+        /* Every latched lane still has a probe in flight. */
+        ret = 1;
+        goto done;
+    }
 
     /* The probe finished after connect. This lane can leave FAILED. */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -2675,10 +2718,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         }
 
         if (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK) {
-            /* Already connected. Another request would repeat the handshake
-             * after the token was released. */
-            arg->state = UCP_EP_RECOVERY_STATE_IDLE;
-            ret        = 1;
+            /* Lanes still failed were already published. The next round has
+             * to include them, instead of waiting another keepalive. */
+            arg->state  = UCP_EP_RECOVERY_STATE_IDLE;
+            arg->resend = 1;
+            ret         = 1;
             goto done;
         }
 

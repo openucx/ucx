@@ -558,6 +558,9 @@ typedef struct ucp_ep_recovery_arg {
     /* Lanes a request already published. A later failure leaves them out
      * until recovery retries. */
     ucp_lane_map_t          sent_lanes;
+    /* Connected, but not ready. Recovery for these lanes starts over once
+     * the probe is no longer in flight. */
+    ucp_lane_map_t          restart_lanes;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
     ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
     /* Pending requests from held lanes, replayed after all of their

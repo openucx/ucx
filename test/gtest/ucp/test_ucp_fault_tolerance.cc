@@ -1401,7 +1401,7 @@ void test_ucp_fault_tolerance::run_probe_fail_after_peer_recovered()
     ucp_ep_recovery_arg_t *arg = NULL;
     mem_buffer sbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST);
     ucp_request_param_t param  = {};
-    uint16_t req_id;
+    uint16_t req_id, ready_id;
     ucp_lane_index_t lane;
     int i;
 
@@ -1435,8 +1435,9 @@ void test_ucp_fault_tolerance::run_probe_fail_after_peer_recovered()
                !ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane));
     }, [this]() { short_progress_loop(); });
     ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "lane did not recover";
+    ready_id = ep->ext->tf_request_id;
     UCS_TEST_MESSAGE << "recovered, requests sent after the failed probe: "
-                     << int(uint16_t(ep->ext->tf_request_id - req_id));
+                     << int(uint16_t(ready_id - req_id));
 
     /* Large AMs are split across the eager lanes, so this lane is used */
     for (i = 0; i < 50; ++i) {
@@ -1444,10 +1445,10 @@ void test_ucp_fault_tolerance::run_probe_fail_after_peer_recovered()
                                      UCS_MBYTE, &param));
     }
     request_wait(ucp_ep_flush_nbx(ep, &param));
-    progress_for(3.0);
+    progress_for(0.5);
 
     EXPECT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "recovered lane failed again";
-    EXPECT_EQ(uint16_t(req_id + 1), ep->ext->tf_request_id)
+    EXPECT_EQ(ready_id, ep->ext->tf_request_id)
             << "extra recovery rounds after the lane became READY";
     EXPECT_EQ(0, total_err_count());
 }

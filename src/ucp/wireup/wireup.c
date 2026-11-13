@@ -677,7 +677,7 @@ static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
     return 0;
 }
 
-static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
+void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
 {
     /* Use one-shot mode to avoid the need to save prog_id */
     ucs_callbackq_add_oneshot(&ucp_ep->worker->uct->progress_q, ucp_ep,

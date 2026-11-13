@@ -370,6 +370,13 @@ static void ucp_ep_flush_assert_started_p2p(ucp_ep_h ep, ucp_request_t *req)
     uct_ep_h uct_ep;
 
     if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        /* started_lanes names the previous endpoints until progress runs.
+         * A replaced lane is a wireup proxy and is not a flush that started
+         * on this generation. */
+        if (req->send.flush.lane_generation != ep->ext->lane_generation) {
+            return;
+        }
+
         /* A p2p lane still on its wireup proxy cannot have been flushed.
          * Recovery switches lanes one at a time, so another lane may already
          * be on the transport with a flush in progress. */
