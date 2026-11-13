@@ -65,10 +65,10 @@ typedef struct {
 
 
 typedef struct {
-    uint64_t dst[2]; /* IPv4 or IPv6 address */
-    uint64_t src[2]; /* IPv4 or IPv6 address */
     int      if_index;
     int      family;
+    uint64_t dst[2]; /* IPv4 or IPv6 address */
+    uint64_t src[2]; /* IPv4 or IPv6 address */
 } ucs_netlink_route_key_t;
 
 
