@@ -23,6 +23,8 @@ typedef struct uct_rdu_md {
     struct uct_md    super;
     /* System device of each RDU, UCS_SYS_DEVICE_ID_UNKNOWN until resolved */
     ucs_sys_device_t sys_dev[UCT_RDU_MAX_RDUS];
+    /* Whether an RDU beyond UCT_RDU_MAX_RDUS was reported */
+    int              max_rdus_warned;
 } uct_rdu_md_t;
 
 /**

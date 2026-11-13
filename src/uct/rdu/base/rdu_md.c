@@ -83,17 +83,16 @@ static int uct_rdu_md_is_rdu_device(const char *path)
 static ucs_sys_device_t
 uct_rdu_md_get_sys_dev(uct_rdu_md_t *md, uint32_t rdu_id)
 {
-    static int warned = 0;
     char path[UCT_RDU_PATH_MAX];
     ucs_sys_bus_id_t bus_id;
     ucs_sys_device_t sys_dev;
 
     if (rdu_id >= UCT_RDU_MAX_RDUS) {
-        if (!warned) {
+        if (!md->max_rdus_warned) {
             ucs_diag("rdu_md: rdu %u is beyond the %u supported RDUs, so its "
                      "memory has no system device and is not cached",
                      rdu_id, UCT_RDU_MAX_RDUS);
-            warned = 1;
+            md->max_rdus_warned = 1;
         }
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
