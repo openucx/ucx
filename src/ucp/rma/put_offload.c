@@ -592,15 +592,13 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
 
 static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req            = ucs_container_of(self, ucp_request_t,
-                                                     send.uct);
-    const size_t *lengths         = req->send.state.dt_iter.type.sgl.lengths;
-    size_t count                  = req->send.state.dt_iter.length;
-    uint32_t fence_flag           = req->flags &
-                                    UCP_REQUEST_FLAG_FENCE_REQUIRED;
-    size_t elem_offset            =
-            req->send.state.dt_iter.type.sgl.frag_offset;
-    ucs_status_t status           = UCS_OK;
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t,
+                                             send.uct);
+    const size_t *lengths = req->send.state.dt_iter.type.sgl.lengths;
+    size_t count          = req->send.state.dt_iter.length;
+    uint32_t fence_flag   = req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    size_t elem_offset    = req->send.state.dt_iter.type.sgl.frag_offset;
+    ucs_status_t status   = UCS_OK;
     size_t index;
 
     ucp_proto_completion_init(&req->send.state.uct_comp,
