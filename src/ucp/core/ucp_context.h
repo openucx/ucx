@@ -821,6 +821,18 @@ ucp_context_eager_uses_am_bw_lanes(ucp_context_h context)
 }
 
 static UCS_F_ALWAYS_INLINE int
+ucp_context_max_rndv_lanes_is_auto(ucp_context_h context)
+{
+    return context->config.ext.max_rndv_lanes_config == UCS_ULUNITS_AUTO;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_max_rma_lanes_is_auto(ucp_context_h context)
+{
+    return context->config.ext.max_rma_lanes_config == UCS_ULUNITS_AUTO;
+}
+
+static UCS_F_ALWAYS_INLINE int
 ucp_context_print_transport_tables_enabled(ucp_context_h context)
 {
     ucs_on_off_auto_value_t value = context->config.ext.print_transport_tables;

@@ -2069,12 +2069,13 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
 /* rndv/am of a GPU buffer may use the AM_BW lanes of all the GPU's NICs.
  * Wireup does not know the buffer, so it creates the lanes for every endpoint
- * and lets the protocol select among them. rndv/am runs only with the auto
- * and am rendezvous schemes. */
+ * and lets the protocol select among them. rndv/am is a regular candidate
+ * only with the auto and am rendezvous schemes; others use it only as a last
+ * resort. */
 static int ucp_wireup_is_auto_gpu_am_bw_needed(ucp_context_h context)
 {
     return context->config.auto_gpu_lanes &&
-           (context->config.ext.max_rndv_lanes_config == UCS_ULUNITS_AUTO) &&
+           ucp_context_max_rndv_lanes_is_auto(context) &&
            ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) ||
             (context->config.ext.rndv_mode == UCP_RNDV_MODE_AM));
 }

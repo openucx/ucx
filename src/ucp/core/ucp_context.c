@@ -264,8 +264,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_RNDV_RAILS_FALLBACK", "2",
    "Maximal number of devices for a rendezvous operation when\n"
    "UCX_MAX_RNDV_RAILS is 'auto' and selects no NICs for the memory (see\n"
-   "UCX_MAX_RNDV_RAILS), and for protocols v1. Ignored when\n"
-   "UCX_MAX_RNDV_RAILS is a number.",
+   "UCX_MAX_RNDV_RAILS). Ignored when UCX_MAX_RNDV_RAILS is a number.",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes_fallback),
    UCS_CONFIG_TYPE_UINT},
 
@@ -287,8 +286,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MAX_RMA_RAILS_FALLBACK", "1",
    "Maximal number of devices for a RMA operation when UCX_MAX_RMA_RAILS is\n"
-   "'auto' and selects no NICs for the memory (see UCX_MAX_RMA_RAILS), and\n"
-   "for protocols v1. Ignored when UCX_MAX_RMA_RAILS is a number.",
+   "'auto' and selects no NICs for the memory (see UCX_MAX_RMA_RAILS).\n"
+   "Ignored when UCX_MAX_RMA_RAILS is a number.",
    ucs_offsetof(ucp_context_config_t, max_rma_lanes_fallback),
    UCS_CONFIG_TYPE_UINT},
 
