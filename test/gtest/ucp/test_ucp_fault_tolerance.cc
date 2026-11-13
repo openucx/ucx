@@ -376,7 +376,7 @@ protected:
     void test_put_am_flush_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
         const std::string op_str = op_name(op_mask);
 
-        if (!(op_mask & TEST_OP_WIREUP)) {
+        if (!is_target_wireup(op_mask, failure_side)) {
             flush_workers();
         }
 
@@ -449,7 +449,7 @@ protected:
     void test_am_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
         const std::string op_str = op_name(op_mask);
 
-        if (!(op_mask & TEST_OP_WIREUP)) {
+        if (!is_target_wireup(op_mask, failure_side)) {
             flush_workers();
 
             UCS_TEST_MESSAGE << "Attempting " << op_str
@@ -568,7 +568,7 @@ protected:
             rbuf.pattern_fill(m_seed);
         }
 
-        if (!(op_mask & TEST_OP_WIREUP)) {
+        if (!is_target_wireup(op_mask, failure_side)) {
             flush_workers();
 
             UCS_TEST_MESSAGE << "Attempting " << op_str
@@ -703,7 +703,8 @@ protected:
             test_rma_with_injected_failure(failure_side, op_mask);
         }
 
-        if ((op_mask & TEST_OP_WIREUP) && (m_total_err_count > 0)) {
+        if (is_target_wireup(op_mask, failure_side) &&
+            (m_total_err_count > 0)) {
             return;
         }
 
@@ -727,6 +728,12 @@ protected:
 
     static size_t am_msg_size() {
         return ucs::limit_buffer_size(UCS_KBYTE);
+    }
+
+    static bool is_target_wireup(unsigned op_mask, failure_side_t failure_side)
+    {
+        return (op_mask & TEST_OP_WIREUP) &&
+               (failure_side == FAILURE_SIDE_TARGET);
     }
 
     static std::string op_name(unsigned op_mask)
@@ -983,7 +990,7 @@ protected:
         {
             std::unique_ptr<scoped_log_handler> slh;
 
-            if (op_mask & TEST_OP_WIREUP) {
+            if (is_target_wireup(op_mask, failure_side)) {
                 slh.reset(new scoped_log_handler(hide_errors_logger));
             }
 
@@ -1239,7 +1246,7 @@ bool test_ucp_fault_tolerance::wireup_op_failed(unsigned op_mask,
 {
     ucs_time_t deadline;
 
-    if (!(op_mask & TEST_OP_WIREUP) || (status == UCS_OK)) {
+    if (!is_target_wireup(op_mask, failure_side) || (status == UCS_OK)) {
         return false;
     }
 
