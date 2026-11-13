@@ -1407,9 +1407,7 @@ public:
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         static const char *op_names[] = {"put", "get"};
-        /* TODO: Enable the get variant (UCS_MASK(2)) once get SGL is
-         * supported */
-        add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_PUT),
+        add_variant_values(variants, get_memtype_variants, UCS_MASK(2),
                            op_names);
     }
 
@@ -1439,6 +1437,12 @@ protected:
 
     sgl_op_t op() const {
         return static_cast<sgl_op_t>(get_variant_value(2));
+    }
+
+    void require_op(sgl_op_t required_op) const {
+        if (op() != required_op) {
+            UCS_TEST_SKIP_R("unsupported operation");
+        }
     }
 
     struct sgl_ctx {
@@ -1880,24 +1884,28 @@ UCS_TEST_P(test_ucp_rma_sgl_data, no_remote_count) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+    require_op(SGL_OP_PUT);
     m_require_zcopy_lane = false;
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
+    require_op(SGL_OP_PUT);
     m_require_zcopy_lane = false;
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
+    require_op(SGL_OP_PUT);
     m_require_zcopy_lane = false;
     test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
+    require_op(SGL_OP_PUT);
     m_require_zcopy_lane = false;
     test_sgl(4, 256 * UCS_KBYTE);
 }

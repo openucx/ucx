@@ -90,6 +90,11 @@ typedef struct {
      * uct_ep_get_sgl_zcopy on this lane, cached from uct_iface_attr_v2 at
      * protocol init when SGL zcopy is selected, otherwise zero */
      size_t                      max_sgl_zcopy_count;
+
+    /* Minimal length of a single SGL element fragment posted on this lane,
+     * cached from uct_iface_attr_t at protocol init for get SGL, otherwise
+     * zero */
+    size_t                      min_sgl_frag;
 } ucp_proto_multi_lane_priv_t;
 
 
@@ -197,6 +202,24 @@ typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
         const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
+
+/**
+ * Adjust callback for a single SGL fragment, called before it is posted
+ *
+ * @param [in]     req          Request to post.
+ * @param [in]     lpriv        Lane to post on.
+ * @param [in]     elem_index   Index of the SGL element of the fragment.
+ * @param [in,out] buffer_p     Local buffer of the fragment.
+ * @param [in,out] length_p     Length of the fragment.
+ * @param [in,out] remote_addr_p Remote address of the fragment.
+ *
+ * @return UCS_OK to post the fragment, UCS_INPROGRESS if the fragment was
+ *         already submitted, or an error status.
+ */
+typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        size_t elem_index, void **buffer_p, size_t *length_p,
+        uint64_t *remote_addr_p);
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
