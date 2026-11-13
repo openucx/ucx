@@ -629,6 +629,18 @@ UCS_TEST_P(test_mem_alloc_device,
 
     check_registrable_iff_exportable(buffer.ptr(), size);
 }
+
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+UCS_TEST_P(test_mem_alloc_device,
+           localized_mem_pool_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_localized_mem_pool_buffer buffer(size);
+
+    check_registrable_iff_exportable(buffer.ptr(), size);
+}
+#endif
 #endif
 
 UCS_TEST_P(test_mem_alloc_device, vmm_mem_registrable_iff_exportable,

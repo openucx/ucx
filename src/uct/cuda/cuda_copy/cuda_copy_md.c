@@ -515,6 +515,24 @@ out_ctx_pop:
     }
 }
 
+static int uct_cuda_copy_md_is_localized_pool(const void *address)
+{
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    int locality_domain = -1;
+
+    /* Queried separately, as older drivers fail on the unknown attribute */
+    if (cuPointerGetAttribute(&locality_domain,
+                              CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL,
+                              (CUdeviceptr)address) != CUDA_SUCCESS) {
+        return 0;
+    }
+
+    return locality_domain >= 0;
+#else
+    return -1; /* Unknown */
+#endif
+}
+
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
@@ -621,6 +639,9 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             *is_async_managed = 1;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
+            if (cuda_mem_ctx == NULL) {
+                *is_localized = uct_cuda_copy_md_is_localized_pool(address);
+            }
         }
     }
 
@@ -769,6 +790,24 @@ uct_cuda_copy_md_detect_memtype_copy_flags(const ucs_memory_info_t *mem_info)
 #endif
 }
 
+static int uct_cuda_copy_md_is_mps_device(ucs_sys_device_t sys_dev)
+{
+#if CUDA_VERSION >= 12030
+    CUdevice cuda_device = uct_cuda_get_cuda_device(sys_dev);
+    int mps_enabled;
+
+    if ((cuda_device == CU_DEVICE_INVALID) ||
+        (cuDeviceGetAttribute(&mps_enabled, CU_DEVICE_ATTRIBUTE_MPS_ENABLED,
+                              cuda_device) != CUDA_SUCCESS)) {
+        return -1; /* Unknown */
+    }
+
+    return mps_enabled;
+#else
+    return -1; /* Unknown */
+#endif
+}
+
 static int
 uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const ucs_memory_info_t *mem_info,
@@ -811,14 +850,21 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     }
 
     /* The driver cannot export localized memory */
-    if (is_localized) {
+    if (is_localized > 0) {
         return 0;
     }
 
-    /* TODO: Avoid the export for the remaining memory: memory not known to be
-     * GPUDirect RDMA capable, which is exportable unless localized by the
-     * device (e.g. by MPS MLOPart), and memory pools. Gather the allocation
-     * properties into a struct then, instead of passing each of them. */
+    /* Memory pools and memory not allocated as GPUDirect RDMA capable are
+     * exported, unless MPS localizes all of the device memory, e.g. MPS
+     * MLOPart, which the memory does not report. Locality is unknown without
+     * locality domain support in the CUDA headers, assume it not localized. */
+    if ((is_gdr_capable == 0) &&
+        (uct_cuda_copy_md_is_mps_device(mem_info->sys_dev) == 0)) {
+        return 1;
+    }
+
+    /* TODO: Gather the allocation properties into a struct, instead of passing
+     * each of them. */
     local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
                                                mem_info->alloc_length,
                                                mem_info->sys_dev);
