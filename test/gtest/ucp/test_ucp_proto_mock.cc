@@ -4212,13 +4212,15 @@ public:
                         attr.latency           = {500e-9, 0};
                         attr.dev_num_paths     = num_paths;
                         attr.cap.put.max_zcopy = max_zcopy;
+                        attr.cap.get.max_zcopy = max_zcopy;
                     },
-                    [num_paths](uct_perf_attr_t &perf_attr) {
+                    [this, num_paths](uct_perf_attr_t &perf_attr) {
                         /* The paths share the device, as on RoCE LAG */
                         if (perf_attr.field_mask &
                             UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
                             perf_attr.path_bandwidth = {
                                 0, 32.0 * UCS_GBYTE / num_paths};
+                            ++m_path_estimates;
                         }
                     });
         }
@@ -4262,6 +4264,7 @@ protected:
             }
 
             m_hooks.setup(&tl_ep->iface->ops.ep_put_zcopy, count_put_zcopy);
+            m_hooks.setup(&tl_ep->iface->ops.ep_get_zcopy, count_get_zcopy);
         }
     }
 
@@ -4355,19 +4358,76 @@ protected:
         return state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT];
     }
 
+    /* The endpoint of the receiver which is connected to the one of the
+     * sender, with the hooks of its lanes */
+    ucp_ep_h peer_ep()
+    {
+        auto ep = sender().ep();
+        ucp_ep_ext_t *ep_ext;
+
+        /* Transports without connected endpoints create it on request */
+        EXPECT_UCS_OK(ucp_ep_resolve_remote_id(ep, ucp_ep_get_am_lane(ep)));
+        flush_workers();
+        ucs_list_for_each(ep_ext, &receiver().worker()->all_eps, ep_list) {
+            if ((ep_ext->ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
+                (ep_ext->remote_ep_id == ucp_ep_local_id(ep))) {
+                install_hooks(ep_ext->ep);
+                return ep_ext->ep;
+            }
+        }
+
+        return nullptr;
+    }
+
+    /* Provide the put samples of the peer by the lanes of the sender which
+     * are connected to its lanes */
+    void set_peer_samples(ucp_ep_h peer, double first, double second)
+    {
+        auto ep           = sender().ep();
+        auto lane         = ucp_ep_lookup_lane(ep, lane_ep(ep, 0));
+        auto peer_lane    = ucp_ep_lookup_lane(peer, lane_ep(peer, 0));
+        auto peer_sys_dev = ucp_ep_get_tl_rsc(peer, peer_lane)->sys_device;
+
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        ASSERT_NE(UCP_NULL_LANE, peer_lane);
+        if (ucp_ep_config(ep)->key.lanes[lane].dst_sys_dev == peer_sys_dev) {
+            set_samples(peer, first, second);
+        } else {
+            set_samples(peer, second, first);
+        }
+
+        /* The samples reach the sender in a message of the peer, which can
+         * still be on the wire */
+        flush_workers();
+        while (progress()) {
+        }
+    }
+
     void reset_counters()
     {
         m_bytes[0]     = m_bytes[1]     = 0;
         m_fragments[0] = m_fragments[1] = 0;
     }
 
+    void check_rma(ucp_operation_id_t op_id, ucp_ep_h ep, double first,
+                   double second, size_t size, double tolerance)
+    {
+        reset_counters();
+        send_recv_rma(size, op_id, UCS_MEMORY_TYPE_HOST, ep);
+        EXPECT_EQ(size, m_bytes[0] + m_bytes[1]);
+        EXPECT_NEAR(size * first / (first + second), m_bytes[0], tolerance);
+    }
+
     void check_put(ucp_ep_h ep, double first, double second,
                    size_t size = 40 * UCS_KBYTE, double tolerance = 2)
     {
-        reset_counters();
-        send_recv_rma(size, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST, ep);
-        EXPECT_EQ(size, m_bytes[0] + m_bytes[1]);
-        EXPECT_NEAR(size * first / (first + second), m_bytes[0], tolerance);
+        check_rma(UCP_OP_ID_PUT, ep, first, second, size, tolerance);
+    }
+
+    void check_get(ucp_ep_h ep, double first, double second,
+                   size_t size = 40 * UCS_KBYTE, double tolerance = 2)
+    {
+        check_rma(UCP_OP_ID_GET, ep, first, second, size, tolerance);
     }
 
     void put_sgl(ucp_ep_h ep, size_t num_elems, size_t elem_size)
@@ -4428,9 +4488,25 @@ protected:
         EXPECT_EQ(num_elems * elem_size, m_bytes[0] + m_bytes[1]);
     }
 
+    /* Record the path bandwidth messages of the endpoints in m_events */
+    void hook_path_bw_sends(const std::vector<ucp_ep_h> &eps)
+    {
+        for (auto ep : eps) {
+            auto iface = ucp_ep_get_lane(ep, ucp_ep_get_am_lane(ep))->iface;
+            if (m_am_bcopy.find(iface) == m_am_bcopy.end()) {
+                /* The mock calls back only functions which return a status */
+                m_am_bcopy[iface] = iface->ops.ep_am_bcopy;
+                m_hooks.setup(&iface->ops.ep_am_bcopy, record_am_bcopy);
+            }
+        }
+    }
+
     std::map<uct_ep_h, unsigned> m_lane_ids;
-    size_t m_bytes[2]       = {};
-    unsigned m_fragments[2] = {};
+    size_t m_bytes[2]         = {};
+    unsigned m_fragments[2]   = {};
+    /* Sample queries ('q') and path bandwidth messages ('s') */
+    std::string m_events;
+    unsigned m_path_estimates = 0;
 
 private:
     static void count_bytes(uct_ep_h ep, size_t bytes)
@@ -4442,13 +4518,9 @@ private:
         }
     }
 
-    static ucs_status_t count_put_zcopy(uct_ep_h ep, const uct_iov_t *iov,
-                                        size_t count, uint64_t remote_addr,
-                                        uct_rkey_t rkey, uct_completion_t *comp)
+    static ucs_status_t count_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                    size_t count, ucs_status_t status)
     {
-        auto status = m_self->m_hooks.orig_func(&ep->iface->ops.ep_put_zcopy,
-                                               ep, iov, count, remote_addr,
-                                               rkey, comp);
         size_t length = 0;
 
         if (!UCS_STATUS_IS_ERR(status)) {
@@ -4459,6 +4531,26 @@ private:
         }
 
         return status;
+    }
+
+    static ucs_status_t count_put_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                        size_t count, uint64_t remote_addr,
+                                        uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        return count_zcopy(ep, iov, count,
+                           m_self->m_hooks.orig_func(
+                                   &ep->iface->ops.ep_put_zcopy, ep, iov,
+                                   count, remote_addr, rkey, comp));
+    }
+
+    static ucs_status_t count_get_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                        size_t count, uint64_t remote_addr,
+                                        uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        return count_zcopy(ep, iov, count,
+                           m_self->m_hooks.orig_func(
+                                   &ep->iface->ops.ep_get_zcopy, ep, iov,
+                                   count, remote_addr, rkey, comp));
     }
 
     static ucs_status_t
@@ -4483,9 +4575,21 @@ private:
         return status;
     }
 
+    static ssize_t record_am_bcopy(uct_ep_h ep, uint8_t id,
+                                   uct_pack_callback_t pack_cb, void *arg,
+                                   unsigned flags)
+    {
+        if (id == UCP_AM_ID_EP_PATH_BW) {
+            m_self->m_events += 's';
+        }
+
+        return m_self->m_am_bcopy.at(ep->iface)(ep, id, pack_cb, arg, flags);
+    }
+
     static ucs_status_t query_bandwidth(uct_ep_h ep, uct_ep_attr_t *attr)
     {
         if (attr->field_mask & UCT_EP_ATTR_FIELD_BANDWIDTH) {
+            m_self->m_events += 'q';
             auto status = m_self->m_query_status.find(ep);
             if (status != m_self->m_query_status.end()) {
                 return status->second;
@@ -4509,6 +4613,7 @@ private:
     std::string m_tl_name;
     std::map<uct_ep_h, double> m_samples;
     std::map<uct_ep_h, ucs_status_t> m_query_status;
+    std::map<uct_iface_h, decltype(uct_iface_ops_t::ep_am_bcopy)> m_am_bcopy;
 };
 
 test_ucp_proto_mock_path_bw *test_ucp_proto_mock_path_bw::m_self = nullptr;
@@ -4694,6 +4799,108 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, put_sgl)
     EXPECT_EQ(0u, m_bytes[0]);
 }
 
+UCS_TEST_P(test_ucp_proto_mock_path_bw, get_peer_put_split_and_recovery)
+{
+    auto ep   = sender().ep();
+    auto peer = peer_ep();
+
+    ASSERT_NE(nullptr, peer);
+    check_get(ep, 1, 1);
+
+    /* The data of get crosses the paths on which the peer puts */
+    set_peer_samples(peer, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    check_get(ep, 1, 4);
+    check_get(ep, 1, 4, 10 * UCS_MBYTE + 100 * UCS_KBYTE, UCS_MBYTE / 4);
+    /* Put of this side uses the opposite direction of the paths */
+    check_put(ep, 1, 1);
+
+    set_peer_samples(peer, 32.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    check_get(ep, 1, 1);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, get_without_peer_put)
+{
+    auto ep = sender().ep();
+
+    /* The put samples of this side do not split get */
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    check_put(ep, 1, 4);
+    check_get(ep, 1, 1);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, get_peer_put_zero_skips_lane)
+{
+    auto ep   = sender().ep();
+    auto peer = peer_ep();
+
+    ASSERT_NE(nullptr, peer);
+    set_peer_samples(peer, 0, 32.0 * UCS_GBYTE);
+    check_get(ep, 0, 1, 40 * UCS_KBYTE, 0);
+    check_get(ep, 0, 1, 10 * UCS_MBYTE, 0);
+    EXPECT_EQ(0u, m_fragments[0]);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, peer_send_after_update)
+{
+    sender().connect(&receiver(), get_ep_params(), 1);
+    flush_workers();
+    auto ep      = sender().ep();
+    auto sibling = sender().ep(0, 1);
+
+    install_hooks(sibling);
+    for (auto e : {ep, sibling}) {
+        EXPECT_UCS_OK(ucp_ep_resolve_remote_id(e, ucp_ep_get_am_lane(e)));
+    }
+
+    flush_workers();
+    hook_path_bw_sends({ep, sibling});
+
+    /* A failed send can invoke the error callback of the user, which may close
+     * endpoints, so the samples go to the peer after all endpoints update */
+    m_events.clear();
+    set_samples({{lane_ep(ep, 0), 8.0 * UCS_GBYTE},
+                 {lane_ep(sibling, 0), 8.0 * UCS_GBYTE}});
+    EXPECT_EQ("qqss", m_events);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, path_estimate_once)
+{
+    auto ep   = sender().ep();
+    auto peer = peer_ep();
+
+    ASSERT_NE(nullptr, peer);
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    set_peer_samples(peer, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+
+    /* The path estimates of an interface stay while its port speed does */
+    m_path_estimates = 0;
+    set_samples(ep, 16.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    set_peer_samples(peer, 16.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_EQ(0u, m_path_estimates);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, put_and_get_degraded_apart)
+{
+    auto ep   = sender().ep();
+    auto peer = peer_ep();
+
+    ASSERT_NE(nullptr, peer);
+    /* The put samples of the peer degrade only get */
+    set_peer_samples(peer, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_EQ(UCS_BIT(UCP_EP_PATH_BW_OP_PEER_PUT),
+              static_cast<unsigned long>(ep->ext->path_bw_degraded));
+    check_put(ep, 1, 1);
+    check_get(ep, 1, 4);
+
+    /* The put samples of this side degrade only put */
+    set_peer_samples(peer, 32.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_EQ(UCS_BIT(UCP_EP_PATH_BW_OP_PUT),
+              static_cast<unsigned long>(ep->ext->path_bw_degraded));
+    check_put(ep, 1, 4);
+    check_get(ep, 1, 1);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, mm_cma, "posix,cma")
 
@@ -4853,6 +5060,18 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw_multi_path, put_split)
     /* A sample is compared with the path estimate, not the whole device */
     set_samples(sender().ep(), 8.0 * UCS_GBYTE, 16.0 * UCS_GBYTE);
     check_put(sender().ep(), 1, 2);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw_multi_path, get_peer_put_split)
+{
+    auto peer = peer_ep();
+
+    ASSERT_NE(nullptr, peer);
+    /* The peer samples one of its two paths of each device. Get does not tell
+     * apart the paths between the same devices, so a lane gets their mean,
+     * 12 GB/s, and a healthy lane gets one path of the device, 16 GB/s. */
+    set_peer_samples(peer, 8.0 * UCS_GBYTE, 16.0 * UCS_GBYTE);
+    check_get(sender().ep(), 3, 4);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_multi_path, rcx,
