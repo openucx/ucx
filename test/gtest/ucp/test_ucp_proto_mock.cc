@@ -4090,16 +4090,17 @@ public:
         }, key, 1);
 
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
+        // Each new EP config adds two rkey configs: RMA and rendezvous
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -4109,19 +4110,19 @@ public:
         // Reduce port_speed of mock_1:1 to be equal with mock_0:1,
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
-        send(3);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        send(4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
             {0, INF,  "zero-copy", "50% on rc_mlx5/mock_1:1 and 50% on rc_mlx5/mock_0:1"},
-        }, key, 3);
+        }, key, 4);
 
         // Reset port_speeds to initial values, should switch to initial configs
         set_port_speed("mock_0:1", 28e9);
         set_port_speed("mock_1:1", 24e9);
         send(1);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 
