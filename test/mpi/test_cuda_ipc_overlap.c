@@ -93,9 +93,9 @@ static int open_ipc(ipc_context_t *ipc)
 
 static int check_legacy_ipc(int rank, CUdeviceptr ptr)
 {
+    CUresult result = CUDA_SUCCESS;
     CUipcMemHandle handle;
     CUdeviceptr mapped;
-    CUresult result = CUDA_SUCCESS;
 
     if (rank == 0) {
         result = cuIpcGetMemHandle(&handle, ptr);
@@ -129,7 +129,7 @@ static ucs_status_t transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
                              unsigned char *host)
 {
     uct_md_mkey_pack_params_t pack_params = {0};
-    ucs_status_t status                  = UCS_OK;
+    ucs_status_t status                   = UCS_OK;
     uct_mem_h memh;
     uct_rkey_bundle_t rkey;
     void *mapped;
@@ -184,6 +184,7 @@ int main(int argc, char **argv)
     ipc_context_t ipc = {0};
     unsigned overlaps = 0, total_overlaps, errors_and_warnings, total_errors;
     CUdeviceptr lower = 0, old = 0, upper = 0, replacement = 0, recv;
+    int device_count  = 0;
     CUuuid uuid, uuids[2];
     CUdevice device;
     CUcontext context;
@@ -192,7 +193,6 @@ int main(int argc, char **argv)
     CUresult result;
     ucs_status_t status;
     int rank, size, local_size, available, all_available, iteration, ret;
-    int device_count = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
