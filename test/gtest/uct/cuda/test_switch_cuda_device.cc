@@ -393,7 +393,7 @@ protected:
         uct_md_mem_attr_v2_t attr = {};
         ucs_mem_flags_t mem_flags;
 
-        if (!(m_md_attr.dmabuf_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        if (!(md_attr().dmabuf_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
             UCS_TEST_SKIP_R("dmabuf is not supported");
         }
 
@@ -407,6 +407,14 @@ protected:
         if (attr.dmabuf_fd != UCT_DMABUF_FD_INVALID) {
             close(attr.dmabuf_fd);
         }
+    }
+
+    template<class T> void test_registrable_iff_exportable()
+    {
+        constexpr size_t size = 4 * UCS_MBYTE;
+        T buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+        check_registrable_iff_exportable(buffer.ptr(), size);
     }
 
     /* Stream-ordered memory from the default pool, as allocated by
@@ -598,10 +606,7 @@ UCS_TEST_P(test_mem_alloc_device, legacy_mem_gdr_capable)
 UCS_TEST_P(test_mem_alloc_device, legacy_mem_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try")
 {
-    constexpr size_t size = 4 * UCS_MBYTE;
-    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-
-    check_registrable_iff_exportable(buffer.ptr(), size);
+    test_registrable_iff_exportable<mem_buffer>();
 }
 
 UCS_TEST_P(test_mem_alloc_device, mem_pool_registrable_iff_exportable,
@@ -646,19 +651,13 @@ UCS_TEST_P(test_mem_alloc_device,
 UCS_TEST_P(test_mem_alloc_device, vmm_mem_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try")
 {
-    constexpr size_t size = 4 * UCS_MBYTE;
-    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-
-    check_registrable_iff_exportable(buffer.ptr(), size);
+    test_registrable_iff_exportable<cuda_vmm_mem_buffer>();
 }
 
 UCS_TEST_P(test_mem_alloc_device, gdr_vmm_mem_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try")
 {
-    constexpr size_t size = 4 * UCS_MBYTE;
-    cuda_gdr_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-
-    check_registrable_iff_exportable(buffer.ptr(), size);
+    test_registrable_iff_exportable<cuda_gdr_vmm_mem_buffer>();
 }
 
 UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_registrable_iff_exportable,
@@ -673,10 +672,7 @@ UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_registrable_iff_exportable,
 UCS_TEST_P(test_mem_alloc_device, localized_mem_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try")
 {
-    constexpr size_t size = 4 * UCS_MBYTE;
-    cuda_localized_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-
-    check_registrable_iff_exportable(buffer.ptr(), size);
+    test_registrable_iff_exportable<cuda_localized_mem_buffer>();
 }
 
 #ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
@@ -684,10 +680,7 @@ UCS_TEST_P(test_mem_alloc_device,
            localized_pcie_mem_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try")
 {
-    constexpr size_t size = 4 * UCS_MBYTE;
-    cuda_localized_pcie_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-
-    check_registrable_iff_exportable(buffer.ptr(), size);
+    test_registrable_iff_exportable<cuda_localized_pcie_mem_buffer>();
 }
 #endif
 #endif
