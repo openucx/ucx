@@ -160,7 +160,7 @@ static void ucm_rdu_add_alloc(const void *ptr, size_t size)
 
     pthread_mutex_lock(&ucm_rdu_ptrs_lock);
     iter = kh_put(ucm_rdu_ptr_size, &ucm_rdu_ptrs, ptr, &ret);
-    if (ret >= 0) {
+    if (ret != UCS_KH_PUT_FAILED) {
         kh_value(&ucm_rdu_ptrs, iter) = size;
     } else {
         ucm_debug("failed to record the size of RDU buffer %p", ptr);
