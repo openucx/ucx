@@ -226,10 +226,14 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
 
     sys_dev = uct_rdu_md_get_sys_dev(md, rdu_id);
 
-    /* Report the whole allocation, if the runtime knows it */
-    uct_rdu_devmem_find_alloc(address, &alloc.base, &alloc.length);
-
-    uct_rdu_md_memtype_cache_update(address, length, &alloc, sys_dev);
+    /* Look up the whole allocation only when it is reported or cached, since
+     * this walks all the allocations of the runtime */
+    if ((mem_attr->field_mask & (UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+                                 UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH)) ||
+        (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        uct_rdu_devmem_find_alloc(address, &alloc.base, &alloc.length);
+        uct_rdu_md_memtype_cache_update(address, length, &alloc, sys_dev);
+    }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr->mem_type = UCS_MEMORY_TYPE_RDU;
