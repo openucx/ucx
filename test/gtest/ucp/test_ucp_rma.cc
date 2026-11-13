@@ -444,6 +444,11 @@ public:
                            gpu_nic_assignment_modes);
     }
 
+    std::string init_skip_filter() const override
+    {
+        return no_assignable_devices_error();
+    }
+
     void init() override
     {
         if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {

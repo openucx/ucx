@@ -68,6 +68,11 @@ public:
         MULTI_THREAD_WORKER   /* workers are multi-threaded, context is mt-single */
     };
 
+    virtual std::string init_skip_filter() const
+    {
+        return {};
+    }
+
     class entity {
         typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
@@ -192,6 +197,10 @@ public:
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
+        /* Check if an error logged since first_error matches the test's
+         * init_skip_filter() */
+        bool is_init_error_filtered(size_t first_error) const;
 
         static ucs_log_func_rc_t
         hide_config_warns_logger(const char *file, unsigned line,

@@ -17,6 +17,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 }
 
+#include <algorithm>
 #include <queue>
 
 namespace ucp {
@@ -684,12 +685,25 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     ss << test_param.transports;
     ucp_test::set_tls(ucp_config, ss.str());
 
+    ucp_context_h ucph;
+    ucs_status_t status;
+    size_t num_errors_before = m_errors.size();
     {
         scoped_log_handler slh(hide_errors_logger);
-        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
-                                            ucp_init, &local_ctx_params,
-                                            ucp_config);
+        status = ucp_init(&local_ctx_params, ucp_config, &ucph);
     }
+
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("Unsupported operation: ucp_init");
+    }
+
+    if ((status != UCS_OK) && is_init_error_filtered(num_errors_before)) {
+        UCS_TEST_SKIP_R(std::string("ucp_init failed: ") +
+                        ucs_status_string(status));
+    }
+
+    ASSERT_UCS_OK(status);
+    m_ucph.reset(ucph, ucp_cleanup);
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
@@ -700,6 +714,19 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);
     }
+}
+
+bool ucp_test_base::entity::is_init_error_filtered(size_t first_error) const
+{
+    const std::string filter = m_test->init_skip_filter();
+    if (filter.empty()) {
+        return false;
+    }
+
+    return std::any_of(m_errors.begin() + first_error, m_errors.end(),
+                       [&filter](const std::string &error) {
+                           return error.find(filter) != std::string::npos;
+                       });
 }
 
 ucp_test_base::entity::~entity() {
