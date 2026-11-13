@@ -13,6 +13,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
@@ -35,6 +36,17 @@ typedef struct {
     const void *ptr;
     size_t     size;
 } ucm_rdu_find_alloc_ctx_t;
+
+
+#define ucm_rdu_ptr_hash(_ptr) kh_int64_hash_func((uintptr_t)(_ptr))
+KHASH_INIT(ucm_rdu_ptr_size, const void*, size_t, 1, ucm_rdu_ptr_hash,
+           kh_int64_hash_equal)
+
+
+/* Sizes of the allocations made through the hook, so releasing a buffer does
+ * not walk all the allocations of the runtime */
+static pthread_mutex_t ucm_rdu_ptrs_lock = PTHREAD_MUTEX_INITIALIZER;
+static khash_t(ucm_rdu_ptr_size) ucm_rdu_ptrs;
 
 
 /* Cached value of a function which the loaded runtime library does not
@@ -140,10 +152,48 @@ ucm_rdu_find_alloc_cb(const void *va, size_t size, uint32_t rdu_id, void *arg)
     }
 }
 
+static void ucm_rdu_add_alloc(const void *ptr, size_t size)
+{
+    khiter_t iter;
+    int ret;
+
+    pthread_mutex_lock(&ucm_rdu_ptrs_lock);
+    iter = kh_put(ucm_rdu_ptr_size, &ucm_rdu_ptrs, ptr, &ret);
+    if (ret >= 0) {
+        kh_value(&ucm_rdu_ptrs, iter) = size;
+    } else {
+        ucm_debug("failed to record the size of RDU buffer %p", ptr);
+    }
+    pthread_mutex_unlock(&ucm_rdu_ptrs_lock);
+}
+
+static int ucm_rdu_remove_alloc(const void *ptr, size_t *size_p)
+{
+    khiter_t iter;
+    int found;
+
+    pthread_mutex_lock(&ucm_rdu_ptrs_lock);
+    iter  = kh_get(ucm_rdu_ptr_size, &ucm_rdu_ptrs, ptr);
+    found = (iter != kh_end(&ucm_rdu_ptrs));
+    if (found) {
+        *size_p = kh_value(&ucm_rdu_ptrs, iter);
+        kh_del(ucm_rdu_ptr_size, &ucm_rdu_ptrs, iter);
+    }
+    pthread_mutex_unlock(&ucm_rdu_ptrs_lock);
+
+    return found;
+}
+
 static size_t ucm_rdu_get_alloc_size(const void *ptr)
 {
     ucm_rdu_find_alloc_ctx_t ctx = {ptr, 1}; /* minimal size by default */
     ucm_rdu_foreach_func_t foreach_alloc;
+
+    /* Buffers allocated before the hook was installed are not recorded, so
+     * ask the runtime for their size */
+    if (ucm_rdu_remove_alloc(ptr, &ctx.size)) {
+        return ctx.size;
+    }
 
     foreach_alloc = ucm_rdu_get_foreach_alloc();
     if (foreach_alloc != NULL) {
@@ -172,6 +222,7 @@ void *ucm_rdu_malloc(uint32_t rdu_id, size_t size, int mem_type)
         ucm_trace("ucm_rdu_malloc(rdu_id=%u size=%zu)=%p", rdu_id, size, ptr);
         /* Report the type as unknown, so the memory type cache asks the RDU
          * memory domain for the type and the device of the buffer */
+        ucm_rdu_add_alloc(ptr, size);
         ucm_dispatch_mem_type_alloc(ptr, size, UCS_MEMORY_TYPE_UNKNOWN,
                                     UCS_MEM_FLAG_REGISTRABLE);
     }
