@@ -1914,9 +1914,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
-#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     uct_iface_set_async_event_params(params, &self->async_ctx.cb,
                                      &self->async_ctx.arg);
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;

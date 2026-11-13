@@ -503,7 +503,9 @@ enum uct_iface_event_types {
     UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
     UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
-    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3), /**< Speed change event */
+    UCT_EVENT_PROGRESS      = UCS_BIT(4)  /**< Callback-only request for worker
+                                             progress */
 };
 
 
@@ -1276,7 +1278,8 @@ struct uct_iface_params {
     /** Callback for asynchronous event handling. The callback will be
      * invoked from UCT transport when there are new events to be
      * read by user if the iface has @ref UCT_IFACE_FLAG_EVENT_ASYNC_CB
-     * capability */
+     * capability. @ref UCT_EVENT_PROGRESS notifications do not require
+     * this capability. */
     uct_async_event_cb_t                         async_event_cb;
 
     /* Time period between keepalive rounds */
