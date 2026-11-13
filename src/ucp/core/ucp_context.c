@@ -696,6 +696,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
 
+  {"GPU_NIC_ASSIGNMENT_GROUP_BY", "auto",
+   "Topology grouping criterion used by UCX_GPU_NIC_ASSIGNMENT_MODE.\n"
+   " - auto       : use 'pci_switch' on x86_64, otherwise 'numa'.\n"
+   " - numa       : one group per NUMA node.\n"
+   " - pci_switch : every GPU uses the deepest PCIe switch it shares with\n"
+   "                a NIC, and GPUs using the same PCIe switch share a group.\n"
+   "                A NIC joins the group of the deepest such PCIe switch\n"
+   "                above it. GPUs sharing no PCIe switch with a NIC, GPUs\n"
+   "                whose group got no NIC, and NICs below none of these\n"
+   "                PCIe switches, are grouped by NUMA node.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_group_by),
+   UCS_CONFIG_TYPE_ENUM(ucs_topo_group_by_names)},
+
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
    "The device is picked among the closest eligible network devices using \n"
@@ -3069,7 +3082,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
                 context, mode, "no assignable network devices");
     }
 
-    status = ucs_topo_build_groups(&net_device_filter, &groups);
+    status = ucs_topo_build_groups(
+            &net_device_filter, context->config.ext.gpu_nic_assignment_group_by,
+            &groups);
     if (status != UCS_OK) {
         return status;
     }

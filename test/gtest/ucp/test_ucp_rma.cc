@@ -438,10 +438,13 @@ class test_ucp_rma_gpu_nic :
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_values(variants, get_rma_variants,
-                           UCS_MASK(ucs_static_array_size(
-                                   gpu_nic_assignment_modes)),
-                           gpu_nic_assignment_modes);
+        add_variant_values(variants, get_mode_variants,
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA),
+                           gpu_nic_assignment_group_by);
+        /* Grouping does not depend on the mode, so one mode covers it */
+        add_variant_values(variants, get_shared_mode_variants,
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH),
+                           gpu_nic_assignment_group_by);
     }
 
     void init() override
@@ -452,6 +455,8 @@ public:
 
         modify_config("GPU_NIC_ASSIGNMENT_MODE",
                       gpu_nic_assignment_modes[get_variant_value(1)]);
+        modify_config("GPU_NIC_ASSIGNMENT_GROUP_BY",
+                      gpu_nic_assignment_group_by[get_variant_value(2)]);
         /* Enough lanes to use every NIC assigned to a GPU */
         modify_config("MAX_RMA_LANES", "8");
         modify_config("MAX_RNDV_LANES", "8");
@@ -465,6 +470,22 @@ protected:
     {
         /* The base flags stay clear: flush worker, no user memory handle */
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    static void get_mode_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
+    }
+
+    static void
+    get_shared_mode_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_MODE_SHARED),
+                           gpu_nic_assignment_modes);
     }
 
     void test_cuda_mem_types(send_func_t send_func,
@@ -524,8 +545,8 @@ public:
     void init() override
     {
         modify_config("RNDV_SCHEME",
-                      gpu_nic_rndv_schemes[get_variant_value(2)]);
-        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+                      gpu_nic_rndv_schemes[get_variant_value(3)]);
+        if (get_variant_value(3) == RNDV_SCHEME_PUT_PPLN) {
             modify_config("RNDV_FRAG_MEM_TYPES", "host");
             modify_config("RNDV_FRAG_SIZE", "host:512K");
 
@@ -559,7 +580,7 @@ protected:
 
     void test_rtr_flow(send_func_t send_func)
     {
-        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+        if (get_variant_value(3) == RNDV_SCHEME_PUT_PPLN) {
             /* Larger messages fall back to the zero-copy protocols */
             test_cuda_mem_types(send_func, "rndv/put/mtype", PPLN_FRAG_SIZE);
             return;

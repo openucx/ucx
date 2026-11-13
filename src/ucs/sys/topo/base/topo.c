@@ -28,6 +28,8 @@
 
 #define UCS_TOPO_SYSFS_PCI_PREFIX    "/sys/bus/pci/devices/"
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
+/* Scan format of a PCI root path, "%n" gets the length of the matched prefix */
+#define UCS_TOPO_SYSFS_PCI_ROOT_FMT  UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
@@ -678,7 +680,7 @@ static int ucs_topo_is_pci_root(const char *path)
     int count = -1;
 
     /* coverity[check_return] */
-    sscanf(path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
+    sscanf(path, UCS_TOPO_SYSFS_PCI_ROOT_FMT, &count);
     return count == strlen(path);
 }
 
@@ -1378,6 +1380,36 @@ static int ucs_topo_is_pci_bridge_nolock(ucs_sys_device_t sys_dev1,
     return result;
 }
 
+static unsigned
+ucs_topo_get_common_pci_bridge_depth_nolock(ucs_sys_device_t sys_dev1,
+                                            ucs_sys_device_t sys_dev2)
+{
+    unsigned depth = 0;
+    int count      = -1;
+    char *path1, *path2, *common_path;
+
+    if (ucs_topo_get_common_path_nolock(sys_dev1, sys_dev2, &path1, &path2,
+                                        &common_path) != UCS_OK) {
+        return 0;
+    }
+
+    /* A common path outside of a PCI hierarchy shares no PCIe bridge */
+    /* coverity[check_return] */
+    sscanf(common_path, UCS_TOPO_SYSFS_PCI_ROOT_FMT, &count);
+    if ((count > 0) && (common_path[count] == '/')) {
+        depth = ucs_string_count_char(common_path + count, '/');
+    }
+
+    ucs_trace("common pci bridge depth of %s and %s is %u (common path %s)",
+              ucs_topo_global_ctx.devices[sys_dev1].name,
+              ucs_topo_global_ctx.devices[sys_dev2].name, depth, common_path);
+
+    ucs_free(common_path);
+    ucs_free(path1);
+    ucs_free(path2);
+    return depth;
+}
+
 static void ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
                                               ucs_sys_device_t sys_dev_mem)
 {
@@ -1529,14 +1561,16 @@ static void ucs_topo_release_devices()
 
 ucs_status_t
 ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
+                      ucs_topo_group_by_t group_by,
                       ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
-                                         ucs_topo_global_ctx.num_devices,
-                                         net_device_filter, groups_p);
+    status = ucs_topo_build_groups_inner(
+            ucs_topo_global_ctx.devices, ucs_topo_global_ctx.num_devices,
+            net_device_filter, group_by,
+            ucs_topo_get_common_pci_bridge_depth_nolock, groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;
