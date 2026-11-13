@@ -526,9 +526,12 @@ static void ucs_memtype_map_release_cb(ucs_interval_map_node_t *node,
     ucs_memtype_map_entry_t *entry =
             ucs_derived_of(node, ucs_memtype_map_entry_t);
 
-    ucs_debug("memtype_map: leftover registration "
-              UCS_MEMTYPE_MAP_ENTRY_FMT,
-              UCS_MEMTYPE_MAP_ENTRY_ARG(entry));
+    /* Print the device index, since the topology device names are already
+     * released when the cleanup runs from ucs_cleanup() */
+    ucs_debug("memtype_map: leftover registration %p [0x%lx..0x%lx] %s "
+              "dev %u flags 0x%x", entry, node->start, node->end,
+              ucs_memory_type_names[entry->mem_type], entry->sys_dev,
+              entry->mem_flags);
     ucs_list_add_tail(arg, &entry->list);
 }
 
@@ -563,8 +566,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     ucs_status_t status;
 
     if (memtype_cache == NULL) {
-        /* The memtype map is empty unless it is enabled */
-        return ucs_memtype_map_lookup(start, size, mem_info);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     ucs_spin_lock(&memtype_cache->lock);
@@ -601,6 +603,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
 out_unlock:
     ucs_spin_unlock(&memtype_cache->lock);
     return status;
+}
+
+ucs_status_t ucs_memtype_lookup(const void *address, size_t size,
+                                ucs_memory_info_t *mem_info)
+{
+    if (ucs_memtype_map_is_enabled()) {
+        return ucs_memtype_map_lookup((uintptr_t)address, size, mem_info);
+    }
+
+    return ucs_memtype_cache_lookup(address, size, mem_info);
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)

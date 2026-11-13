@@ -452,7 +452,10 @@ ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
 {
     ucp_memory_info_t mem_info;
 
-    ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
+    ucs_assertv(!(memh->flags & UCP_MEMH_FLAG_IMPORTED),
+                "memh %p address %p length %zu flags 0x%x mem_type %s", memh,
+                ucp_memh_address(memh), ucp_memh_length(memh), memh->flags,
+                ucs_memory_type_names[memh->mem_type]);
 
     if (!ucs_memtype_map_is_enabled()) {
         return;
@@ -492,7 +495,6 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 
     ucs_assert(ucp_memh_is_user_memh(memh));
 
-    /* Remove the memory from the cache before it is released */
     ucp_memh_memtype_map_unregister(memh);
 
     mem.address = ucp_memh_address(memh);

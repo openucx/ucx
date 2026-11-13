@@ -600,8 +600,8 @@ protected:
 
     ucs_status_t lookup(const void *base, size_t offset, size_t size,
                         ucs_memory_info_t *info) const {
-        return ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, offset),
-                                        size, info);
+        return ucs_memtype_lookup(UCS_PTR_BYTE_OFFSET(base, offset), size,
+                                  info);
     }
 
     void expect_hit(const void *base, size_t offset, size_t size,

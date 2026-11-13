@@ -155,7 +155,7 @@ public:
 protected:
     ucs_status_t lookup(const void *address, size_t size,
                         ucs_memory_info_t *info) const {
-        return ucs_memtype_cache_lookup(address, size, info);
+        return ucs_memtype_lookup(address, size, info);
     }
 
     ucs_status_t map(void *address, size_t size, ucp_mem_h *memh_p,

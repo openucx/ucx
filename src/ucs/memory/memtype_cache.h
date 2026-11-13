@@ -69,12 +69,29 @@ void ucs_memtype_cache_cleanup(void);
  *
  * @return UCS_OK              - an element was found and the memory info is valid.
  * @return UCS_ERR_NO_ELEM     - an element was not found.
- * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled, or the
- *                               memtype map is used and no registration in it
- *                               contains the range.
+ * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);
+
+
+/**
+ * Find the memory type of an address range, in the memtype map if it is
+ * enabled, otherwise in the memtype cache.
+ *
+ * @param [in]  address         Address to lookup.
+ * @param [in]  size            Length of the memory.
+ * @param [out] mem_info        Set to the memory info of the address range, see
+ *                              @ref ucs_memtype_cache_lookup.
+ *
+ * @return UCS_OK              - the range was found and the memory info is
+ *                               valid.
+ * @return UCS_ERR_NO_ELEM     - the range was not found in the memtype cache.
+ * @return UCS_ERR_UNSUPPORTED - the memory type is not known, and must be
+ *                               detected in another way.
+ */
+ucs_status_t ucs_memtype_lookup(const void *address, size_t size,
+                                ucs_memory_info_t *mem_info);
 
 
 /**

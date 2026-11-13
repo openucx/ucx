@@ -864,8 +864,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     }
 
     if (address != NULL) {
-        cache_status = ucs_memtype_cache_lookup(address, length,
-                                                &cached_mem_info);
+        cache_status = ucs_memtype_lookup(address, length, &cached_mem_info);
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
                                                    &is_async_managed,
