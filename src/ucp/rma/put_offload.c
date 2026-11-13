@@ -219,7 +219,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -255,7 +256,7 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_put_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
