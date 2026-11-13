@@ -813,6 +813,8 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
         return NULL;
     }
 
+    md->flags &= ~UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET;
+
     uct_ib_reg_mr_trace("mlx5dv_reg_dmabuf_mr", &md->super, address, length,
                         dmabuf_fd, dmabuf_offset, access_flags, mr, 0,
                         start_time);
@@ -874,7 +876,6 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                                                                 length, params,
                                                                 access_flags);
     if (memh->mrs[mr_type].super.ib != NULL) {
-        memh->super.flags |= UCT_IB_MEM_DIRECT_NIC;
         goto out;
     }
 
@@ -2618,6 +2619,10 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
+    if (md->super.config.enable_indirect_atomic) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET;
+    }
+
     /* Zero init UMR related fields, will lazy init on first use */
     md->umr.cq        = NULL;
     md->umr.qp        = NULL;
@@ -3005,11 +3010,10 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ((memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
          uct_ib_memh_uses_strict_order_mr(&memh->super)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
-        !(memh->super.flags & UCT_IB_MEM_DIRECT_NIC) &&
-        md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
-                           UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
+                           UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS |
+                           UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET)) {
         status = uct_ib_mlx5_devx_reg_atomic_key(md, memh);
         if (status == UCS_OK) {
             ucs_assertv(memh->atomic_rkey != UCT_IB_INVALID_MKEY,

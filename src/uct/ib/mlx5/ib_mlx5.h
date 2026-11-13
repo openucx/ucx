@@ -219,6 +219,8 @@ enum {
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
+    /* Atomic keys are indirect and carry an atomic offset */
+    UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET        = UCS_BIT(19),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,

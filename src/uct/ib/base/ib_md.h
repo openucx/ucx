@@ -75,8 +75,6 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
-    UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
-                                                        registered using Direct NIC */
     UCT_IB_MEM_STRICT_ORDER_MR       = UCS_BIT(7), /**< A strict-order MR is
                                                         allocated alongside the
                                                         relaxed-order default MR */
