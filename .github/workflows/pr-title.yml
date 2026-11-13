@@ -1,0 +1,24 @@
+name: PR Title
+
+on:
+  pull_request_target:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          if ! grep -qP '^[0-9A-Z/_-]*: \w' <<<"${PR_TITLE}"; then
+            echo "Bad PR title: '${PR_TITLE}'" >&2
+            exit 1
+          fi
