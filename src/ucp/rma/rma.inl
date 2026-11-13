@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -184,23 +184,6 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     ep->ext->unflushed_lanes |= lane_map;
 
     return status;
-}
-
-/* Make the unsent part of a contig RMA request a request of its own, so any
- * protocol can restart it without resume support */
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rma_request_skip_sent(ucp_request_t *req)
-{
-    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    size_t offset                = dt_iter->offset;
-
-    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
-
-    dt_iter->type.contig.buffer = UCS_PTR_BYTE_OFFSET(
-            dt_iter->type.contig.buffer, offset);
-    dt_iter->length            -= offset;
-    dt_iter->offset             = 0;
-    req->send.rma.remote_addr  += offset;
 }
 
 #endif

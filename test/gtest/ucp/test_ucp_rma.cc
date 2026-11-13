@@ -1021,24 +1021,24 @@ protected:
                            (uint64_t)rbuf.ptr(), rkey, &param);
         ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
         req = (ucp_request_t*)sptr - 1;
+        UCS_ASYNC_BLOCK(&sender().worker()->async);
         if (req->send.state.dt_iter.offset == 0) {
+            UCS_ASYNC_UNBLOCK(&sender().worker()->async);
             ASSERT_UCS_OK(request_wait(sptr));
             UCS_TEST_SKIP_R("request was not partially sent");
         }
 
-        UCS_ASYNC_BLOCK(&sender().worker()->async);
         ucs_queue_head_init(&pending_q);
         uct_ep_pending_purge(ucp_ep_get_lane(sender().ep(), req->send.lane),
                              ucp_request_purge_enqueue_cb, &pending_q);
         EXPECT_EQ(1, ucs_queue_length(&pending_q));
         ucp_wireup_replay_pending_requests(sender().ep(), &pending_q);
-        UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
-        if (!is_iov) {
-            /* The sent data is skipped instead of resumed */
-            EXPECT_FALSE(req->send.proto_config->select_param.op_id_flags &
-                         UCP_PROTO_SELECT_OP_FLAG_RESUME);
-        }
+        /* A contig request skips the sent data, an IOV request resumes */
+        EXPECT_EQ(is_iov,
+                  !!(req->send.proto_config->select_param.op_id_flags &
+                     UCP_PROTO_SELECT_OP_FLAG_RESUME));
+        UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
         ASSERT_UCS_OK(request_wait(sptr));
         flush_ep(sender());
