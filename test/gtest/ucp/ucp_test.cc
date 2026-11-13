@@ -697,9 +697,11 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
         UCS_TEST_SKIP_R("Unsupported operation: ucp_init");
     }
 
-    if ((status != UCS_OK) && is_init_error_filtered(num_errors_before)) {
-        UCS_TEST_SKIP_R(std::string("ucp_init failed: ") +
-                        ucs_status_string(status));
+    if (status != UCS_OK) {
+        auto it = find_filtered_init_error(num_errors_before);
+        if (it != m_errors.end()) {
+            UCS_TEST_SKIP_R(*it);
+        }
     }
 
     ASSERT_UCS_OK(status);
@@ -714,19 +716,6 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);
     }
-}
-
-bool ucp_test_base::entity::is_init_error_filtered(size_t first_error) const
-{
-    const std::string filter = m_test->init_skip_filter();
-    if (filter.empty()) {
-        return false;
-    }
-
-    return std::any_of(m_errors.begin() + first_error, m_errors.end(),
-                       [&filter](const std::string &error) {
-                           return error.find(filter) != std::string::npos;
-                       });
 }
 
 ucp_test_base::entity::~entity() {
@@ -849,6 +838,20 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
         m_workers[worker_index].second.push_back(
                         ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
     }
+}
+
+std::vector<std::string>::iterator
+ucp_test_base::entity::find_filtered_init_error(size_t first_error) const
+{
+    const std::string filter = m_test->init_skip_filter();
+    if (filter.empty()) {
+        return m_errors.end();
+    }
+
+    return std::find_if(m_errors.begin() + first_error, m_errors.end(),
+                        [&filter](const std::string &error) {
+                            return error.find(filter) != std::string::npos;
+                        });
 }
 
 ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(

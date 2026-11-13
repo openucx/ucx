@@ -198,9 +198,10 @@ public:
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
 
-        /* Check if an error logged since first_error matches the test's
+        /* Find filtered init error since first_error matching the test's
          * init_skip_filter() */
-        bool is_init_error_filtered(size_t first_error) const;
+        std::vector<std::string>::iterator
+        find_filtered_init_error(size_t first_error) const;
 
         static ucs_log_func_rc_t
         hide_config_warns_logger(const char *file, unsigned line,
