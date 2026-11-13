@@ -2,6 +2,7 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -28,6 +29,7 @@ noinst_HEADERS = \
 	util/replace.h \
 	util/log.h \
 	util/reloc.h \
+	util/hook.h \
 	util/sys.h \
 	bistro/bistro_int.h \
 	bistro/bistro.h \

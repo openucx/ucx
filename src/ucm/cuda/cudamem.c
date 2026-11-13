@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -12,6 +13,7 @@
 
 #include <ucm/event/event.h>
 #include <ucm/mmap/mmap.h>
+#include <ucm/util/hook.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
@@ -80,17 +82,6 @@
         ucm_event_leave(); \
         return ret; \
     }
-
-#define UCM_CUDA_FUNC_ENTRY(_func) \
-    { \
-        {#_func, ucm_override_##_func}, (void**)&ucm_orig_##_func \
-    }
-
-typedef struct {
-    ucm_reloc_patch_t patch;
-    void              **orig_func_ptr;
-} ucm_cuda_func_t;
-
 
 /* Driver API */
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAlloc, CUresult, -1, CUdeviceptr*,
@@ -230,28 +221,28 @@ UCM_CUDA_GET_GLOBAL_FUNC(cuModuleGetGlobal_v2, CUmodule)
 UCM_CUDA_GET_GLOBAL_FUNC(cuLibraryGetGlobal, CUlibrary)
 #endif
 
-static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
-    UCM_CUDA_FUNC_ENTRY(cuMemAlloc),
-    UCM_CUDA_FUNC_ENTRY(cuMemAlloc_v2),
-    UCM_CUDA_FUNC_ENTRY(cuMemAllocManaged),
-    UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch),
-    UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch_v2),
-    UCM_CUDA_FUNC_ENTRY(cuMemMap),
-    UCM_CUDA_FUNC_ENTRY(cuModuleGetGlobal_v2),
+static ucm_hook_func_t ucm_cuda_driver_funcs[] = {
+    UCM_HOOK_FUNC_ENTRY(cuMemAlloc),
+    UCM_HOOK_FUNC_ENTRY(cuMemAlloc_v2),
+    UCM_HOOK_FUNC_ENTRY(cuMemAllocManaged),
+    UCM_HOOK_FUNC_ENTRY(cuMemAllocPitch),
+    UCM_HOOK_FUNC_ENTRY(cuMemAllocPitch_v2),
+    UCM_HOOK_FUNC_ENTRY(cuMemMap),
+    UCM_HOOK_FUNC_ENTRY(cuModuleGetGlobal_v2),
 #if CUDA_VERSION >= 11020
-    UCM_CUDA_FUNC_ENTRY(cuMemAllocAsync),
-    UCM_CUDA_FUNC_ENTRY(cuMemAllocFromPoolAsync),
+    UCM_HOOK_FUNC_ENTRY(cuMemAllocAsync),
+    UCM_HOOK_FUNC_ENTRY(cuMemAllocFromPoolAsync),
 #endif
 #if CUDART_VERSION >= 12000
-    UCM_CUDA_FUNC_ENTRY(cuLibraryGetGlobal),
+    UCM_HOOK_FUNC_ENTRY(cuLibraryGetGlobal),
 #endif
-    UCM_CUDA_FUNC_ENTRY(cuMemFree),
-    UCM_CUDA_FUNC_ENTRY(cuMemFree_v2),
-    UCM_CUDA_FUNC_ENTRY(cuMemFreeHost),
-    UCM_CUDA_FUNC_ENTRY(cuMemFreeHost_v2),
-    UCM_CUDA_FUNC_ENTRY(cuMemUnmap),
+    UCM_HOOK_FUNC_ENTRY(cuMemFree),
+    UCM_HOOK_FUNC_ENTRY(cuMemFree_v2),
+    UCM_HOOK_FUNC_ENTRY(cuMemFreeHost),
+    UCM_HOOK_FUNC_ENTRY(cuMemFreeHost_v2),
+    UCM_HOOK_FUNC_ENTRY(cuMemUnmap),
 #if CUDA_VERSION >= 11020
-    UCM_CUDA_FUNC_ENTRY(cuMemFreeAsync),
+    UCM_HOOK_FUNC_ENTRY(cuMemFreeAsync),
 #endif
     {{NULL}, NULL}
 };
@@ -306,76 +297,22 @@ UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p, stream=%p", void*, cudaStream_t)
 #endif
 
-static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
-    UCM_CUDA_FUNC_ENTRY(cudaFree),
+static ucm_hook_func_t ucm_cuda_runtime_funcs[] = {
+    UCM_HOOK_FUNC_ENTRY(cudaFree),
 #if CUDART_VERSION >= 11020
-    UCM_CUDA_FUNC_ENTRY(cudaFreeAsync),
+    UCM_HOOK_FUNC_ENTRY(cudaFreeAsync),
 #endif
-    UCM_CUDA_FUNC_ENTRY(cudaFreeHost),
-    UCM_CUDA_FUNC_ENTRY(cudaMalloc),
+    UCM_HOOK_FUNC_ENTRY(cudaFreeHost),
+    UCM_HOOK_FUNC_ENTRY(cudaMalloc),
 #if CUDART_VERSION >= 11020
-    UCM_CUDA_FUNC_ENTRY(cudaMallocAsync),
-    UCM_CUDA_FUNC_ENTRY(cudaMallocFromPoolAsync),
+    UCM_HOOK_FUNC_ENTRY(cudaMallocAsync),
+    UCM_HOOK_FUNC_ENTRY(cudaMallocFromPoolAsync),
 #endif
-    UCM_CUDA_FUNC_ENTRY(cudaMallocManaged),
-    UCM_CUDA_FUNC_ENTRY(cudaMallocPitch),
-    UCM_CUDA_FUNC_ENTRY(cudaGetSymbolAddress),
+    UCM_HOOK_FUNC_ENTRY(cudaMallocManaged),
+    UCM_HOOK_FUNC_ENTRY(cudaMallocPitch),
+    UCM_HOOK_FUNC_ENTRY(cudaGetSymbolAddress),
     {{NULL}, NULL}
 };
-
-static ucs_status_t
-ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, const char *name,
-                       ucm_mmap_hook_mode_t mode, int *installed_hooks_p)
-{
-    ucm_cuda_func_t *func;
-    ucs_status_t status;
-    void *func_ptr;
-    int count;
-
-    if (*installed_hooks_p & UCS_BIT(mode)) {
-        return UCS_OK;
-    }
-
-    if (!(ucm_global_opts.cuda_hook_modes & UCS_BIT(mode))) {
-        /* Disabled by configuration */
-        ucm_debug("cuda memory hooks mode %s is disabled for %s API",
-                  ucm_mmap_hook_modes[mode], name);
-        return UCS_OK;
-    }
-
-    count = 0;
-    for (func = funcs; func->patch.symbol != NULL; ++func) {
-        func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
-        if (func_ptr == NULL) {
-            continue;
-        }
-
-        if (mode == UCM_MMAP_HOOK_BISTRO) {
-            status = ucm_bistro_patch(func_ptr, func->patch.value,
-                                      func->patch.symbol, func->orig_func_ptr,
-                                      NULL);
-        } else if (mode == UCM_MMAP_HOOK_RELOC) {
-            status = ucm_reloc_modify(&func->patch);
-        } else {
-            break;
-        }
-
-        if (status != UCS_OK) {
-            ucm_diag("failed to install %s hook for '%s'",
-                     ucm_mmap_hook_modes[mode], func->patch.symbol);
-            return status;
-        }
-
-        ucm_debug("installed %s hook for '%s'", ucm_mmap_hook_modes[mode],
-                  func->patch.symbol);
-        ++count;
-    }
-
-    *installed_hooks_p |= UCS_BIT(mode);
-    ucm_info("cuda memory hooks mode %s: installed %d on %s API",
-             ucm_mmap_hook_modes[mode], count, name);
-    return UCS_OK;
-}
 
 static ucs_status_t ucm_cudamem_install(int events)
 {
@@ -396,20 +333,26 @@ static ucs_status_t ucm_cudamem_install(int events)
 
     pthread_mutex_lock(&install_mutex);
 
-    status = ucm_cuda_install_hooks(ucm_cuda_driver_funcs, "driver",
-                                    UCM_MMAP_HOOK_BISTRO, &driver_api_hooks);
+    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver",
+                               UCM_MMAP_HOOK_BISTRO,
+                               ucm_global_opts.cuda_hook_modes,
+                               &driver_api_hooks);
     if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    status = ucm_cuda_install_hooks(ucm_cuda_driver_funcs, "driver",
-                                    UCM_MMAP_HOOK_RELOC, &driver_api_hooks);
+    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver",
+                               UCM_MMAP_HOOK_RELOC,
+                               ucm_global_opts.cuda_hook_modes,
+                               &driver_api_hooks);
     if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    status = ucm_cuda_install_hooks(ucm_cuda_runtime_funcs, "runtime",
-                                    UCM_MMAP_HOOK_RELOC, &runtime_api_hooks);
+    status = ucm_install_hooks(ucm_cuda_runtime_funcs, "cuda runtime",
+                               UCM_MMAP_HOOK_RELOC,
+                               ucm_global_opts.cuda_hook_modes,
+                               &runtime_api_hooks);
     if (status != UCS_OK) {
         goto out_unlock;
     }
