@@ -1410,7 +1410,8 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
-#define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+#define UCP_SGL_EMULATION_PROTOS \
+    "PROTOS=put/sgl/am/*,get/sgl/am/*,get/am/*,reconfig"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
@@ -1426,12 +1427,14 @@ public:
         add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_op_variants(std::vector<ucp_test_variant>& variants,
+                                uint64_t op_mask) {
         static const char *op_names[] = {"put", "get"};
-        /* TODO: Enable the get variant (UCS_MASK(2)) once get SGL is
-         * supported */
-        add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_PUT),
-                           op_names);
+        add_variant_values(variants, get_memtype_variants, op_mask, op_names);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        get_op_variants(variants, UCS_MASK(2));
     }
 
     virtual void init() override {
@@ -1904,24 +1907,24 @@ UCS_TEST_P(test_ucp_rma_sgl_data, no_remote_count) {
     test_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation, UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_with_callback,
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_no_memhs,
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_emulation_fragmented,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_sgl(4, 256 * UCS_KBYTE);
@@ -2207,10 +2210,21 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
 
 class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
 public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        get_op_variants(variants, UCS_MASK(2));
+    }
+
     test_ucp_rma_sgl_contig() {
-        modify_config("PROTOS", UCP_MEM_IS_HOST(src_mem_type()) ?
-                                "put/sgl/contig,put/offload/*" :
-                                "put/sgl/contig,put/rndv,rndv/*");
+        const bool host = UCP_MEM_IS_HOST(src_mem_type());
+
+        if (op() == SGL_OP_PUT) {
+            modify_config("PROTOS", host ? "put/sgl/contig,put/offload/*" :
+                                           "put/sgl/contig,put/rndv,rndv/*");
+        } else {
+            modify_config("PROTOS", host ?
+                                    "get/sgl/contig,get/bcopy,get/zcopy" :
+                                    "get/sgl/contig,get/rndv,rndv/*");
+        }
     }
 
     virtual void init() override {
@@ -2232,15 +2246,17 @@ protected:
         }
 
         const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-        EXPECT_STREQ("put/sgl/contig", req->send.proto_config->proto->name);
+        EXPECT_STREQ((op() == SGL_OP_PUT) ? "put/sgl/contig" :
+                                            "get/sgl/contig",
+                     req->send.proto_config->proto->name);
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl_contig, put) {
+UCS_TEST_P(test_ucp_rma_sgl_contig, various_sizes) {
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_contig, put_with_callback) {
+UCS_TEST_P(test_ucp_rma_sgl_contig, with_callback) {
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
