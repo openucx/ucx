@@ -604,7 +604,7 @@ static int ucs_netlink_route_has_oif(const ucs_netlink_route_t *route,
 {
     unsigned i;
 
-    if ((route->num_oifs == 0) || route->is_oifs_truncated) {
+    if (!route->is_oifs_reported || route->is_oifs_truncated) {
         return 1;
     }
 
@@ -654,16 +654,19 @@ ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
     route->type              = rt_msg->rtm_type;
     route->prefix_len        = rt_msg->rtm_dst_len;
     route->num_oifs          = 0;
+    route->is_oifs_reported  = 0;
     route->is_oifs_truncated = 0;
 
     for (rta = RTM_RTA(rt_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
+            route->is_oifs_reported = 1;
             ucs_netlink_route_add_oif(route, *(const int*)RTA_DATA(rta));
         } else if (rta->rta_type == RTA_MULTIPATH) {
             /* A fib match reply lists all the nexthops of the route, including
              * the ones the kernel does not use. RTNH_OK() reads the nexthop
              * length before checking the remaining length. */
-            nh_len = RTA_PAYLOAD(rta);
+            route->is_oifs_reported = 1;
+            nh_len                  = RTA_PAYLOAD(rta);
             for (nh = RTA_DATA(rta);
                  (nh_len >= (int)sizeof(*nh)) && RTNH_OK(nh, nh_len);
                  nh_len -= RTNH_ALIGN(nh->rtnh_len), nh = RTNH_NEXT(nh)) {

@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/sys/netlink.h>
 }
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -289,13 +290,17 @@ UCS_TEST_F(test_netlink, kernel_route_matches) {
     /* TEST-NET-2 address has no route through the loopback device */
     EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
 
-    /* No interface has a more specific route than the default to TEST-NET-2 */
+    /* No interface has a more specific route than the default to TEST-NET-2.
+     * A lookup through a VRF device selects a route through its slaves. */
     ifs = if_nameindex();
     ASSERT_NE(nullptr, ifs);
     for (ifp = ifs; ifp->if_index != 0; ++ifp) {
         if ((ucs_netlink_route_get((struct sockaddr*)&sin, NULL, ifp->if_index,
                                    &route) == UCS_OK) &&
-            (route.prefix_len == 0)) {
+            (route.prefix_len == 0) &&
+            (std::find(route.oifs, route.oifs + route.num_oifs,
+                       static_cast<int>(ifp->if_index)) !=
+             route.oifs + route.num_oifs)) {
             EXPECT_EQ(UCS_OK, ucs_netlink_kernel_route_matches(
                                       ifp->if_index, (struct sockaddr*)&sin,
                                       NULL, &best_prefix_len))
