@@ -12,6 +12,7 @@ extern "C" {
 }
 
 #include <map>
+#include <set>
 
 class test_cuda_nvml : public ucs::test {
 };
@@ -70,6 +71,7 @@ UCS_TEST_F(test_cuda_nvml, device_rubin_flag) {
     }
 
     /* Check the flags of topo GPU devices */
+    std::set<ucs_bus_id_bit_rep_t> checked_bus_ids;
     const unsigned num_devices = ucs_topo_num_devices();
     for (unsigned i = 0; i < num_devices; ++i) {
         auto sys_dev = static_cast<ucs_sys_device_t>(i);
@@ -80,16 +82,25 @@ UCS_TEST_F(test_cuda_nvml, device_rubin_flag) {
 
         ASSERT_UCS_OK(ucs_topo_get_device_bus_id(sys_dev, &bus_id));
 
-        auto it = nvml_dev_archs.find(ucs_topo_get_bus_id_bit_repr(&bus_id));
-        ASSERT_NE(nvml_dev_archs.end(), it)
-                << "no nvml device for "
-                << ucs_topo_sys_device_get_name(sys_dev);
+        auto bus_id_key = ucs_topo_get_bus_id_bit_repr(&bus_id);
+        auto it         = nvml_dev_archs.find(bus_id_key);
+        if (it == nvml_dev_archs.end()) {
+            continue; /* Not an NVIDIA GPU */
+        }
 
         EXPECT_EQ(it->second == UCT_CUDA_NVML_DEVICE_ARCH_RUBIN,
                   (ucs_topo_sys_device_get_flags(sys_dev) &
                    UCS_TOPO_DEVICE_FLAG_RUBIN) != 0)
                 << ucs_topo_sys_device_get_name(sys_dev);
+        checked_bus_ids.insert(bus_id_key);
     }
+
+    if (checked_bus_ids.empty()) {
+        UCS_TEST_SKIP_R("no gpus in the topology");
+    }
+
+    /* Every NVML gpu, visible or hidden, must be registered */
+    EXPECT_EQ(nvml_dev_archs.size(), checked_bus_ids.size());
 }
 
 #if HAVE_NVML_FABRIC_INFO

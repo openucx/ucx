@@ -110,10 +110,12 @@ typedef enum {
  * @ingroup UCS_RESOURCE
  * Properties of a system device, set by the owning transport.
  */
+/* clang-format off */
 typedef enum {
-    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0), /**< DPU device (e.g. BlueField) */
-    UCS_TOPO_DEVICE_FLAG_RUBIN = UCS_BIT(1) /**< NVIDIA Rubin GPU */
+    UCS_TOPO_DEVICE_FLAG_DPU   = UCS_BIT(0), /**< DPU device (e.g. BlueField) */
+    UCS_TOPO_DEVICE_FLAG_RUBIN = UCS_BIT(1)  /**< NVIDIA Rubin GPU */
 } ucs_topo_device_flags_t;
+/* clang-format on */
 
 
 /**

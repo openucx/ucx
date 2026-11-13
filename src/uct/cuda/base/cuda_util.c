@@ -169,22 +169,6 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev)
     return (CUdevice)user_value;
 }
 
-static int
-uct_cuda_gpu_bus_id_is_visible(const uct_cuda_visible_gpu_t *visible_gpus,
-                               unsigned num_visible_gpus,
-                               ucs_bus_id_bit_rep_t bus_id_key)
-{
-    unsigned i;
-
-    for (i = 0; i < num_visible_gpus; ++i) {
-        if (visible_gpus[i].bus_id_key == bus_id_key) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 static unsigned uct_cuda_nvml_get_device_flags(nvmlDevice_t nvml_dev)
 {
     nvmlDeviceArchitecture_t arch;
@@ -204,12 +188,14 @@ static unsigned uct_cuda_nvml_get_device_flags(nvmlDevice_t nvml_dev)
     return 0;
 }
 
-/* MLOPart partitions of a gpu share its bus id, so all of them get the flags */
-static void
+/* Add the flags to all visible gpus with this bus id, including MLOPart
+ * partitions, and return their number */
+static unsigned
 uct_cuda_visible_gpus_add_flags(const uct_cuda_visible_gpu_t *visible_gpus,
                                 unsigned num_visible_gpus,
                                 ucs_bus_id_bit_rep_t bus_id_key, unsigned flags)
 {
+    unsigned num_gpus = 0;
     ucs_status_t status;
     unsigned i;
 
@@ -220,7 +206,10 @@ uct_cuda_visible_gpus_add_flags(const uct_cuda_visible_gpu_t *visible_gpus,
 
         status = ucs_topo_sys_device_add_flags(visible_gpus[i].sys_dev, flags);
         ucs_assert_always(status == UCS_OK);
+        ++num_gpus;
     }
+
+    return num_gpus;
 }
 
 static unsigned uct_cuda_init_devices_cu(uct_cuda_visible_gpu_t *visible_gpus)
@@ -308,10 +297,8 @@ uct_cuda_init_devices_nvml(const uct_cuda_visible_gpu_t *visible_gpus,
         bus_id_key   = ucs_topo_get_bus_id_bit_repr(&bus_id);
         device_flags = uct_cuda_nvml_get_device_flags(nvml_dev);
 
-        if (uct_cuda_gpu_bus_id_is_visible(visible_gpus, num_visible_gpus,
-                                           bus_id_key)) {
-            uct_cuda_visible_gpus_add_flags(visible_gpus, num_visible_gpus,
-                                            bus_id_key, device_flags);
+        if (uct_cuda_visible_gpus_add_flags(visible_gpus, num_visible_gpus,
+                                            bus_id_key, device_flags) > 0) {
             continue;
         }
 
