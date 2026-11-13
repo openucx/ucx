@@ -13,6 +13,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/debug/log.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/sys/sock.h>
 
 #include <pthread.h>
 #include <string.h>
@@ -142,6 +143,44 @@ static void ucx_perf_rdu_mem_free(const ucx_perf_context_t *perf, void *address)
     ucx_perf_rdu_ops->free(ucx_perf_rdu_id, address);
 }
 
+/*
+ * Register RDU memory with the memory domain under test. When the runtime can
+ * export RDU memory as a dma-buf, pass it, as UCP does with the file descriptor
+ * returned by the RDU memory domain: some kernels can register RDU memory only
+ * through a dma-buf.
+ */
+static ucs_status_t uct_perf_rdu_mem_reg(uct_md_h md, void *address,
+                                         size_t length, unsigned flags,
+                                         uct_mem_h *memh_p)
+{
+    int dmabuf_fd         = UCT_DMABUF_FD_INVALID;
+    uint64_t dmabuf_offset = 0;
+    uct_md_mem_reg_params_t params;
+    ucs_status_t status;
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                        UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    params.flags      = flags;
+    params.mem_type   = UCS_MEMORY_TYPE_RDU;
+
+    if (uct_rdu_devmem_dmabuf_supported() &&
+        (uct_rdu_devmem_dmabuf_export(address, length, &dmabuf_fd,
+                                      &dmabuf_offset) ==
+         UCT_RDU_DEVMEM_SUCCESS)) {
+        params.field_mask   |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                               UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+        params.dmabuf_fd     = dmabuf_fd;
+        params.dmabuf_offset = dmabuf_offset;
+    }
+
+    status = uct_md_mem_reg_v2(md, address, length, &params, memh_p);
+    if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+        ucs_close_fd(&dmabuf_fd);
+    }
+
+    return status;
+}
+
 static ucs_status_t
 uct_perf_rdu_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
                            int mem_kind, unsigned flags,
@@ -154,8 +193,8 @@ uct_perf_rdu_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
         return status;
     }
 
-    status = uct_perf_md_mem_reg(perf->uct.md, alloc_mem->address, length,
-                                 flags, UCS_MEMORY_TYPE_RDU, &alloc_mem->memh);
+    status = uct_perf_rdu_mem_reg(perf->uct.md, alloc_mem->address, length,
+                                  flags, &alloc_mem->memh);
     if (status != UCS_OK) {
         ucs_error("failed to register memory");
         ucx_perf_rdu_ops->free(ucx_perf_rdu_id, alloc_mem->address);
