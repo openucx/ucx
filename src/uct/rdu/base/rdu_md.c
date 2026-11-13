@@ -199,6 +199,19 @@ uct_rdu_md_memtype_cache_update(const void *address, size_t length,
     }
 }
 
+/*
+ * Whether the memory type cache already holds the range as RDU memory
+ */
+static int uct_rdu_md_is_cached(const void *address, size_t length)
+{
+    ucs_memory_info_t mem_info;
+
+    /* A partial overlap is returned with a NULL base address */
+    return (ucs_memtype_cache_lookup(address, length, &mem_info) == UCS_OK) &&
+           (mem_info.base_address != NULL) &&
+           (mem_info.type == UCS_MEMORY_TYPE_RDU);
+}
+
 static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
                                       size_t length,
                                       uct_md_mem_attr_v2_t *mem_attr)
@@ -219,11 +232,13 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
 
     sys_dev = uct_rdu_md_get_sys_dev(md, rdu_id);
 
-    /* Look up the whole allocation only when it is reported or cached, since
-     * this walks all the allocations of the runtime */
+    /* Look up the whole allocation only when it is reported, or when it can
+     * be cached and is not cached yet, since this walks all the allocations
+     * of the runtime */
     if ((mem_attr->field_mask & (UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
                                  UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH)) ||
-        (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+         !uct_rdu_md_is_cached(address, length))) {
         uct_rdu_devmem_find_alloc(address, &alloc.base, &alloc.length);
         uct_rdu_md_memtype_cache_update(address, length, &alloc, sys_dev);
     }
