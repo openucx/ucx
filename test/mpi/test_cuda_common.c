@@ -11,8 +11,6 @@
 #include "test_cuda_check_def.h"
 #include "test_cuda_common.h"
 
-#include <ucs/debug/log_def.h>
-
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,6 +201,11 @@ ucx_errors_and_warnings_counter(const char *file, unsigned line,
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
+unsigned test_cuda_get_errors_and_warnings(void)
+{
+    return total_ucx_errors_and_warnings;
+}
+
 static alloc_mem_t alloc_mem_alloc(size_t size)
 {
     alloc_mem_t alloc_mem = {};
@@ -383,7 +386,7 @@ static xfer_params_t init_xfer_params(const test_params_t *params,
     return xfer_params;
 }
 
-static int check_result(CUdeviceptr dptr, size_t size)
+int test_cuda_check_buffer(CUdeviceptr dptr, const void *expected, size_t size)
 {
     void *h_buffer;
     int ret;
@@ -395,7 +398,7 @@ static int check_result(CUdeviceptr dptr, size_t size)
     }
 
     cuda_memcpy(h_buffer, (void*)dptr, size);
-    ret = memcmp(h_buffer, gold_data, size);
+    ret = memcmp(h_buffer, expected, size);
     free(h_buffer);
     return ret;
 }
@@ -406,7 +409,7 @@ static int check_and_free_mem(const test_params_t *params,
 {
     int ret;
 
-    ret = check_result(alloc_mem_recv->ptr, params->size);
+    ret = test_cuda_check_buffer(alloc_mem_recv->ptr, gold_data, params->size);
     params->allocator_send->free(alloc_mem_send);
     params->allocator_recv->free(alloc_mem_recv);
     return ret;

@@ -9,9 +9,9 @@
 #endif
 
 #include "test_cuda_check_def.h"
+#include "test_cuda_common.h"
 #include "test_ucx_check_def.h"
 
-#include <ucs/debug/log_def.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 
@@ -34,8 +34,6 @@ typedef struct {
     void            *rkey_buffer;
     size_t          rkey_size;
 } ipc_context_t;
-
-static unsigned errors_and_warnings;
 
 static int open_ipc(ipc_context_t *ipc)
 {
@@ -107,7 +105,7 @@ static int check_ipc(int rank, CUdeviceptr ptr)
         MPI_Bcast(&handle, sizeof(handle), MPI_BYTE, 0, MPI_COMM_WORLD);
         if (rank == 1) {
             result = cuIpcOpenMemHandle(&mapped, handle,
-                                       CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+                                        CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
             if (result == CUDA_SUCCESS) {
                 result = cuIpcCloseMemHandle(mapped);
             }
@@ -126,19 +124,6 @@ static int check_ipc(int rank, CUdeviceptr ptr)
     return 0;
 }
 
-static ucs_log_func_rc_t
-count_errors_and_warnings(const char *file, unsigned line, const char *function,
-                         ucs_log_level_t level,
-                         const ucs_log_component_config_t *comp,
-                         const char *format, va_list ap)
-{
-    if ((level == UCS_LOG_LEVEL_ERROR) || (level == UCS_LOG_LEVEL_WARN)) {
-        ++errors_and_warnings;
-    }
-
-    return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
 static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
                      CUdeviceptr recv, size_t size, unsigned char value,
                      unsigned char *host)
@@ -147,7 +132,6 @@ static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
     uct_mem_h memh;
     uct_rkey_bundle_t rkey;
     void *mapped;
-    size_t i;
 
     if (rank == 0) {
         CUDA_CHECK(cuMemsetD8(send, value, size));
@@ -161,18 +145,15 @@ static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
     MPI_Bcast(ipc->rkey_buffer, ipc->rkey_size, MPI_BYTE, 0, MPI_COMM_WORLD);
     if (rank == 1) {
         /* Count diagnostics only while importing the remote mapping. */
-        ucs_log_push_handler(count_errors_and_warnings);
+        ucs_log_push_handler(ucx_errors_and_warnings_counter);
         UCX_CHECK(uct_rkey_unpack(ipc->component, ipc->rkey_buffer, &rkey));
         UCX_CHECK(uct_rkey_ptr(ipc->component, &rkey, send, &mapped));
         ucs_log_pop_handler();
         CUDA_CHECK(cuMemcpyDtoD(recv, (CUdeviceptr)mapped, size));
-        CUDA_CHECK(cuMemcpyDtoH(host, recv, size));
-        for (i = 0; i < size; ++i) {
-            if (host[i] != value) {
-                fprintf(stderr, "data mismatch at byte %zu: %u != %u\n",
-                        i, host[i], value);
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
+        memset(host, value, size);
+        if (test_cuda_check_buffer(recv, host, size) != 0) {
+            fprintf(stderr, "data mismatch in %zu-byte transfer\n", size);
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
         UCX_CHECK(uct_rkey_release(ipc->component, &rkey));
     }
@@ -187,7 +168,7 @@ static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
 int main(int argc, char **argv)
 {
     ipc_context_t ipc = {0};
-    unsigned overlaps = 0, total_overlaps, total_errors;
+    unsigned overlaps = 0, total_overlaps, errors_and_warnings, total_errors;
     CUdeviceptr lower = 0, old = 0, upper = 0, replacement = 0, recv;
     CUuuid uuid, uuids[2];
     CUdevice device;
@@ -214,7 +195,7 @@ int main(int argc, char **argv)
     }
 
     MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank,
-                       MPI_INFO_NULL, &local_comm);
+                        MPI_INFO_NULL, &local_comm);
     MPI_Comm_size(local_comm, &local_size);
     MPI_Comm_free(&local_comm);
     if (local_size != 2) {
@@ -296,6 +277,7 @@ int main(int argc, char **argv)
 
     MPI_Allreduce(&overlaps, &total_overlaps, 1, MPI_UNSIGNED, MPI_SUM,
                   MPI_COMM_WORLD);
+    errors_and_warnings = test_cuda_get_errors_and_warnings();
     MPI_Allreduce(&errors_and_warnings, &total_errors, 1, MPI_UNSIGNED, MPI_SUM,
                   MPI_COMM_WORLD);
     ret = (total_errors != 0) ? 1 :
