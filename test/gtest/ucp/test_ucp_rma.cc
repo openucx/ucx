@@ -699,7 +699,8 @@ protected:
 
     static bool is_gpu_transport(const std::string &tl_name)
     {
-        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr"};
+        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr",
+                                               "rdu"};
 
         for (const auto &prefix : prefixes) {
             if (tl_name.compare(0, prefix.size(), prefix) == 0) {
