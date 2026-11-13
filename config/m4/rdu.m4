@@ -42,9 +42,25 @@ AS_IF([test "x$rdu_checked" != "xyes"],
          # is installed, so the default build is unchanged on other hosts.  An
          # explicit --with-rdu enables them without the runtime, e.g. for build
          # coverage in CI.
+         # The modules load the library by its SONAME, so check that it loads
+         # rather than link with it: the runtime does not need to install the
+         # unversioned development link.
          AS_IF([test "x$with_rdu" = "xguess"],
-               [AC_CHECK_LIB([rdu_devmem], [rdu_detect],
-                             [rdu_happy="yes"], [rdu_happy="no"])],
+               [AC_MSG_CHECKING([whether the rdu_devmem runtime library loads])
+                LIBS="$RDU_LIBS $LIBS"
+                # Run the test program with its output discarded, since the
+                # runtime library may print when it is loaded
+                rdu_happy="no"
+                AS_IF([test "x$cross_compiling" != "xyes"],
+                      [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <dlfcn.h>
+                                                         #include <stddef.h>]],
+                                         [[return (dlopen("librdu_devmem.so.1",
+                                                          RTLD_LAZY) == NULL) &&
+                                                  (dlopen("librdu_devmem.so",
+                                                          RTLD_LAZY) == NULL);]])],
+                                      [AS_IF([./conftest$ac_exeext >/dev/null 2>&1],
+                                             [rdu_happy="yes"])])])
+                AC_MSG_RESULT([$rdu_happy])],
                [rdu_happy="yes"])
 
          LIBS="$save_LIBS"
