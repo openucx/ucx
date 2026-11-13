@@ -247,25 +247,6 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
-ucs_status_t ucp_proto_put_bcopy_reset(ucp_request_t *req)
-{
-    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    size_t offset                = dt_iter->offset;
-
-    /* The offset counts posted fragments, whose data bcopy already copied out
-     * of the user buffer. Make the unsent part of a contig request a request
-     * of its own, so any protocol can restart it without resume support. */
-    if (dt_iter->dt_class == UCP_DATATYPE_CONTIG) {
-        dt_iter->type.contig.buffer = UCS_PTR_BYTE_OFFSET(
-                dt_iter->type.contig.buffer, offset);
-        dt_iter->length            -= offset;
-        dt_iter->offset             = 0;
-        req->send.rma.remote_addr  += offset;
-    }
-
-    return ucp_proto_request_bcopy_reset(req);
-}
-
 ucp_proto_t ucp_put_offload_bcopy_proto = {
     .name     = "put/offload/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
