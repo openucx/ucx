@@ -606,12 +606,12 @@ public:
             UCS_TEST_SKIP_R(device_str.str() + " is not Ethernet");
         }
 
-        union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
-        ucs_config_allow_list_t dummy_subnet_list;
+        ucs_config_allow_list_t dummy_subnet_list = {};
+        auto uct_md                               = open_md();
+        union ibv_gid gid;
         uct_ib_iface_t dummy_ib_iface;
-        auto uct_md = open_md();
         uct_ib_md_t *ib_md;
         ucs_status_t status;
         uint8_t gid_index;
