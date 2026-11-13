@@ -65,7 +65,8 @@ public:
                    CUmemLocationType location_type  = CU_MEM_LOCATION_TYPE_DEVICE,
                    size_t num_chunks                = 1,
                    unsigned char locality_domain_id = 0,
-                   bool gdr_capable                 = false)
+                   bool gdr_capable                 = false,
+                   unsigned short usage             = 0)
     {
         size_t granularity             = 0;
         CUmemAllocationProp prop       = {};
@@ -82,6 +83,7 @@ public:
         prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
         prop.location.type                   = location_type;
         prop.allocFlags.gpuDirectRDMACapable = gdr_capable;
+        prop.allocFlags.usage                = usage;
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
         if (location_type == CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
             prop.location.localized.deviceId         = (unsigned char)device;
@@ -240,6 +242,20 @@ public:
                 alloc(size, 0, CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN));
     }
 };
+
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
+/* Localized memory allowed GPUDirect RDMA over PCIe, which MPS MLOPart reports
+ * as device memory */
+class cuda_localized_pcie_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_localized_pcie_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        skip_unless_ok(
+                alloc(size, 0, CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN, 1,
+                      0, true, CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE));
+    }
+};
+#endif
 #endif
 
 #if CUDA_VERSION >= 11020
