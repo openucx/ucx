@@ -23,6 +23,13 @@
 #include <string.h>
 
 
+const char *ucs_topo_group_by_names[] = {
+    [UCS_TOPO_GROUP_BY_AUTO]       = "auto",
+    [UCS_TOPO_GROUP_BY_NUMA]       = "numa",
+    [UCS_TOPO_GROUP_BY_PCI_SWITCH] = "pci_switch",
+    [UCS_TOPO_GROUP_BY_LAST]       = NULL
+};
+
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
                        ucs_sys_device_t);
 

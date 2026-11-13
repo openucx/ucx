@@ -126,13 +126,6 @@ static const char *ucp_gpu_nic_assignment_modes[] = {
     [UCP_GPU_NIC_ASSIGNMENT_MODE_LAST]        = NULL
 };
 
-static const char *ucp_gpu_nic_assignment_group_by_names[] = {
-    [UCS_TOPO_GROUP_BY_AUTO]       = "auto",
-    [UCS_TOPO_GROUP_BY_NUMA]       = "numa",
-    [UCS_TOPO_GROUP_BY_PCI_SWITCH] = "pci_switch",
-    [UCS_TOPO_GROUP_BY_LAST]       = NULL
-};
-
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -714,7 +707,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "                whose group got no NIC, and NICs below none of these\n"
    "                PCIe switches, are grouped by NUMA node.",
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_group_by),
-   UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_group_by_names)},
+   UCS_CONFIG_TYPE_ENUM(ucs_topo_group_by_names)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"

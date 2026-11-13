@@ -79,6 +79,12 @@ typedef enum {
 
 
 /**
+ * Array of string names for each topology grouping criterion
+ */
+extern const char *ucs_topo_group_by_names[];
+
+
+/**
  * Get the depth of the deepest PCIe bridge shared by two system devices, below
  * the PCI root. Called with the topology lock held, so it must not take the
  * lock.
