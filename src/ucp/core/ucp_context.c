@@ -246,18 +246,50 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
   {"MAX_RNDV_LANES", NULL,"",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
-  {"MAX_RNDV_RAILS", "2",
-   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RNDV_RAILS", "auto",
+   "Maximal number of devices on which a rendezvous operation may be\n"
+   "executed in parallel.\n"
+   " - auto : for host memory, use UCX_MAX_RNDV_RAILS_FALLBACK.\n"
+   "          for GPU memory:\n"
+   "           - with NICs assigned by UCX_GPU_NIC_ASSIGNMENT_MODE, use the\n"
+   "             lanes on those NICs.\n"
+   "           - without assigned NICs, use UCX_MAX_RNDV_RAILS_FALLBACK.\n"
+   " - <N>  : use up to N devices.",
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
+
+  {"MAX_RNDV_RAILS_FALLBACK", "2",
+   "Maximal number of devices for a rendezvous operation when\n"
+   "UCX_MAX_RNDV_RAILS is 'auto' and selects no NICs for the memory (see\n"
+   "UCX_MAX_RNDV_RAILS). Ignored when UCX_MAX_RNDV_RAILS is a number.",
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes_fallback),
+   UCS_CONFIG_TYPE_UINT},
 
   {"MAX_RMA_LANES", NULL, "",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
-  {"MAX_RMA_RAILS", "1",
-   "Maximal number of devices on which a RMA operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RMA_RAILS", "auto",
+   "Maximal number of devices on which a RMA operation may be executed in\n"
+   "parallel.\n"
+   " - auto : for host memory, use UCX_MAX_RMA_RAILS_FALLBACK.\n"
+   "          for GPU memory:\n"
+   "           - with NICs assigned by UCX_GPU_NIC_ASSIGNMENT_MODE, use the\n"
+   "             lanes on those NICs.\n"
+   "           - without assigned NICs, use UCX_MAX_RMA_RAILS_FALLBACK.\n"
+   " - <N>  : use up to N devices.",
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
+
+  {"MAX_RMA_RAILS_FALLBACK", "1",
+   "Maximal number of devices for a RMA operation when UCX_MAX_RMA_RAILS is\n"
+   "'auto' and selects no NICs for the memory (see UCX_MAX_RMA_RAILS).\n"
+   "Ignored when UCX_MAX_RMA_RAILS is a number.",
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes_fallback),
+   UCS_CONFIG_TYPE_UINT},
 
   {"MIN_RNDV_CHUNK_SIZE", "16k",
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
@@ -2587,16 +2619,46 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
 }
 
 static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
-                                      unsigned max_rails)
+                                      unsigned long max_rails)
 {
     const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
 
     if (max_rails > max_lanes) {
-        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+        ucs_error("%s%s %lu exceeds the maximal number of lanes %u", env_prefix,
                   name, max_rails, max_lanes);
         return 0;
     }
 
+    return 1;
+}
+
+static int
+ucp_context_resolve_max_lanes(const char *env_prefix, const char *name,
+                              const char *fallback_name,
+                              unsigned long config_value, unsigned fallback,
+                              unsigned *max_lanes_p)
+{
+    if (config_value == UCS_ULUNITS_INF) {
+        ucs_error("%s%s value 'inf' is not supported, use a number or 'auto'",
+                  env_prefix, name);
+        return 0;
+    }
+
+    if (config_value == UCS_ULUNITS_AUTO) {
+        /* Validate the fallback value before using it */
+        if (!ucp_max_rails_config_valid(env_prefix, fallback_name, fallback)) {
+            return 0;
+        }
+
+        *max_lanes_p = fallback;
+        return 1;
+    }
+
+    if (!ucp_max_rails_config_valid(env_prefix, name, config_value)) {
+        return 0;
+    }
+
+    *max_lanes_p = config_value;
     return 1;
 }
 
@@ -2688,10 +2750,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
                                     context->config.ext.max_eager_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
-                                    context->config.ext.max_rndv_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
-                                    context->config.ext.max_rma_lanes)) {
+        !ucp_context_resolve_max_lanes(
+                config->env_prefix, "MAX_RNDV_RAILS", "MAX_RNDV_RAILS_FALLBACK",
+                context->config.ext.max_rndv_lanes_config,
+                context->config.ext.max_rndv_lanes_fallback,
+                &context->config.ext.max_rndv_lanes) ||
+        !ucp_context_resolve_max_lanes(
+                config->env_prefix, "MAX_RMA_RAILS", "MAX_RMA_RAILS_FALLBACK",
+                context->config.ext.max_rma_lanes_config,
+                context->config.ext.max_rma_lanes_fallback,
+                &context->config.ext.max_rma_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }
@@ -3164,6 +3232,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     if (status != UCS_OK) {
         goto err_free_res;
     }
+
+    context->config.auto_gpu_lanes = (context->gpu_nic_assignment != NULL);
 
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
     context->next_memh_reg_id = 0;
