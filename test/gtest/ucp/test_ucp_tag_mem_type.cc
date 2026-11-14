@@ -82,7 +82,14 @@ public:
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
 
-        test_ucp_tag::init();
+        /* Check the memory types before connecting the endpoints */
+        ucp_test::init();
+        if (!is_mem_type_copy_supported(m_send_mem_type) ||
+            !is_mem_type_copy_supported(m_recv_mem_type)) {
+            UCS_TEST_SKIP_R("memory type cannot be copied");
+        }
+
+        init_eps();
     }
 
     static void

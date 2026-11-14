@@ -43,6 +43,11 @@ void test_ucp_tag::get_test_variants(std::vector<ucp_test_variant>& variants)
 void test_ucp_tag::init()
 {
     ucp_test::init();
+    init_eps();
+}
+
+void test_ucp_tag::init_eps()
+{
     sender().connect(&receiver(), get_ep_params());
 
     ctx_attr.field_mask = 0;

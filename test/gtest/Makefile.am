@@ -347,6 +347,12 @@ gtest_LDADD += \
 endif # HAVE_GNUXX11
 endif # HAVE_HIP
 
+if HAVE_RDU
+gtest_SOURCES += \
+	ucm/rdu_hooks.cc \
+	ucp/test_ucp_rdu_memtype.cc
+endif
+
 if HAVE_ZE
 gtest_SOURCES += \
 	ucm/ze_hooks.cc \

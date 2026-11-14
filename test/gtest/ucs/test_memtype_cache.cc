@@ -15,6 +15,9 @@ extern "C" {
 #include <ucm/event/event.h>
 }
 
+#include <exception>
+#include <memory>
+
 class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
     test_memtype_cache() {
@@ -165,24 +168,43 @@ protected:
         std::vector<std::pair<void*, size_t> > released_ptrs;
         std::vector<mem_buffer*> allocated_buffers;
 
+        std::string skip_reason;
+        bool tested = false;
+
         /* The tests try to allocate two buffers with different memory types */
         for (auto mem_type : mem_buffer::supported_mem_types()) {
-            for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
-                mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
-                                                       &allocated_buffers, 0);
-
-                for (size_t j = 1; j <= ucs_get_page_size(); j += inner_step) {
-                    mem_buffer *buf2 = allocate_mem_buffer(j, mem_type,
+            try {
+                for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
+                    mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
                                                            &allocated_buffers,
                                                            0);
+
+                    for (size_t j = 1; j <= ucs_get_page_size();
+                         j       += inner_step) {
+                        mem_buffer *buf2 = allocate_mem_buffer(
+                                j, mem_type, &allocated_buffers, 0);
+                        if (!keep_buffers) {
+                            release_mem_buffer(buf2, &released_ptrs,
+                                               &allocated_buffers);
+                        }
+                    }
+
                     if (!keep_buffers) {
-                        release_mem_buffer(buf2, &released_ptrs);
+                        release_mem_buffer(buf1, &released_ptrs,
+                                           &allocated_buffers);
                     }
                 }
-
-                if (!keep_buffers) {
-                    release_mem_buffer(buf1, &released_ptrs);
-                }
+            } catch (const ucs::test_skip_exception &e) {
+                /* A device may limit the number of allocations; continue with
+                 * the next memory type */
+                delete_buffers(&allocated_buffers);
+                released_ptrs.clear();
+                skip_reason = e.what();
+                continue;
+            } catch (...) {
+                /* Do not leak the buffers if the test is aborted */
+                delete_buffers(&allocated_buffers);
+                throw;
             }
 
             if (keep_buffers) {
@@ -192,6 +214,20 @@ protected:
                 /* test released buffers */
                 test_ptrs_released(&released_ptrs);
             }
+
+            tested = true;
+        }
+
+        if (!tested) {
+            UCS_TEST_SKIP_R(skip_reason);
+        }
+    }
+
+    static void delete_buffers(std::vector<mem_buffer*> *allocated_buffers)
+    {
+        while (!allocated_buffers->empty()) {
+            delete allocated_buffers->back();
+            allocated_buffers->pop_back();
         }
     }
 
@@ -526,7 +562,24 @@ protected:
         void *ptr;
 
         {
-            mem_buffer b(buf_size, GetParam());
+            std::unique_ptr<mem_buffer> buffer;
+            std::exception_ptr alloc_error;
+
+            try {
+                buffer.reset(new mem_buffer(buf_size, GetParam()));
+            } catch (...) {
+                alloc_error = std::current_exception();
+            }
+
+            /* Allocate in all threads before any thread releases its buffer,
+             * since a released address range may be allocated again. Every
+             * thread reaches the barrier, also if its allocation failed. */
+            barrier();
+            if (alloc_error) {
+                std::rethrow_exception(alloc_error);
+            }
+
+            mem_buffer &b = *buffer;
 
             test_memtype_cache::init();
 

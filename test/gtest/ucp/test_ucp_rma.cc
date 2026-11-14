@@ -167,6 +167,14 @@ protected:
                             size_t max_size, ucs_memory_type_t send_mem_type,
                             ucs_memory_type_t target_mem_type,
                             unsigned mem_map_flags) {
+        if (!is_mem_type_rma_supported(send_mem_type) ||
+            !is_mem_type_rma_supported(target_mem_type)) {
+            UCS_TEST_MESSAGE << ucs_memory_type_names[send_mem_type] << "->"
+                             << ucs_memory_type_names[target_mem_type]
+                             << " is not supported by the transports";
+            return;
+        }
+
         ucs::detail::message_stream ms("INFO");
 
         ucs_assert(min_size <= max_size);
@@ -691,7 +699,8 @@ protected:
 
     static bool is_gpu_transport(const std::string &tl_name)
     {
-        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr"};
+        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr",
+                                               "rdu"};
 
         for (const auto &prefix : prefixes) {
             if (tl_name.compare(0, prefix.size(), prefix) == 0) {
@@ -777,6 +786,13 @@ protected:
 
         for (const auto &pair : ucs::supported_mem_type_pairs()) {
             if (!is_rndv_mem_type_pair(pair[0], pair[1])) {
+                continue;
+            }
+
+            /* Without GPU-direct RDMA, the data is staged through host
+             * memory, which requires copying it */
+            if (!is_mem_type_copy_supported(pair[0]) ||
+                !is_mem_type_copy_supported(pair[1])) {
                 continue;
             }
 

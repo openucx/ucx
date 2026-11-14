@@ -1,0 +1,11 @@
+#
+# Copyright (C) SambaNova Systems, 2025. ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+Name: @PACKAGE@-rdu
+Description: Unified Communication X Library RDU module
+Version: @VERSION@
+Libs:
+Libs.private:

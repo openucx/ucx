@@ -255,6 +255,8 @@ protected:
     virtual bool has_transport(const std::string& tl_name) const;
     bool has_any_transport(const std::vector<std::string>& tl_names) const;
     bool has_any_transport(const std::string *tls, size_t tl_size) const;
+    bool is_mem_type_copy_supported(ucs_memory_type_t mem_type);
+    bool is_mem_type_rma_supported(ucs_memory_type_t mem_type);
     size_t count_resources(const ucp_test_base::entity &e,
                            const std::string &tl_name) const;
     bool has_resource(const ucp_test_base::entity &e,
@@ -470,9 +472,9 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
 
 
 /**
- * The list of GPU copy TLs
+ * The list of GPU copy TLs, and of TLs needed to detect device memory types
  */
-#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy"
+#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy,rdu"
 
 
 /**

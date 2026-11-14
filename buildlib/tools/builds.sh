@@ -259,6 +259,28 @@ build_prof() {
 }
 
 #
+# Build RDU (SambaNova) - compile-only: the rdu_devmem runtime is loaded at run
+# time, so the modules build without it
+#
+build_rdu() {
+	echo "==== Build with enable RDU ===="
+	# RDU memory is registered by the IB memory domain, so configure rejects
+	# --with-rdu when it does not find IB
+	if ! ${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
+	then
+		grep 'RDU support was requested but IB support is not available' config.log
+		azure_log_warning "Not building with RDU (no IB)"
+		return
+	fi
+	$MAKEP
+
+	# Compilation check: configure must have enabled the RDU modules
+	grep '#define HAVE_RDU 1' config.h
+
+	make_clean distclean
+}
+
+#
 # Build UGNI
 #
 build_ugni() {
@@ -634,6 +656,7 @@ short)
 long)
 	tests=("${base_tests[@]}" \
 			'build_ugni' \
+			'build_rdu' \
 			'check_config_h' \
 			'check_inst_headers' \
 			'build_gcc' \
