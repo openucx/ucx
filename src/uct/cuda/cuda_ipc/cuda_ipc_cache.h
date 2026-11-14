@@ -22,6 +22,13 @@ typedef struct uct_cuda_ipc_cache_region uct_cuda_ipc_cache_region_t;
 typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 
 
+typedef struct {
+    ucs_status_t (*open)(uct_cuda_ipc_extended_rkey_t *key, CUdevice cu_dev,
+                         CUdeviceptr *mapped_addr, ucs_log_level_t log_level);
+    ucs_status_t (*close)(uct_cuda_ipc_cache_region_t *region);
+} uct_cuda_ipc_cache_ops_t;
+
+
 struct uct_cuda_ipc_cache_region {
     ucs_pgt_region_t        super;        /**< Base class - page table region */
     ucs_list_link_t         list;         /**< List element */
@@ -34,6 +41,7 @@ struct uct_cuda_ipc_cache_region {
 
 
 struct uct_cuda_ipc_cache {
+    const uct_cuda_ipc_cache_ops_t *ops; /**< Mapping operations */
     pthread_rwlock_t      lock;         /**< Protects the page table */
     ucs_pgtable_t         pgtable;      /**< Page table to hold the regions */
     char                  *name;        /**< Name */
@@ -56,6 +64,14 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
 
 
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache, int close_handles);
+
+
+/* Import into a specific cache, invalidating stale overlaps on a miss. */
+ucs_status_t
+uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
+                              uct_cuda_ipc_extended_rkey_t *key,
+                              CUdevice cu_dev, void **mapped_addr,
+                              ucs_log_level_t log_level);
 
 
 /**

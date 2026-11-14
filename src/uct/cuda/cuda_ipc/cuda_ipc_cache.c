@@ -225,7 +225,7 @@ uct_cuda_ipc_cache_region_destroy(uct_cuda_ipc_cache_t *cache,
               cache->name, UCS_PGT_REGION_ARG(&region->super),
               region->key.b_len);
 
-    uct_cuda_ipc_close_memhandle(region);
+    cache->ops->close(region);
     ucs_free(region);
 }
 
@@ -261,7 +261,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (close_handles) {
-            uct_cuda_ipc_close_memhandle(region);
+            cache->ops->close(region);
         }
 
         ucs_free(region);
@@ -559,7 +559,7 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         uct_cuda_ipc_cache_region_remove(cache, region);
 
-        status = uct_cuda_ipc_close_memhandle(region);
+        status = cache->ops->close(region);
         if (status != UCS_OK) {
             ucs_error("failed to close memhandle for base addr:%p type:%d (%s)",
                       (void*)region->key.d_bptr, region->key.ph.handle_type,
@@ -690,7 +690,7 @@ void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_mapping_t *mapping,
     ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
 }
 
-static ucs_status_t
+ucs_status_t
 uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                               uct_cuda_ipc_extended_rkey_t *ext_key,
                               CUdevice cu_dev, void **mapped_addr,
@@ -724,53 +724,9 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
             region->refcount++;
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
-        } else {
-            ucs_trace("%s: cuda_ipc cache remove stale region:"
-                      UCS_PGT_REGION_FMT " new_addr:%p new_size:%lu",
-                      cache->name, UCS_PGT_REGION_ARG(&region->super),
-                      (void *)key->d_bptr, key->b_len);
-
-            uct_cuda_ipc_cache_region_destroy(cache, region);
         }
     }
 
-    status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
-                                         (CUdeviceptr*)mapped_addr, log_level);
-    if (ucs_unlikely(status != UCS_OK)) {
-        if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
-            /* unmap all overlapping regions and retry*/
-            uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
-                                                  UCS_PTR_BYTE_OFFSET(key->d_bptr,
-                                                                      key->b_len));
-            status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
-                                                 (CUdeviceptr*)mapped_addr,
-                                                 log_level);
-            if (ucs_unlikely(status != UCS_OK)) {
-                if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
-                    /* unmap all cache entries and retry */
-                    uct_cuda_ipc_cache_purge(cache, 1);
-                    status = uct_cuda_ipc_open_memhandle(
-                            ext_key, cu_dev, (CUdeviceptr*)mapped_addr,
-                            log_level);
-                    if (status != UCS_OK) {
-                        ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
-                                  "len:%lu (%s)", cache->name,
-                                  (void *)key->d_bptr, key->b_len,
-                                  ucs_status_string(status));
-                    }
-                } else {
-                    ucs_fatal("%s: failed to open ipc mem handle. addr:%p len:%lu",
-                              cache->name, (void *)key->d_bptr, key->b_len);
-                }
-            }
-        } else {
-            ucs_debug("%s: failed to open ipc mem handle. addr:%p len:%lu",
-                      cache->name, (void *)key->d_bptr, key->b_len);
-            goto err;
-        }
-    }
-
-    /*create new cache entry */
     ret = ucs_posix_memalign((void **)&region,
                              ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
                              sizeof(uct_cuda_ipc_cache_region_t),
@@ -778,35 +734,52 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
     if (ret != 0) {
         ucs_warn("failed to allocate uct_cuda_ipc_cache region");
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto out_unlock;
     }
 
     region->super.start = ucs_align_down_pow2((uintptr_t)key->d_bptr,
                                                UCS_PGT_ADDR_ALIGN);
-    region->super.end   = ucs_align_up_pow2  ((uintptr_t)key->d_bptr + key->b_len,
-                                               UCS_PGT_ADDR_ALIGN);
+    region->super.end   = ucs_align_up_pow2((uintptr_t)key->d_bptr + key->b_len,
+                                             UCS_PGT_ADDR_ALIGN);
     region->key         = *key;
-    region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
 
+    /* A new allocation can start below a stale cached region, so a point
+     * lookup can miss it. Invalidate the aligned insertion span first. */
+    uct_cuda_ipc_cache_invalidate_regions(cache, (void*)region->super.start,
+                                           (void*)region->super.end);
+
+    status = cache->ops->open(ext_key, cu_dev,
+                              (CUdeviceptr*)&region->mapped_addr, log_level);
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
+            /* A remaining mapping conflict may lie outside the advertised
+             * range, so recovery requires purging the entire cache. */
+            uct_cuda_ipc_cache_purge(cache, 1);
+            status = cache->ops->open(ext_key, cu_dev,
+                                      (CUdeviceptr*)&region->mapped_addr,
+                                      log_level);
+            if (ucs_unlikely(status != UCS_OK)) {
+                ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
+                          "len:%lu (%s)", cache->name, (void *)key->d_bptr,
+                          key->b_len, ucs_status_string(status));
+            }
+        } else {
+            ucs_debug("%s: failed to open ipc mem handle. addr:%p len:%lu",
+                      cache->name, (void *)key->d_bptr, key->b_len);
+            goto err_free_region;
+        }
+    }
+
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
-    if (status == UCS_ERR_ALREADY_EXISTS) {
-        /* overlapped region means memory freed at source. remove and try insert */
-        uct_cuda_ipc_cache_invalidate_regions(cache,
-                                              (void *)region->super.start,
-                                              (void *)region->super.end);
-        status = UCS_PROFILE_CALL(ucs_pgtable_insert,
-                                  &cache->pgtable, &region->super);
-    }
     if (status != UCS_OK) {
-
         ucs_error("%s: failed to insert region:"UCS_PGT_REGION_FMT" size:%lu :%s",
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len,
                   ucs_status_string(status));
-        ucs_free(region);
-        goto err;
+        cache->ops->close(region);
+        goto err_free_region;
     }
 
     cache->num_regions++;
@@ -814,6 +787,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
     ucs_list_add_tail(&cache->lru_list, &region->lru_list);
 
     uct_cuda_ipc_cache_evict_lru(cache);
+    *mapped_addr = region->mapped_addr;
 
     ucs_trace("%s: cuda_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu"
               " (regions:%lu/%lu size:%zu/%zu)",
@@ -822,8 +796,11 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
               cache->total_size, uct_cuda_ipc_remote_cache.max_size);
 
     status = UCS_OK;
+    goto out_unlock;
 
-err:
+err_free_region:
+    ucs_free(region);
+out_unlock:
     pthread_rwlock_unlock(&cache->lock);
     return status;
 }
@@ -871,6 +848,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
 ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
                                        const char *name)
 {
+    static const uct_cuda_ipc_cache_ops_t ops = {
+        uct_cuda_ipc_open_memhandle, uct_cuda_ipc_close_memhandle
+    };
     ucs_status_t status;
     uct_cuda_ipc_cache_t *cache_desc;
     int ret;
@@ -901,6 +881,7 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
         goto err_destroy_rwlock;
     }
 
+    cache_desc->ops = &ops;
     ucs_list_head_init(&cache_desc->lru_list);
     cache_desc->num_regions = 0;
     cache_desc->total_size  = 0;
