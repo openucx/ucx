@@ -1,5 +1,5 @@
 #
-# Copyright (c) Intel Corporation, 2023. ALL RIGHTS RESERVED.
+# Copyright (c) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -46,6 +46,11 @@ AS_IF([test "x$ze_checked" != "xyes"],
          AS_IF([test "x$ze_happy" = "xyes"],
                [AC_CHECK_LIB([ze_loader], [zeInit],
                              [ZE_LIBS="$ZE_LIBS -lze_loader"], [ze_happy="no"])])
+
+         # Queue group ordinal queries, Level Zero API 1.9 (used by gtest)
+         AS_IF([test "x$ze_happy" = "xyes"],
+               [AC_CHECK_DECLS([zeCommandQueueGetOrdinal, zeCommandListGetOrdinal],
+                               [], [], [[#include <level_zero/ze_api.h>]])])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"

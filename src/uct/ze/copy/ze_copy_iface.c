@@ -237,11 +237,17 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
-/* Create the queue and list of a device; a driver failure is logged at
- * log_level, as the caller may be able to continue without them */
+static const char *uct_ze_copy_engine_names[] = {
+    [UCT_ZE_COPY_ENGINE_COPY]    = "copy",
+    [UCT_ZE_COPY_ENGINE_COMPUTE] = "compute"
+};
+
+/* Create the queue and list of an engine of a device; a driver failure is
+ * logged at log_level, as the caller may be able to continue without them */
 static ucs_status_t
 uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                ze_device_handle_t device,
+                               uct_ze_copy_engine_t engine,
                                ucs_log_level_t log_level,
                                unsigned *queue_index_p)
 {
@@ -250,7 +256,25 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ze_command_queue_desc_t cq_desc = {};
     ze_command_list_desc_t cl_desc  = {};
     uct_ze_copy_queue_t *queue;
+    uint32_t ordinal;
+    ucs_status_t status;
     ze_result_t ret;
+
+    if (engine == UCT_ZE_COPY_ENGINE_COPY) {
+        status = uct_ze_base_get_copy_ordinal(device, log_level, &ordinal,
+                                              NULL);
+    } else {
+        status = uct_ze_base_get_compute_ordinal(device, log_level, &ordinal);
+    }
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cq_desc.stype                    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
+    cq_desc.ordinal                  = ordinal;
+    cl_desc.stype                    = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC;
+    cl_desc.commandQueueGroupOrdinal = ordinal;
 
     queue = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
 
@@ -258,7 +282,8 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                &queue->cmdq);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_log(log_level, "ze_copy_iface: zeCommandQueueCreate failed for "
-                "device %p with 0x%x", device, ret);
+                "the %s engine of device %p with 0x%x",
+                uct_ze_copy_engine_names[engine], device, ret);
         goto err_pop;
     }
 
@@ -266,11 +291,13 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                               &queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_log(log_level, "ze_copy_iface: zeCommandListCreate failed for "
-                "device %p with 0x%x", device, ret);
+                "the %s engine of device %p with 0x%x",
+                uct_ze_copy_engine_names[engine], device, ret);
         goto err_destroy_cmdq;
     }
 
     queue->device  = device;
+    queue->engine  = engine;
     *queue_index_p = ucs_array_length(&iface->queues) - 1;
     return UCS_OK;
 
@@ -282,10 +309,11 @@ err_pop:
 }
 
 /* Return the device which owns the allocation, or NULL for host memory and
- * for allocations the context does not recognize */
+ * for allocations the context does not recognize; is_device_p tells whether
+ * the allocation is device memory, which cannot migrate to the host */
 static ze_device_handle_t
 uct_ze_copy_iface_get_mem_device(uct_ze_copy_iface_t *iface,
-                                 const void *address)
+                                 const void *address, int *is_device_p)
 {
     uct_ze_copy_md_t *ze_md                 = ucs_derived_of(iface->super.md,
                                                              uct_ze_copy_md_t);
@@ -297,61 +325,71 @@ uct_ze_copy_iface_get_mem_device(uct_ze_copy_iface_t *iface,
 
     ret = zeMemGetAllocProperties(ze_md->ze_context, address, &props, &device);
     if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
+        *is_device_p = 0;
         return NULL;
     }
 
+    *is_device_p = (props.type == ZE_MEMORY_TYPE_DEVICE);
     return device;
 }
 
 unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
                                      const void *src, const void *dst)
 {
+    uct_ze_copy_engine_t engine = UCT_ZE_COPY_ENGINE_COPY;
     uct_ze_copy_queue_t *queue;
-    ze_device_handle_t device;
+    ze_device_handle_t device, dst_device;
+    int src_is_device, dst_is_device;
     unsigned queue_index;
     ucs_status_t status;
     unsigned i;
 
-    /* With one device every device buffer is on the MD device */
-    if (!iface->multi_device) {
-        return 0;
-    }
-
     /* Run the copy on the device which owns the source buffer, so it reads
      * locally, or else on the owner of the destination. A queue on an
      * unrelated device has to reach both buffers over PCIe. */
-    device = uct_ze_copy_iface_get_mem_device(iface, src);
+    device = uct_ze_copy_iface_get_mem_device(iface, src, &src_is_device);
     if (device == NULL) {
-        device = uct_ze_copy_iface_get_mem_device(iface, dst);
+        device = uct_ze_copy_iface_get_mem_device(iface, dst, &dst_is_device);
         if (device == NULL) {
             return 0;
+        }
+    } else if (src_is_device) {
+        /* A copy within one device runs on the compute engine of that
+         * device. Shared memory may reside on the host, so it does not
+         * count. */
+        dst_device = uct_ze_copy_iface_get_mem_device(iface, dst,
+                                                      &dst_is_device);
+        if (dst_is_device && (dst_device == device)) {
+            engine = UCT_ZE_COPY_ENGINE_COMPUTE;
         }
     }
 
     for (i = 0; i < ucs_array_length(&iface->queues); ++i) {
         queue = &ucs_array_elem(&iface->queues, i);
-        if (queue->device == device) {
-            /* A device without a queue of its own uses the MD device queue */
+        if ((queue->device == device) && (queue->engine == engine)) {
+            /* An engine without a queue of its own uses the MD device queue */
             return (queue->cmdq == NULL) ? 0 : i;
         }
     }
 
-    status = uct_ze_copy_iface_queue_create(iface, device, UCS_LOG_LEVEL_DEBUG,
-                                            &queue_index);
+    status = uct_ze_copy_iface_queue_create(iface, device, engine,
+                                            UCS_LOG_LEVEL_DEBUG, &queue_index);
     if (status == UCS_OK) {
         return queue_index;
     }
 
     /* Fall back to the MD device queue, which reaches the buffer if the MD
-     * device has peer access to its device. Record the device without a
+     * device has peer access to its device. Record the engine without a
      * queue, so that the next copy does not try to create one again. Without
      * the record the copy still runs, and the next one tries again. */
     queue         = ucs_array_append(&iface->queues, return 0);
     queue->device = device;
+    queue->engine = engine;
     queue->cmdq   = NULL;
     queue->cmdl   = NULL;
-    ucs_warn("ze_copy_iface: could not create a queue on device %p, using "
-             "the queue of the MD device", device);
+    ucs_warn("ze_copy_iface: could not create a %s engine queue on device %p, "
+             "using the copy engine queue of the MD device",
+             uct_ze_copy_engine_names[engine], device);
     return 0;
 }
 
@@ -379,6 +417,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     ucs_array_init_dynamic(&self->queues);
 
     status = uct_ze_copy_iface_queue_create(self, ze_md->ze_device,
+                                            UCT_ZE_COPY_ENGINE_COPY,
                                             UCS_LOG_LEVEL_ERROR, &queue_index);
     if (status != UCS_OK) {
         ucs_array_cleanup_dynamic(&self->queues);
@@ -388,12 +427,10 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     /* The fallback to the MD device queue uses element 0 */
     ucs_assert(queue_index == 0);
 
-    self->id           = ucs_generate_uuid((uintptr_t)self);
-    self->multi_device = (uct_ze_base_get_num_subdevices() > 1);
+    self->id = ucs_generate_uuid((uintptr_t)self);
 
-    ucs_debug("ze_copy_iface: initialized iface on device %p, %s",
-              ze_md->ze_device,
-              self->multi_device ? "queues per device" : "single device");
+    ucs_debug("ze_copy_iface: initialized iface on device %p",
+              ze_md->ze_device);
 
     return UCS_OK;
 }
