@@ -225,51 +225,18 @@ out:
 }
 
 static ucs_status_t
-ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, size_t rtm_dst_len)
+ucs_netlink_add_route_entry(const struct rtmsg *rt_msg, int if_index,
+                            const void *dst_in_addr)
 {
-    *if_index_p  = -1;
-    *dst_in_addr = NULL;
-
-    for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-        if (rta->rta_type == RTA_OIF) {
-            *if_index_p = *((const int *)RTA_DATA(rta));
-        } else if (rta->rta_type == RTA_DST) {
-            *dst_in_addr = RTA_DATA(rta);
-        }
-    }
-
-    if (/* Network interface index is not valid */
-        (*if_index_p == -1) ||
-        /* dst_in_addr required but not present */
-        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
-static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
-{
-    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
-    const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
-    int iface_index;
     khiter_t iter;
     int khret;
 
-    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr,
-                                   rt_msg->rtm_dst_len) != UCS_OK) {
-        return UCS_INPROGRESS;
-    }
-
     iter = kh_put(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
-                  iface_index, &khret);
+                  if_index, &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        ucs_error("failed to put net iface index (%d) in the cache", iface_index);
+        ucs_error("failed to put net iface index (%d) in the cache", if_index);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -296,6 +263,56 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 
     new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
     new_rule->route_type        = rt_msg->rtm_type;
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    const struct rtattr *rta   = RTM_RTA(rt_msg);
+    int len                    = RTM_PAYLOAD(nlh);
+    const struct rtattr *multipath = NULL;
+    const void *dst_in_addr        = NULL;
+    int if_index                   = -1;
+    const struct rtnexthop *nh;
+    int nh_len;
+    ucs_status_t status;
+
+    for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if (rta->rta_type == RTA_OIF) {
+            if_index = *((const int *)RTA_DATA(rta));
+        } else if (rta->rta_type == RTA_DST) {
+            dst_in_addr = RTA_DATA(rta);
+        } else if (rta->rta_type == RTA_MULTIPATH) {
+            multipath = rta;
+        }
+    }
+
+    /* dst_in_addr required but not present */
+    if ((rt_msg->rtm_dst_len != 0) && (dst_in_addr == NULL)) {
+        return UCS_INPROGRESS;
+    }
+
+    if (multipath != NULL) {
+        /* ECMP route: the output interfaces are in the nested nexthops */
+        nh     = RTA_DATA(multipath);
+        nh_len = RTA_PAYLOAD(multipath);
+        for (; RTNH_OK(nh, nh_len); nh = RTNH_NEXT(nh)) {
+            nh_len -= RTNH_ALIGN(nh->rtnh_len);
+            status  = ucs_netlink_add_route_entry(rt_msg, nh->rtnh_ifindex,
+                                                  dst_in_addr);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    } else if (if_index != -1) {
+        status = ucs_netlink_add_route_entry(rt_msg, if_index, dst_in_addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     return UCS_INPROGRESS;
 }
