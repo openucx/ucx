@@ -31,7 +31,7 @@ jobs:
     pool:
       name: MLNX
       demands:
-        - ucx_gpu_test -equals yes
+        - ucx_new01_test -equals yes
     strategy:
       matrix:
         centos7_cuda_11_0:

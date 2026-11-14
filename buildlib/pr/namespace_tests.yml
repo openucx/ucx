@@ -4,6 +4,9 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     displayName: ${{ parameters.name }} on worker
+    ${{ if eq(parameters.name, 'gpu_namespace') }}:
+      variables:
+        UCX_CI_GPU_JOB: yes
     timeoutInMinutes: 30
     workspace:
       clean: all
