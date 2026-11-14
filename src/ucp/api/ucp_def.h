@@ -14,6 +14,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/config/types.h>
+#include <ucs/type/qos_level.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -788,6 +789,16 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    /**
+     * Quality of service level of this endpoint, as defined by
+     * @ref ucs_qos_level_t.
+     *
+     * This setting is optional. To enable it, the corresponding @ref
+     * UCP_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must be set. When it
+     * is not set, the endpoint keeps the transport's default priority, which
+     * is not necessarily any of those levels.
+     */
+    ucs_qos_level_t         qos_level;
 } ucp_ep_params_t;
 
 
