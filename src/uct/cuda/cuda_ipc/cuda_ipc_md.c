@@ -222,8 +222,18 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 static ucs_status_t
 uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 {
+    static ucs_init_once_t init_ptrace_peers = UCS_INIT_ONCE_INITIALIZER;
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
+
+    /* Peers import POSIX FD handles with pidfd_getfd(), which requires them to
+     * pass the ptrace access check against this process. Export the handles
+     * even if peers are not allowed: the same process, its descendants and
+     * peers with CAP_SYS_PTRACE still pass the check, and other peers fall
+     * back when the import fails. */
+    UCS_INIT_ONCE(&init_ptrace_peers) {
+        ucs_sys_ptrace_enable_peers();
+    }
 
     status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&alloc_handle, addr),
                               UCS_LOG_LEVEL_DIAG);
