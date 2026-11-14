@@ -51,6 +51,17 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                                    int *msg_done_p);
 
 /**
+ * Parse an RTM_NEWROUTE entry into the routing table cache.
+ *
+ * @param [in] nlh    Pointer to the netlink message header.
+ * @param [in] arg    Unused.
+ *
+ * @return UCS_INPROGRESS if parsing should continue, or error code otherwise.
+ */
+ucs_status_t
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg);
+
+/**
  * Send a netlink request and parse the response.
  *
  * @param [in]  protocol         Netlink protocol (e.g. NETLINK_ROUTE).

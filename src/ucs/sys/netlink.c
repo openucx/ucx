@@ -249,7 +249,7 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
     const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
@@ -259,6 +259,19 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     int iface_index;
     khiter_t iter;
     int khret;
+
+    if (nlh->nlmsg_len < NLMSG_LENGTH(sizeof(*rt_msg))) {
+        ucs_debug("netlink route message is too short (%u bytes)",
+                  nlh->nlmsg_len);
+        return UCS_INPROGRESS;
+    }
+
+    /* A non-unicast default route (e.g. TPROXY local default, IPv6
+     * unreachable default on lo) matches any destination, so it says nothing
+     * about reachability. */
+    if ((rt_msg->rtm_dst_len == 0) && (rt_msg->rtm_type != RTN_UNICAST)) {
+        return UCS_INPROGRESS;
+    }
 
     if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
                                    &iface_index, &dst_in_addr,
