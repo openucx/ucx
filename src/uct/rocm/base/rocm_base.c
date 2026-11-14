@@ -658,8 +658,7 @@ ucs_status_t uct_rocm_base_ep_flush(uct_ep_h tl_ep, ucs_mpool_t *signal_pool,
     }
 
     hsa_signal_store_screlease(flush_signal->signal, 0);
-    flush_signal->comp        = comp;
-    flush_signal->mapped_addr = NULL;
+    uct_rocm_base_signal_desc_set(flush_signal, comp, NULL, NULL, NULL);
     ucs_queue_push(signal_queue, &flush_signal->queue);
 
     UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
