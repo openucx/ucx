@@ -199,7 +199,12 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             ucp_trace_req(req, "adding pending flush on ep %p lane[%d]: %s",
                           ep, lane, ucs_status_string(status));
             if (status == UCS_OK) {
+                /* The requests queued on this lane before the flush may send
+                 * on the other lanes too, e.g. a put split between the lanes.
+                 * Flush the other lanes from the pending callback, after
+                 * these requests are sent. */
                 req->send.lane = lane;
+                break;
             } else if (status == UCS_ERR_BUSY) {
                 ucp_ep_flush_request_resched(ep, req);
                 return;
@@ -353,8 +358,16 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
     ucp_request_t *req = arg;
 
-    ucp_trace_req(req, "resume slow path callback comp %d",
-                  req->send.state.uct_comp.count);
+    ucp_trace_req(req, "resume slow path callback comp %d lane %d",
+                  req->send.state.uct_comp.count, req->send.lane);
+
+    if (req->send.lane != UCP_NULL_LANE) {
+        /* The request was added to the pending queue of this lane, and the
+         * requests queued there before the flush may send on the remaining
+         * lanes too, so do not flush them from here. The pending callback, or
+         * the purge of that queue, continues the flush. */
+        return 0;
+    }
 
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
