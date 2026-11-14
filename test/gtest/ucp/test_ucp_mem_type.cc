@@ -9,6 +9,9 @@
 #include <common/mem_buffer.h>
 
 extern "C" {
+#include <ucm/event/event.h>
+#include <ucs/config/global_opts.h>
+#include <ucs/memory/memtype_cache.h>
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
@@ -102,6 +105,237 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
 
+/* Disables UCM events and resets the global memory type cache, and restores
+ * both on destruction, also when the test fails or is skipped in init() */
+class memtype_explicit_guard {
+public:
+    memtype_explicit_guard() : m_enable_events(0), m_active(false) {
+    }
+
+    ~memtype_explicit_guard() {
+        if (m_active) {
+            reset_cache();
+            ucm_global_opts.enable_events = m_enable_events;
+        }
+    }
+
+    void enable() {
+        m_enable_events               = ucm_global_opts.enable_events;
+        m_active                      = true;
+        ucm_global_opts.enable_events = 0;
+        reset_cache();
+    }
+
+private:
+    static void reset_cache() {
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+    }
+
+    int  m_enable_events;
+    bool m_active;
+};
+
+/* Memory type cache without UCM events: only ranges mapped by ucp_mem_map() are
+ * cached, and they are removed by ucp_mem_unmap() */
+class test_ucp_memtype_explicit : public test_ucp_mem_type {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_test_variants_base,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED));
+    }
+
+    virtual void init() {
+        modify_config("MEMTYPE_CACHE", "y");
+        m_guard.enable();
+        ucp_test::init();
+    }
+
+protected:
+    ucs_status_t lookup(const void *address, size_t size,
+                        ucs_memory_info_t *info) const {
+        return ucs_memtype_lookup(address, size, info);
+    }
+
+    ucs_status_t map(void *address, size_t size, ucp_mem_h *memh_p,
+                     const ucs_memory_type_t *hint = NULL) {
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = address;
+        params.length     = size;
+        if (hint != NULL) {
+            params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+            params.memory_type = *hint;
+        }
+
+        return ucp_mem_map(sender().ucph(), &params, memh_p);
+    }
+
+    void unmap(ucp_mem_h memh) {
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    }
+
+private:
+    memtype_explicit_guard m_guard;
+};
+
+UCS_TEST_P(test_ucp_memtype_explicit, map_unmap) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    mem_buffer b(size, mem_type());
+
+    /* Memory which was not mapped is not known to the cache */
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh));
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
+UCS_TEST_P(test_ucp_memtype_explicit, repeated_map) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh1, memh2;
+
+    mem_buffer b(size, mem_type());
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh1));
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh2));
+
+    /* The range stays cached until the last mapping is released */
+    unmap(memh1);
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh2);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
+UCS_TEST_P(test_ucp_memtype_explicit, map_with_hint) {
+    const size_t size                  = 4096;
+    const ucs_memory_type_t wrong_hint = UCS_MEMORY_TYPE_HOST;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+    ucs_status_t status;
+
+    mem_buffer b(size, mem_type());
+
+    status = map(b.ptr(), size, &memh, &wrong_hint);
+    if (status != UCS_OK) {
+        UCS_TEST_SKIP_R("mapping with a different memory type hint failed");
+    }
+
+    /* The cache holds the detected type, not the user-provided hint */
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+}
+
+UCS_TEST_P(test_ucp_memtype_explicit, map_allocate) {
+    const size_t size = 4096;
+    ucp_mem_map_params_t params;
+    ucp_mem_attr_t attr;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS     |
+                         UCP_MEM_MAP_PARAM_FIELD_LENGTH      |
+                         UCP_MEM_MAP_PARAM_FIELD_FLAGS       |
+                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    params.address     = NULL;
+    params.length      = size;
+    params.flags       = UCP_MEM_MAP_ALLOCATE;
+    params.memory_type = mem_type();
+    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    ASSERT_UCS_OK(ucp_mem_query(memh, &attr));
+
+    ASSERT_UCS_OK(lookup(attr.address, size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(attr.address, size, &info));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_explicit, self_cuda,
+                              "self,cuda_copy")
+
+/* Transfers from and to memory which is cached by ucp_mem_map(), where the
+ * operations get no memory handle, so the protocols look the memory up */
+class test_ucp_memtype_explicit_xfer : public test_ucp_memtype_explicit {
+public:
+    virtual void init() {
+        test_ucp_memtype_explicit::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+protected:
+    static const uint64_t SEED = 0x2222222222222222lu;
+
+    void send_recv(void *send_ptr, void *recv_ptr, size_t length) {
+        ucp_request_param_t param;
+
+        param.op_attr_mask = 0;
+        mem_buffer::pattern_fill(send_ptr, length, SEED, mem_type());
+        mem_buffer::pattern_fill(recv_ptr, length, 0, mem_type());
+
+        void *rreq = ucp_tag_recv_nbx(receiver().worker(), recv_ptr, length, 1,
+                                      1, &param);
+        void *sreq = ucp_tag_send_nbx(sender().ep(), send_ptr, length, 1,
+                                      &param);
+        EXPECT_UCS_OK(request_wait(sreq));
+        EXPECT_UCS_OK(request_wait(rreq));
+
+        mem_buffer::pattern_check(recv_ptr, length, SEED, mem_type());
+    }
+};
+
+/* Send a rendezvous size message from an offset inside a mapped buffer, without
+ * passing the memory handle, and then send again after the buffers are
+ * unmapped, which falls back to the memory type detection */
+UCS_TEST_P(test_ucp_memtype_explicit_xfer, tag_send_from_mapped_buffer,
+           "RNDV_THRESH=0")
+{
+    static const size_t size   = 256 * UCS_KBYTE;
+    static const size_t offset = 4 * UCS_KBYTE;
+    const size_t length        = size - (2 * offset);
+    ucs_memory_info_t info;
+    ucp_mem_h send_memh, recv_memh;
+
+    mem_buffer send_buf(size, mem_type());
+    mem_buffer recv_buf(size, mem_type());
+    void *send_ptr = UCS_PTR_BYTE_OFFSET(send_buf.ptr(), offset);
+    void *recv_ptr = UCS_PTR_BYTE_OFFSET(recv_buf.ptr(), offset);
+
+    ASSERT_UCS_OK(map(send_buf.ptr(), size, &send_memh));
+    ASSERT_UCS_OK(map(recv_buf.ptr(), size, &recv_memh));
+
+    /* The lookup of a range inside the buffer reports the mapped range */
+    ASSERT_UCS_OK(lookup(send_ptr, length, &info));
+    EXPECT_EQ(mem_type(), info.type);
+    EXPECT_EQ(send_buf.ptr(), info.base_address);
+    EXPECT_EQ(size, info.alloc_length);
+
+    send_recv(send_ptr, recv_ptr, length);
+
+    unmap(send_memh);
+    unmap(recv_memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(send_ptr, length, &info));
+
+    send_recv(send_ptr, recv_ptr, length);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_explicit_xfer, all, "all")
 
 /*
  * The CUDA_COPY_DMABUF, ROCM_COPY_DMABUF and ZE_COPY_DMABUF settings decide

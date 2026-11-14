@@ -8,6 +8,7 @@
 #include <common/mem_buffer.h>
 
 #include <ucs/sys/sys.h>
+#include <ucs/config/global_opts.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucm/api/ucm.h>
 
@@ -575,3 +576,197 @@ UCS_MT_TEST_P(test_memtype_cache_deferred_create, mt_cache_init, 8) {
 
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
+
+class test_memtype_explicit : public ucs::test {
+protected:
+    virtual void init() {
+        ucs::test::init();
+        m_enable_events = ucm_global_opts.enable_events;
+        modify_config("MEMTYPE_CACHE", "y");
+        ucm_global_opts.enable_events = 0;
+        reset_cache();
+    }
+
+    virtual void cleanup() {
+        reset_cache();
+        ucm_global_opts.enable_events = m_enable_events;
+        ucs::test::cleanup();
+    }
+
+    static void reset_cache() {
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+    }
+
+    ucs_status_t lookup(const void *base, size_t offset, size_t size,
+                        ucs_memory_info_t *info) const {
+        return ucs_memtype_lookup(UCS_PTR_BYTE_OFFSET(base, offset), size,
+                                  info);
+    }
+
+    void expect_hit(const void *base, size_t offset, size_t size,
+                    size_t reg_offset, size_t reg_size) const {
+        ucs_memory_info_t info;
+
+        ASSERT_UCS_OK(lookup(base, offset, size, &info));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+        EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, reg_offset), info.base_address);
+        EXPECT_EQ(reg_size, info.alloc_length);
+    }
+
+    void expect_miss(const void *base, size_t offset, size_t size) const {
+        ucs_memory_info_t info;
+
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, offset, size, &info));
+    }
+
+    void reg(const void *base, size_t offset, size_t size,
+             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
+             uint8_t mem_flags = 1) const {
+        ucs_memtype_map_register(UCS_PTR_BYTE_OFFSET(base, offset), size,
+                                 mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                                 mem_flags);
+    }
+
+    void unreg(const void *base, size_t offset, size_t size) const {
+        ucs_memtype_map_unregister(UCS_PTR_BYTE_OFFSET(base, offset), size);
+    }
+
+    int m_enable_events;
+};
+
+UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x10000);
+
+    ASSERT_TRUE(ucs_memtype_map_is_enabled());
+    reg(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 5);
+
+    /* The info of the registration is reported, with its real bounds */
+    ASSERT_UCS_OK(lookup(base, 0x100, 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, info.sys_dev);
+    EXPECT_EQ(5, info.mem_flags);
+    expect_hit(base, 0x100, 0x100, 0, 0x1000);
+
+    /* A range which is not fully inside the registration is a miss */
+    expect_miss(base, 0xff0, 0x20);
+    expect_miss(base, 0x1000, 0x10);
+
+    unreg(base, 0, 0x1000);
+    expect_miss(base, 0, 0x100);
+}
+
+/* A=[0,0x2000) and B=[0x1000,0x3000) partially overlap, C=[0x8000,0xc000)
+ * contains D=[0x9000,0xa000) */
+UCS_TEST_F(test_memtype_explicit, overlapping_registrations) {
+    const void *base = reinterpret_cast<void*>(0x20000);
+
+    reg(base, 0, 0x2000);
+    reg(base, 0x1000, 0x2000);
+    expect_hit(base, 0, 0x2000, 0, 0x2000);
+    expect_hit(base, 0x1800, 0x1000, 0x1000, 0x2000);
+
+    /* No single registration contains the whole range */
+    expect_miss(base, 0, 0x3000);
+
+    /* Unregistering A leaves exactly B */
+    unreg(base, 0, 0x2000);
+    expect_miss(base, 0, 0x100);
+    expect_hit(base, 0x1000, 0x2000, 0x1000, 0x2000);
+    unreg(base, 0x1000, 0x2000);
+    expect_miss(base, 0x1000, 0x100);
+
+    /* Unregistering the outer one leaves the inner one, and vice versa */
+    for (int outer_first = 0; outer_first < 2; ++outer_first) {
+        reg(base, 0x8000, 0x4000);
+        reg(base, 0x9000, 0x1000);
+        if (outer_first) {
+            unreg(base, 0x8000, 0x4000);
+            expect_hit(base, 0x9000, 0x100, 0x9000, 0x1000);
+            expect_miss(base, 0x8000, 0x100);
+            unreg(base, 0x9000, 0x1000);
+        } else {
+            unreg(base, 0x9000, 0x1000);
+            expect_hit(base, 0x9000, 0x100, 0x8000, 0x4000);
+            unreg(base, 0x8000, 0x4000);
+        }
+        expect_miss(base, 0x9000, 0x100);
+    }
+}
+
+/* An unregistration removes only the registration of exactly this range, and
+ * only one registration of it */
+UCS_TEST_F(test_memtype_explicit, unregister_exact_range) {
+    const void *base = reinterpret_cast<void*>(0x30000);
+
+    /* Same start and different ends are distinct registrations */
+    reg(base, 0, 0x1000);
+    reg(base, 0, 0x3000);
+    unreg(base, 0, 0x3000);
+    expect_hit(base, 0, 0x1000, 0, 0x1000);
+    expect_miss(base, 0, 0x2000);
+
+    /* A range which is not registered does not remove anything */
+    unreg(base, 0x4000, 0x1000);
+    unreg(base, 0, 0x800);
+    expect_hit(base, 0, 0x100, 0, 0x1000);
+
+    /* N registrations of a range need N unregistrations */
+    reg(base, 0, 0x1000);
+    unreg(base, 0, 0x1000);
+    expect_hit(base, 0, 0x100, 0, 0x1000);
+    unreg(base, 0, 0x1000);
+    expect_miss(base, 0, 0x100);
+}
+
+UCS_TEST_F(test_memtype_explicit, host_registration) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x3d000);
+
+    reg(base, 0, 0x1000, UCS_MEMORY_TYPE_HOST);
+    ASSERT_UCS_OK(lookup(base, 0, 0x1000, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, info.type);
+
+    unreg(base, 0, 0x1000);
+    expect_miss(base, 0, 0x1000);
+}
+
+/* The event-driven cache is not created in explicit mode, and a detection
+ * result cannot be cached without free events */
+UCS_TEST_F(test_memtype_explicit, no_event_cache) {
+    const void *base = reinterpret_cast<void*>(0x39000);
+
+    ucs_memtype_cache_global_create();
+    EXPECT_TRUE(ucs_memtype_cache_global_instance == NULL);
+
+    ucs_memtype_cache_update(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                             UCS_SYS_DEVICE_ID_UNKNOWN, 1);
+    expect_miss(base, 0, 0x100);
+    EXPECT_FALSE(ucs_memtype_cache_is_empty());
+}
+
+/* Registrations which were not released are dropped by the cleanup */
+UCS_TEST_F(test_memtype_explicit, leftover_registrations) {
+    const void *base = reinterpret_cast<void*>(0x3f000);
+
+    reg(base, 0, 0x1000);
+    reg(base, 0x2000, 0x1000);
+
+    reset_cache();
+    expect_miss(base, 0, 0x100);
+    expect_miss(base, 0x2000, 0x100);
+}
+
+/* Explicit mode requires the cache to be enabled and UCM events to be off */
+UCS_TEST_F(test_memtype_explicit, mode_selection) {
+    EXPECT_TRUE(ucs_memtype_map_is_enabled());
+
+    modify_config("MEMTYPE_CACHE", "n");
+    EXPECT_FALSE(ucs_memtype_map_is_enabled());
+    modify_config("MEMTYPE_CACHE", "y");
+    EXPECT_TRUE(ucs_memtype_map_is_enabled());
+
+    ucm_global_opts.enable_events = 1;
+    EXPECT_FALSE(ucs_memtype_map_is_enabled());
+}

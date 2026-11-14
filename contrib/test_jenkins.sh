@@ -748,6 +748,19 @@ run_ucx_perftest() {
 			done
 		done
 
+		# Memory type cache which tracks only explicitly registered memory,
+		# since UCM events are disabled
+		for gdr in $gdr_options
+		do
+			export UCX_MEM_EVENTS=n
+			export UCX_MEMTYPE_CACHE=y
+			export UCX_IB_GPU_DIRECT_RDMA=$gdr
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+			unset UCX_MEM_EVENTS
+			unset UCX_MEMTYPE_CACHE
+			unset UCX_IB_GPU_DIRECT_RDMA
+		done
+
 		export UCX_TLS=self,shm,cma,cuda_copy
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		unset UCX_TLS

@@ -88,6 +88,17 @@ void ucs_interval_map_remove(ucs_interval_map_t *map,
 
 
 /**
+ * @brief Remove and return the interval with the lowest start
+ *
+ * @param [in]  map  Interval map.
+ *
+ * @return The removed node, or NULL if @a map is empty.
+ */
+ucs_interval_map_node_t *
+ucs_interval_map_extract_first(ucs_interval_map_t *map);
+
+
+/**
  * @brief Find an interval containing [start, end)
  *
  * @param [in]  map    Interval map.

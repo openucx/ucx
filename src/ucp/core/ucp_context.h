@@ -735,7 +735,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    status = ucs_memtype_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
         if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
             ucs_trace_req("address %p length %zu: not found in memtype cache, "
