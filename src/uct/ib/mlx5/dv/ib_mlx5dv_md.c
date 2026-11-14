@@ -3431,7 +3431,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
 
-    status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 0, 0);
+    status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 1, 0);
     if (status != UCS_OK) {
         goto err_md_close;
     }
