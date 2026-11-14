@@ -28,6 +28,64 @@ static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
     return sizeof(*hdr);
 }
 
+/*
+ * A software RMA/AMO reply could not be sent: the transport failed the send
+ * itself instead of returning UCS_ERR_NO_RESOURCE (UCT/TCP reports a peer which
+ * closed its connection this way). A transport reports such a failure through
+ * the error handler before it returns from the send, so the endpoint is already
+ * either failed - the peer is gone and the reply is dropped - or, with
+ * UCP_ERR_HANDLING_MODE_FAILOVER, reconfigured without the lane: the peer still
+ * waits for the reply (its flush counts it), so it is re-sent on the lane the
+ * endpoint fell over to. A failure the transport did not report is reported
+ * here, as ucp_wireup_msg_progress() does. Either way the error does not reach
+ * ucp_request_send(), which has no handling for it and aborts.
+ */
+ucs_status_t
+ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
+{
+    ucs_status_t status = (ucs_status_t)packed_len;
+    ucp_ep_h ep         = req->send.ep;
+    ucp_lane_index_t am_lane;
+    uct_ep_h uct_ep;
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return status;
+    }
+
+    ucs_diag("ep %p: failed to send software RMA/AMO reply on lane %d: %s", ep,
+             req->send.lane, ucs_status_string(status));
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        goto out_drop;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, req->send.lane);
+    if ((uct_ep != NULL) && !ucp_is_uct_ep_failed(uct_ep)) {
+        ucp_ep_set_lanes_failed_schedule(ep, UCS_BIT(req->send.lane), status);
+        goto out_drop;
+    }
+
+    am_lane = ucp_ep_get_am_lane(ep);
+    if (am_lane == UCP_NULL_LANE) {
+        goto out_drop;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, am_lane);
+    if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep)) {
+        /* No lane to fall over to, the endpoint is being failed */
+        goto out_drop;
+    }
+
+    ucs_debug("ep %p: re-sending software RMA/AMO reply %p on lane %d", ep, req,
+              am_lane);
+    ucp_request_send(req);
+    return UCS_OK;
+
+out_drop:
+    ucp_request_put(req);
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -39,8 +97,8 @@ static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
     packed_len = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                  UCP_AM_ID_CMPL, ucp_rma_sw_pack_rma_ack, req,
                                  0);
-    if (packed_len < 0) {
-        return (ucs_status_t)packed_len;
+    if (ucs_unlikely(packed_len < 0)) {
+        return ucp_rma_sw_reply_send_failed(req, packed_len);
     }
 
     ucs_assert(packed_len == sizeof(ucp_cmpl_hdr_t));
@@ -130,8 +188,8 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     packed_len     = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                      UCP_AM_ID_GET_REP, ucp_rma_sw_pack_get_reply,
                                      req, 0);
-    if (packed_len < 0) {
-        return (ucs_status_t)packed_len;
+    if (ucs_unlikely(packed_len < 0)) {
+        return ucp_rma_sw_reply_send_failed(req, packed_len);
     }
 
     payload_len = packed_len - sizeof(ucp_request_data_hdr_t);
