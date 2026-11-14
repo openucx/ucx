@@ -10,6 +10,7 @@
 
 #include "ucp_gpu_nic_assignment.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -32,6 +33,48 @@ typedef struct {
     size_t              count;
 } ucp_nics_string_buffers_t;
 
+
+int ucp_gpu_nic_assignment_is_vera_rubin(void)
+{
+    const unsigned num_devices = ucs_topo_num_devices();
+    unsigned num_gpus          = 0;
+    ucs_sys_device_t sys_dev;
+    unsigned i;
+
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        ucs_debug("cpu model %s is not vera", ucs_cpu_model_name());
+        return 0;
+    }
+
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        ucs_diag("gpu discovery is incomplete, cannot detect vera rubin");
+        return 0;
+    }
+
+    for (i = 0; i < num_devices; ++i) {
+        sys_dev = (ucs_sys_device_t)i;
+        if (ucs_topo_sys_device_get_class(sys_dev) !=
+            UCS_TOPO_DEVICE_CLASS_ACC) {
+            continue;
+        }
+
+        if (!(ucs_topo_sys_device_get_flags(sys_dev) &
+              UCS_TOPO_DEVICE_FLAG_RUBIN)) {
+            ucs_diag("gpu %s is not rubin",
+                     ucs_topo_sys_device_get_name(sys_dev));
+            return 0;
+        }
+
+        ++num_gpus;
+    }
+
+    if (num_gpus == 0) {
+        ucs_debug("no gpus found");
+        return 0;
+    }
+
+    return 1;
+}
 
 static size_t
 ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_mode_t mode,

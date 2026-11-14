@@ -1178,6 +1178,12 @@ out_unlock:
     return status;
 }
 
+ucs_topo_device_class_t ucs_topo_sys_device_get_class(ucs_sys_device_t sys_dev)
+{
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, device_class,
+                                         UCS_TOPO_DEVICE_CLASS_UNKNOWN);
+}
+
 ucs_status_t
 ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags)
 {

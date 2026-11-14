@@ -34,6 +34,15 @@ struct ucp_gpu_nic_assignment {
 
 
 /**
+ * Check whether the host is Vera Rubin: a Vera CPU and at least one GPU, all
+ * of them Rubin GPUs.
+ *
+ * @return Nonzero if the host is Vera Rubin, or zero otherwise.
+ */
+int ucp_gpu_nic_assignment_is_vera_rubin(void);
+
+
+/**
  * Build GPU-to-NIC assignments from topology groups.
  *
  * @note The groups must be disjoint: each sys_dev may appear in at most one
