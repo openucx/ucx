@@ -445,6 +445,15 @@ static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
+static int ucp_memh_memtype_map_is_used(ucp_mem_h memh)
+{
+    /* Imported memhs are not registered, and without detect MDs any memory is
+     * detected as host, which other contexts in the process would trust */
+    return ucs_memtype_map_is_enabled() &&
+           (memh->context->num_mem_type_detect_mds > 0) &&
+           !(memh->flags & UCP_MEMH_FLAG_IMPORTED);
+}
+
 /* Add the memory of a user memory handle to the memtype map, if the map is used
  * instead of the event-driven memtype cache */
 static void
@@ -457,7 +466,7 @@ ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
                 ucp_memh_address(memh), ucp_memh_length(memh), memh->flags,
                 ucs_memory_type_names[memh->mem_type]);
 
-    if (!ucs_memtype_map_is_enabled()) {
+    if (!ucp_memh_memtype_map_is_used(memh)) {
         return;
     }
 
@@ -477,10 +486,7 @@ ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
 
 static void ucp_memh_memtype_map_unregister(ucp_mem_h memh)
 {
-    /* Imported memhs are not registered, but their range can match a local
-     * registration, which unregister may wrongly remove */
-    if (ucs_memtype_map_is_enabled() &&
-        !(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+    if (ucp_memh_memtype_map_is_used(memh)) {
         ucs_memtype_map_unregister(ucp_memh_address(memh),
                                    ucp_memh_length(memh));
     }
