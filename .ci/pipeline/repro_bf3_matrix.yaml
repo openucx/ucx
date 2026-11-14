@@ -1,0 +1,76 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-bf3-alignment-repro
+failFast: true
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
+runs_on_dockers:
+  - name: bf3
+    url: harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
+    arch: aarch64
+    nodeSelector: "hardware.node.kubernetes.io=BF3"
+    tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+    privileged: true
+    hostNetwork: true
+
+matrix:
+  axes:
+    arch: [aarch64]
+
+taskName: '${name}/${arch}'
+
+env:
+  UCX_HANDLE_ERRORS: bt
+  UCX_ERROR_SIGNALS: SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGABRT
+  UCX_PROTO_ENABLE: "y"
+  UCX_PROTO_REQUEST_RESET: "y"
+  UCX_PROTO_INFO: "y"
+  UCX_IB_ROCE_SUBNET_PREFIX_LEN: inf
+  GTEST_REPORT_LONGEST_TESTS: "1"
+
+steps:
+  - name: Build and probe DC receive alignment
+    parallel: false
+    timeout: 80
+    run: |
+      set -euo pipefail
+      ulimit -c 0
+      test -w "${WORKSPACE}"
+      uname -a
+      gcc --version | head -1
+      git rev-parse HEAD
+      ./autogen.sh
+      mkdir build-bf3-repro
+      cd build-bf3-repro
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java --without-valgrind
+      make -j6
+      unset GTEST_SHARD_INDEX GTEST_TOTAL_SHARDS
+      cpu_set=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+      for attempt in $(seq 1 10); do
+          echo "BF3 protocol-v2 alignment attempt ${attempt}, CPUs ${cpu_set}"
+          status=0
+          output=$(taskset -c "${cpu_set}" ./test/gtest/gtest -s 0 -t 900 \
+              --gtest_filter=dcx/test_ucp_tag_match_rndv_align.recv_align/2 2>&1) || status=$?
+          printf '%s\n' "${output}"
+          echo "BF3 probe exit status ${status}"
+          test "${status}" -eq 0
+          [[ "${output}" == *"[==========] Running 1 test"* ]]
+          [[ "${output}" == *"get_zcopy,proto_v2"* ]]
+          [[ "${output}" == *"dc_mlx5/"* ]]
+          [[ "${output}" == *"rendezvous zero-copy read from remote"* ]]
+          [[ "${output}" != *"[     SKIP ]"* ]]
+      done
