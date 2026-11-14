@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/sys/netlink.h>
 }
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -192,6 +193,150 @@ UCS_TEST_F(test_netlink, best_route_to_local_addr) {
     UCS_TEST_MESSAGE << num_checks << " routes from other domains checked";
 }
 
+UCS_TEST_F(test_netlink, route_get) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_addrs     = 0;
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+    ucs_netlink_route_t route;
+    int local_index, vrf_index;
+    ucs_status_t status;
+
+    ASSERT_NE(0u, lo_index);
+
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    status = ucs_netlink_route_get((struct sockaddr*)&sin, NULL, 0, &route);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(RTN_LOCAL, route.type);
+    ASSERT_EQ(1, route.num_oifs);
+    EXPECT_EQ(static_cast<int>(lo_index), route.oifs[0]);
+
+    ASSERT_UCS_OK(ucs_netlink_route_get((struct sockaddr*)&sin,
+                                        (struct sockaddr*)&sin, lo_index,
+                                        &route));
+    EXPECT_EQ(RTN_LOCAL, route.type);
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    for (int i = 0; i < 2; ++i) {
+        /* The second lookup returns the cached result */
+        EXPECT_EQ(UCS_ERR_UNREACHABLE,
+                  ucs_netlink_route_get((struct sockaddr*)&sin, NULL, lo_index,
+                                        &route));
+    }
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        /* A link-local address is ambiguous without an interface */
+        if ((ifa->ifa_addr->sa_family == AF_INET6) &&
+            IN6_IS_ADDR_LINKLOCAL(
+                    &((struct sockaddr_in6*)ifa->ifa_addr)->sin6_addr)) {
+            continue;
+        }
+
+        local_index = ucs_netlink_get_local_route_ndev_index(ifa->ifa_addr);
+        if (local_index < 0) {
+            continue;
+        }
+
+        /* The kernel selects the host route of a local address in the
+         * routing domain of the address */
+        vrf_index = ucs_netlink_get_vrf_master_index(local_index);
+        ASSERT_UCS_OK(ucs_netlink_route_get(ifa->ifa_addr, NULL,
+                                            std::max(vrf_index, 0), &route),
+                      << ifa->ifa_name);
+        EXPECT_EQ(RTN_LOCAL, route.type) << ifa->ifa_name;
+        EXPECT_EQ((ifa->ifa_addr->sa_family == AF_INET) ? 32 : 128,
+                  route.prefix_len)
+                << ifa->ifa_name;
+        ++num_addrs;
+    }
+
+    freeifaddrs(ifaddrs);
+    UCS_TEST_MESSAGE << num_addrs << " local addresses checked";
+}
+
+UCS_TEST_F(test_netlink, kernel_route_matches) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_defaults  = 0;
+    struct sockaddr_in sin = {};
+    struct if_nameindex *ifs, *ifp;
+    ucs_netlink_route_t route;
+    uint8_t best_prefix_len;
+    ucs_status_t status;
+
+    ASSERT_NE(0u, lo_index);
+
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    status = ucs_netlink_kernel_route_matches(lo_index, (struct sockaddr*)&sin,
+                                              NULL, &best_prefix_len);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+
+    /* No interface has a more specific route than the default to TEST-NET-2.
+     * A lookup through a VRF device selects a route through its slaves. */
+    ifs = if_nameindex();
+    ASSERT_NE(nullptr, ifs);
+    for (ifp = ifs; ifp->if_index != 0; ++ifp) {
+        if ((ucs_netlink_route_get((struct sockaddr*)&sin, NULL, ifp->if_index,
+                                   &route) == UCS_OK) &&
+            (route.prefix_len == 0) &&
+            (std::find(route.oifs, route.oifs + route.num_oifs,
+                       static_cast<int>(ifp->if_index)) !=
+             route.oifs + route.num_oifs)) {
+            EXPECT_EQ(UCS_OK, ucs_netlink_kernel_route_matches(
+                                      ifp->if_index, (struct sockaddr*)&sin,
+                                      NULL, &best_prefix_len))
+                    << ifp->if_name;
+            EXPECT_EQ(0, best_prefix_len) << ifp->if_name;
+            ++num_defaults;
+        }
+    }
+
+    if_freenameindex(ifs);
+    UCS_TEST_MESSAGE << num_defaults << " default routes checked";
+}
+
+UCS_TEST_F(test_netlink, is_host_addr) {
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr != NULL) &&
+            ((ifa->ifa_addr->sa_family == AF_INET) ||
+             (ifa->ifa_addr->sa_family == AF_INET6))) {
+            EXPECT_EQ(1, ucs_netlink_is_host_addr(ifa->ifa_addr))
+                    << ifa->ifa_name;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+
+    /* TEST-NET-2 address is not assigned to any host */
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    EXPECT_EQ(0, ucs_netlink_is_host_addr((struct sockaddr*)&sin));
+}
+
 UCS_TEST_F(test_netlink, parse_msg) {
     auto fail_cb = [](const struct nlmsghdr*, void *arg) -> ucs_status_t {
         ++(*static_cast<int*>(arg));
@@ -259,6 +404,14 @@ UCS_TEST_F(test_netlink, parse_msg) {
     EXPECT_EQ(0, count);
     EXPECT_EQ(0, msg_done);
     EXPECT_TRUE(m_errors.empty());
+
+    /* A route lookup fails when the kernel has no route */
+    reply.clear();
+    nlerr.error = -EHOSTUNREACH;
+    append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
+                                    &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
 
     /* A dump which failed in the kernel ends with an error in NLMSG_DONE */
     dump.resize(done_offset);

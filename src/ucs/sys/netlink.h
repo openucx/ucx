@@ -20,6 +20,23 @@ typedef enum {
     UCS_NETLINK_ROUTE_CHECK_RELAXED
 } ucs_netlink_route_check_t;
 
+
+/* Maximal number of output interfaces of a route reported by the kernel */
+#define UCS_NETLINK_ROUTE_MAX_OIFS 16
+
+
+/**
+ * Routing table entry selected by the kernel for a destination address.
+ */
+typedef struct {
+    uint8_t type;       /**< Route type, e.g. RTN_UNICAST or RTN_LOCAL */
+    uint8_t prefix_len; /**< Destination prefix length of the entry */
+    uint8_t num_oifs;   /**< Number of live output interfaces */
+    uint8_t is_oifs_reported; /**< The kernel reported output interfaces */
+    uint8_t is_oifs_truncated; /**< Some output interfaces were not stored */
+    int     oifs[UCS_NETLINK_ROUTE_MAX_OIFS]; /**< Output interface indexes */
+} ucs_netlink_route_t;
+
 /**
  * Callback function for parsing individual netlink messages.
  *
@@ -43,7 +60,8 @@ typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
  * @param [out] msg_done_p     Set to 1 if NLMSG_DONE was reached, 0 otherwise.
  *
  * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
- *         interrupted (NLM_F_DUMP_INTR), or error code otherwise.
+ *         interrupted (NLM_F_DUMP_INTR), UCS_ERR_UNREACHABLE if the kernel
+ *         replied that it has no route, or error code otherwise.
  */
 ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                                    ucs_netlink_parse_cb_t parse_cb, void *arg,
@@ -63,8 +81,9 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
  * @param [in]  err_log_level    Log level used when an NLMSG_ERROR is received.
  *
  * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
- *         interrupted (NLM_F_DUMP_INTR) and should be retried, or error code
- *         otherwise.
+ *         interrupted (NLM_F_DUMP_INTR) and should be retried,
+ *         UCS_ERR_UNREACHABLE if the kernel replied that it has no route, or
+ *         error code otherwise.
  */
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                                       unsigned short nlmsg_flags,
@@ -152,6 +171,68 @@ typedef void (*ucs_netlink_route_cb_t)(const struct sockaddr *dest,
  */
 void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
                                void *arg);
+
+/**
+ * Get the routing table entry which the kernel selects to send to a
+ * destination address, as "ip route get fibmatch" does. Unlike the cached
+ * routing table, the kernel applies policy routing rules and VRF. The result
+ * is cached, unless it is an error other than UCS_ERR_UNREACHABLE.
+ *
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  sa_local         Optional pointer to the source address, of the
+ *                               same address family as the destination, or
+ *                               NULL.
+ * @param [in]  if_index         Optional outgoing interface index, or 0.
+ *                               When it is set, the kernel prefers routes
+ *                               through this interface, or uses the routes of
+ *                               its VRF when it is a VRF device. An IPv6
+ *                               lookup with a source address can still select
+ *                               a route through another interface.
+ * @param [out] route_p          Filled with the selected routing table entry.
+ *
+ * @return UCS_OK if a route was found, UCS_ERR_UNREACHABLE if the kernel has
+ *         no route to the destination, UCS_ERR_UNSUPPORTED if the kernel
+ *         cannot report the selected entry, or error code otherwise.
+ */
+ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
+                                   const struct sockaddr *sa_local,
+                                   int if_index, ucs_netlink_route_t *route_p);
+
+/**
+ * Check whether the kernel routes a destination address through a network
+ * interface. As in @ref ucs_netlink_route_matches with
+ * UCS_NETLINK_ROUTE_CHECK_RELAXED, a default route is accepted only if the
+ * routing domain of the interface has no more specific route through another
+ * interface of that domain.
+ *
+ * @param [in]  if_index         Network interface index.
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  sa_local         Optional pointer to the source address, of the
+ *                               same address family as the destination, or
+ *                               NULL.
+ * @param [out] best_prefix_len_p Set to the prefix length of the more specific
+ *                               route when a default route is rejected because
+ *                               of it, or to 0 otherwise.
+ *
+ * @return UCS_OK if the destination is routed through the interface,
+ *         UCS_ERR_UNREACHABLE if it is not, UCS_ERR_UNSUPPORTED if the kernel
+ *         cannot report the selected route, or error code otherwise.
+ */
+ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
+                                              const struct sockaddr *sa_remote,
+                                              const struct sockaddr *sa_local,
+                                              uint8_t *best_prefix_len_p);
+
+/**
+ * Check whether an address is assigned to a network interface of the host, in
+ * any routing domain. Unlike local routes, addresses are not affected by policy
+ * routing tables. The addresses are read once and cached at the first call.
+ *
+ * @param [in]  sa               Pointer to the address.
+ *
+ * @return 1 if the address is assigned to a network interface, or 0 otherwise.
+ */
+int ucs_netlink_is_host_addr(const struct sockaddr *sa);
 
 /**
  * Get the VRF (L3 master) device of a network interface: the VRF device it is
