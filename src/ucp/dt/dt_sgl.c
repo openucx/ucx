@@ -12,7 +12,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
-#include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 
 
 ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
@@ -33,6 +33,26 @@ ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
     }
 
     return UCS_OK;
+}
+
+/*
+ * An RMA operation moves only the rkey of the first SGL element to a
+ * configuration for the current endpoint configuration, and the SGL protocols
+ * use only the configuration of the first rkey. So another rkey can still have
+ * the same configuration for a previous endpoint configuration.
+ */
+static int
+ucp_dt_sgl_rkey_config_is_compatible(ucp_rkey_h rkey, ucp_rkey_h ref_rkey)
+{
+#if ENABLE_PARAMS_CHECK
+    ucp_worker_h worker = ref_rkey->ep->worker;
+
+    return ucp_rkey_config_is_equal_except_ep_cfg(
+            ucp_rkey_config(worker, rkey)->key,
+            ucp_rkey_config(worker, ref_rkey)->key);
+#else
+    return 0;
+#endif
 }
 
 ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
@@ -64,7 +84,8 @@ ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
         }
 #endif
 
-        if (ucs_unlikely(rkey->cfg_index != ref_rkey->cfg_index)) {
+        if (ucs_unlikely(rkey->cfg_index != ref_rkey->cfg_index) &&
+            !ucp_dt_sgl_rkey_config_is_compatible(rkey, ref_rkey)) {
             ucs_error("sgl[%zu]: rkey %p has cfg_index %u, but sgl[0] rkey %p "
                       "has cfg_index %u, all rkeys must map to the same "
                       "remote endpoint configuration",
