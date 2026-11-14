@@ -114,7 +114,7 @@ ucs_config_field_t ucs_config_rcache_table[] = {
      "Purge registration cache upon fork",
      ucs_offsetof(ucs_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
 
-    {"RCACHE_MERGE_ADJACENT", "n", "Merge adjacent registration cache regions",
+    {"RCACHE_MERGE_ADJACENT", "y", "Merge adjacent registration cache regions",
      ucs_offsetof(ucs_rcache_config_t, merge_adjacent), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
