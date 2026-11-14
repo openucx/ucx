@@ -104,6 +104,9 @@ typedef struct ucp_context_config {
     double                                 multi_lane_max_ratio;
     /* Bandwidth efficiency ratio */
     double                                 multi_path_ratio;
+    /** Whether to select fallback device lanes, from the transports which
+     *  can access both CUDA and host memory */
+    int                                    device_lanes_fallback;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */

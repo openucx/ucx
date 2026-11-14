@@ -2690,6 +2690,13 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
 
     for (i = 0; i < ucs_static_array_size(mem_type_bitmaps); ++i) {
+        /* Fallback lanes are selected from the transports which can access host
+         * memory as well */
+        if (!context->config.ext.device_lanes_fallback &&
+            (mem_type_bitmaps[i] & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            continue;
+        }
+
         ucp_wireup_memaccess_bitmap(context, mem_type_bitmaps[i],
                                     &mem_type_tl_bitmap);
         found_lane |= ucp_wireup_add_bw_lanes(select_params, &bw_info,
