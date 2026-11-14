@@ -27,15 +27,22 @@ typedef struct uct_rocm_ipc_md_config {
 } uct_rocm_ipc_md_config_t;
 
 typedef struct uct_rocm_ipc_key {
-    hsa_amd_ipc_memory_t ipc;
+    union {
+        hsa_amd_ipc_memory_t ipc; /* pool-allocated memory IPC handle */
+        struct {
+            int      fd;     /* VMM memory: shareable dmabuf fd (sender) */
+            uint64_t reg_id; /* unique per registration; survives fd reuse */
+        } vmm;
+    };
     /* Owner sets this signal to 0 when the allocation is released.
      * Unused when invalidation is disabled or unavailable. */
     hsa_amd_ipc_signal_t ipc_signal;
     uintptr_t            address;
     size_t               length;
     int                  dev_num;
-    pid_t                pid; /* PID of the process that owns the memory */
+    pid_t                pid;    /* PID of the process that owns the memory */
     ucs_sys_ns_t         pid_ns; /* PID namespace of the owner process */
+    uint8_t              is_vmm; /* 1 = VMM memory, 0 = pool-allocated */
 } uct_rocm_ipc_key_t;
 
 #endif
