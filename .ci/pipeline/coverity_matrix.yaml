@@ -18,7 +18,7 @@ volumes:
   - {mountPath: /auto/sw_tools/Commercial, hostPath: /auto/sw_tools/Commercial}
 
 runs_on_dockers:
-  - { name: "cov", url: "harbor.mellanox.com/ucx/coverity:mofed-5.1-2.3.8.0", arch: x86_64 }
+  - { name: "cov", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64 }
 
 matrix:
   axes:
