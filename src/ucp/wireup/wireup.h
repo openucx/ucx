@@ -280,6 +280,9 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
+/* Switch ready wireup proxies on the main progress thread. */
+void ucp_wireup_eps_progress_sched(ucp_ep_h ep);
+
 unsigned ucp_wireup_eps_progress(void *arg);
 
 
