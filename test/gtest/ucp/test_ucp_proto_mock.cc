@@ -5,6 +5,7 @@
  */
 
 #include "ucp_test.h"
+#include "test_ucp_wireup.h"
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -1159,6 +1160,145 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_slow_dev : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_slow_dev()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* With the default MULTI_LANE_MAX_RATIO=4, mock_1:1 is fast enough to
+         * be used together with mock_0:1, and mock_2:1 is too slow */
+        add_mock_iface("mock_0:1", iface_attr_func(20e9));
+        add_mock_iface("mock_1:1", iface_attr_func(6e9));
+        add_mock_iface("mock_2:1", iface_attr_func(4e9));
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    using lane_devs_t = std::multiset<std::pair<unsigned, unsigned>>;
+    using dev_names_t = std::set<std::string>;
+
+    static iface_attr_func_t iface_attr_func(double bandwidth)
+    {
+        return [bandwidth](uct_iface_attr_t &iface_attr) {
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        };
+    }
+
+    /* Local and remote system devices of each lane, swapped if requested */
+    static lane_devs_t lane_devs(ucp_ep_h ep, bool swap)
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+        lane_devs_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            const unsigned local_sys_dev  =
+                    ucp_ep_get_tl_rsc(ep, lane)->sys_device;
+            const unsigned remote_sys_dev = key.lanes[lane].dst_sys_dev;
+
+            if (swap) {
+                result.emplace(remote_sys_dev, local_sys_dev);
+            } else {
+                result.emplace(local_sys_dev, remote_sys_dev);
+            }
+        }
+
+        return result;
+    }
+
+    /* Local devices of all lanes */
+    static dev_names_t lane_dev_names(ucp_ep_h ep)
+    {
+        dev_names_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            result.insert(ucp_ep_get_tl_rsc(ep, lane)->dev_name);
+        }
+
+        return result;
+    }
+
+    /* Select the sender lanes from the receiver address as if the receiver had
+     * the given release version */
+    void select_lanes(unsigned dst_version, ucp_ep_config_key_t &key)
+    {
+        unpacked_address receiver_address(receiver().worker());
+
+        receiver_address.unpack(sender().worker());
+        receiver_address.address.dst_version = dst_version;
+        ::select_lanes(sender(), receiver_address.address, key);
+    }
+
+    /* Local and remote system devices of the sender lanes of the given type */
+    lane_devs_t
+    lane_devs(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
+    {
+        ucp_context_h context = sender().ucph();
+        lane_devs_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            if (key.lanes[lane].lane_types & UCS_BIT(lane_type)) {
+                const ucp_rsc_index_t rsc_index = key.lanes[lane].rsc_index;
+
+                result.emplace(context->tl_rscs[rsc_index].tl_rsc.sys_device,
+                               key.lanes[lane].dst_sys_dev);
+            }
+        }
+
+        return result;
+    }
+};
+
+/* The receiver selects its lanes from the address in the wireup request, which
+ * has only the devices of the sender lanes and so lacks the device which is too
+ * slow to be used. Both sides must still select matching lanes. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, wireup_request_lanes,
+           "IB_NUM_PATHS?=2")
+{
+    const dev_names_t fast_devs = {"mock_0:1", "mock_1:1"};
+    ucp_worker_h worker         = receiver().worker();
+
+    wait_for_value(&worker->num_all_eps, 1u);
+    ASSERT_EQ(1u, worker->num_all_eps);
+    ucp_ep_h receiver_ep = ucs_list_head(&worker->all_eps, ucp_ep_ext_t,
+                                         ep_list)->ep;
+
+    EXPECT_EQ(fast_devs, lane_dev_names(sender().ep()));
+    EXPECT_EQ(fast_devs, lane_dev_names(receiver_ep));
+    EXPECT_EQ(lane_devs(sender().ep(), false), lane_devs(receiver_ep, true));
+}
+
+/* A peer of an older release selects the slow lanes and drops them only after
+ * the selection, so one of the 4 AM_BW lanes is selected on the slow device and
+ * dropped. The selection with such a peer must be the same, so that both sides
+ * get the same lanes. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, older_peer_lanes,
+           "IB_NUM_PATHS?=2", "MAX_EAGER_RAILS=4")
+{
+    const unsigned dev0 = get_mock_sys_dev_by_name("mock_0:1");
+    const unsigned dev1 = get_mock_sys_dev_by_name("mock_1:1");
+    ucp_ep_config_key_t key;
+
+    /* Both paths of both fast devices */
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES, key);
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1},
+                           {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
+
+    /* The slow device takes the lane of the second path of mock_1:1 and is
+     * dropped */
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES - 1, key);
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_dev, rcx, "rc_x")
 
 /* Base class for RMA protocol selection on CUDA memory, over a single mocked
  * high bandwidth device */
