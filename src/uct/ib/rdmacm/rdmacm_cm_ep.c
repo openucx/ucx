@@ -509,13 +509,14 @@ static ucs_status_t uct_rdmacm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     if (rdma_resolve_addr(cep->id, (struct sockaddr*)src_addr,
                           (struct sockaddr*)params->sockaddr->addr,
                           uct_rdmacm_cm_get_timeout(rdmacm_cm))) {
+        status = ((errno == ENETUNREACH) || (errno == EHOSTUNREACH)) ?
+                         UCS_ERR_UNREACHABLE : UCS_ERR_IO_ERROR;
         ucs_diag("rdma_resolve_addr(src=%s, dst=%s) failed (%d): %m",
                  ucs_sockaddr_str(src_addr,
                                   src_ip_port_str, UCS_SOCKADDR_STRING_LEN),
                  ucs_sockaddr_str((struct sockaddr*)params->sockaddr->addr,
                                   dst_ip_port_str, UCS_SOCKADDR_STRING_LEN),
                  errno);
-        status = UCS_ERR_IO_ERROR;
         goto err_destroy_id;
     }
 

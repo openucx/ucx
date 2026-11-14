@@ -1227,6 +1227,7 @@ protected:
 
     ucs::rlimit_setter   m_rlimit;
     static constexpr int m_fd_per_cpu = 60;
+    static constexpr int m_max_workers = 32;
 
 private:
     unsigned m_cpu = 0;
@@ -1234,15 +1235,21 @@ private:
 
 UCS_TEST_P(test_worker_cpu_mask, all_cpus)
 {
+    /* Leave half the descriptor budget for process and startup overhead. */
+    const rlim_t max_workers = std::max<rlim_t>(
+            1, std::min<rlim_t>(m_max_workers,
+                               m_rlimit.limit() / m_fd_per_cpu / 2));
     ucs_sys_cpuset_t mask;
 
     CPU_ZERO(&mask);
     ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
 
-    long num_cpus = ucs_min(m_rlimit.limit() / m_fd_per_cpu,
-                            ucs_sys_get_num_cpus());
-    for (auto cpu = 0; cpu < num_cpus; ++cpu) {
+    for (auto cpu = 0; cpu < ucs_sys_get_num_cpus(); ++cpu) {
         if (CPU_ISSET(cpu, &mask)) {
+            if (entities().size() >= max_workers) {
+                cleanup();
+            }
+
             set_cpu(cpu);
             UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
             create_entity();
