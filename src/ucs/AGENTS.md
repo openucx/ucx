@@ -26,7 +26,8 @@ no transport or protocol logic — only foundational utilities.
 - `signal/` — signal handler installation built as a shared subdir for ordering.
 - `stats/` — counter/timer infrastructure; gated by `HAVE_STATS`. Adds the
   `ucs_stats_parser` binary.
-- `sys/` — OS abstraction: `event_set` (epoll), `sock`, `string`, `math`,
+- `sys/` — OS abstraction: `event_set` (epoll), `sock`, `fd_exchange`
+  (descriptor passing over Unix sockets), `string`, `math`,
   `topo`, `module` (dlopen modules), `iovec`, `netlink`, `lib`, `uid`,
   `compiler*`, `device_code` (CUDA/HIP host-side helpers).
 - `time/` — `time_def`/`time` (high-resolution clock), `timerq`, `timer_wheel`.
