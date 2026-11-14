@@ -146,6 +146,23 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest);
 
 
 /**
+ * Convert a string starting with an unsigned number to a numeric value.
+ * Unlike strtoul(), a leading sign or whitespace and an out of range value are
+ * rejected.
+ *
+ * @param [in]  str      String to convert.
+ * @param [in]  base     Numeric base, as for strtoul().
+ * @param [out] value_p  Filled with the numeric value of the string.
+ * @param [out] end_p    Filled with the first character after the number. If
+ *                       NULL, the whole string must be a number.
+ *
+ * @return UCS_OK if successful, or UCS_ERR_INVALID_PARAM otherwise.
+ */
+ucs_status_t ucs_str_to_ulong(const char *str, int base,
+                              unsigned long *value_p, char **end_p);
+
+
+/**
  *  Return the numeric value of the memunits prefix.
  *  For example:
  *  'M' -> 1048576

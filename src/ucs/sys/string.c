@@ -18,7 +18,9 @@
 
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <libgen.h>
 
@@ -205,6 +207,30 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     }
 
     *(size_t*)dest = value * bytes;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_str_to_ulong(const char *str, int base,
+                              unsigned long *value_p, char **end_p)
+{
+    unsigned long value;
+    char *end;
+
+    if (!isdigit((unsigned char)*str)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    errno = 0;
+    value = strtoul(str, &end, base);
+    if ((errno != 0) || ((end_p == NULL) && (*end != '\0'))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *value_p = value;
+    if (end_p != NULL) {
+        *end_p = end;
+    }
+
     return UCS_OK;
 }
 
