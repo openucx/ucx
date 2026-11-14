@@ -1,0 +1,45 @@
+# CLA check for pull requests, see buildlib/tools/cla_check.sh. The signer
+# lists are repository secrets, set from the internal signer record.
+name: CLA
+
+# pull_request_target passes secrets to fork PRs; PR code is never checked out.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches: [master, 'v*.*.x']
+
+# Keep only the newest run per PR
+concurrency:
+  group: cla-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  cla:
+    name: CLA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Forks have no CLA list secrets
+    if: github.repository == 'openucx/ucx'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # The script comes from the base branch commit that provided this
+      # workflow (the default ref for pull_request_target), never from the PR
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: buildlib/tools/cla_check.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Check CLA signers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLA_INDIVIDUALS: ${{ secrets.CLA_INDIVIDUALS }}
+          CLA_ENTITIES: ${{ secrets.CLA_ENTITIES }}
+        run: >
+          ./buildlib/tools/cla_check.sh
+          --repo "${{ github.repository }}"
+          --pr "${{ github.event.pull_request.number }}"
+          --head-sha "${{ github.event.pull_request.head.sha }}"
