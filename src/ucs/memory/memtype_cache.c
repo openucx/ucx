@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -55,7 +55,6 @@ struct ucs_memtype_cache_region {
  * disabled */
 typedef struct {
     ucs_interval_map_node_t super;     /**< Registered range, must be first */
-    ucs_list_link_t         list;      /**< Used to release the entries */
     ucs_memory_type_t       mem_type;  /**< Memory type */
     ucs_sys_device_t        sys_dev;   /**< System device index */
     uint8_t                 mem_flags; /**< UCS memory flags */
@@ -403,6 +402,7 @@ ucs_memtype_map_find_exact(uint64_t start, uint64_t end)
     return ctx.entry;
 }
 
+#if UCS_ENABLE_ASSERT
 static void ucs_memtype_map_check_overlap_cb(ucs_interval_map_node_t *node,
                                              void *arg)
 {
@@ -410,11 +410,12 @@ static void ucs_memtype_map_check_overlap_cb(ucs_interval_map_node_t *node,
     const ucs_memtype_map_entry_t *entry     =
             ucs_derived_of(node, ucs_memtype_map_entry_t);
 
-    ucs_assertv_always(entry->mem_type == new_entry->mem_type,
-                       "overlapping registrations of %s and %s memory",
-                       ucs_memory_type_names[entry->mem_type],
-                       ucs_memory_type_names[new_entry->mem_type]);
+    ucs_assertv(entry->mem_type == new_entry->mem_type,
+                "overlapping registrations of %s and %s memory",
+                ucs_memory_type_names[entry->mem_type],
+                ucs_memory_type_names[new_entry->mem_type]);
 }
+#endif
 
 void ucs_memtype_map_register(const void *address, size_t size,
                               ucs_memory_type_t mem_type,
@@ -441,12 +442,11 @@ void ucs_memtype_map_register(const void *address, size_t size,
     entry->mem_flags = mem_flags;
 
     ucs_spin_lock(&ucs_memtype_map_lock);
-    if (UCS_ENABLE_ASSERT) {
-        ucs_interval_map_foreach_overlapping(&ucs_memtype_map,
-                                             start, start + size,
-                                             ucs_memtype_map_check_overlap_cb,
-                                             entry);
-    }
+#if UCS_ENABLE_ASSERT
+    ucs_interval_map_foreach_overlapping(&ucs_memtype_map, start, start + size,
+                                         ucs_memtype_map_check_overlap_cb,
+                                         entry);
+#endif
     ucs_interval_map_insert(&ucs_memtype_map, &entry->super,
                             start, start + size);
     ucs_trace("memtype_map: register " UCS_MEMTYPE_MAP_ENTRY_FMT,
@@ -520,35 +520,17 @@ ucs_memtype_map_lookup(uint64_t start, size_t size,
     return status;
 }
 
-static void ucs_memtype_map_release_cb(ucs_interval_map_node_t *node,
-                                       void *arg)
-{
-    ucs_memtype_map_entry_t *entry =
-            ucs_derived_of(node, ucs_memtype_map_entry_t);
-
-    /* Print the device index, since the topology device names are already
-     * released when the cleanup runs from ucs_cleanup() */
-    ucs_debug("memtype_map: leftover registration %p [0x%lx..0x%lx] %s "
-              "dev %u flags 0x%x", entry, node->start, node->end,
-              ucs_memory_type_names[entry->mem_type], entry->sys_dev,
-              entry->mem_flags);
-    ucs_list_add_tail(arg, &entry->list);
-}
-
 static void ucs_memtype_map_cleanup(void)
 {
+    ucs_interval_map_node_t *node;
     ucs_memtype_map_entry_t *entry;
-    UCS_LIST_HEAD(entry_list);
 
-    ucs_interval_map_foreach_overlapping(&ucs_memtype_map, 0,
-                                         UINT64_MAX,
-                                         ucs_memtype_map_release_cb,
-                                         &entry_list);
-
-    while (!ucs_list_is_empty(&entry_list)) {
-        entry = ucs_list_extract_head(&entry_list, ucs_memtype_map_entry_t,
-                                      list);
-        ucs_interval_map_remove(&ucs_memtype_map, &entry->super);
+    while ((node = ucs_interval_map_extract_first(&ucs_memtype_map)) != NULL) {
+        entry = ucs_derived_of(node, ucs_memtype_map_entry_t);
+        ucs_debug("memtype_map: leftover registration %p [0x%lx..0x%lx] %s "
+                  "dev %u flags 0x%x", entry, node->start, node->end,
+                  ucs_memory_type_names[entry->mem_type], entry->sys_dev,
+                  entry->mem_flags);
         ucs_free(entry);
     }
 
