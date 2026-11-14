@@ -19,6 +19,11 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/ptr_arith.h>
 
+struct uct_rc_mlx5_ext_ops;
+
+/* The common registry selects one RC provider for an interface lifetime. */
+const struct uct_rc_mlx5_ext_ops *uct_ib_mlx5_ext_get_rc_provider(void);
+
 /**
  * When using a clang version that is higher than 3.0, the GNUC_MINOR is set
  * to 2, which affects the offset of several fields that are used by UCX from
@@ -219,6 +224,8 @@ enum {
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
+    /* Device supports dump/fill memory keys */
+    UCT_IB_MLX5_MD_FLAG_DUMP_FILL_MKEY       = UCS_BIT(19),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,

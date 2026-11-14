@@ -189,6 +189,34 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                        NULL);
 }
 
+ucs_status_t uct_iface_set_ep_event_handler(
+        uct_iface_h tl_iface, const uct_iface_set_ep_event_params_t *params)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    if ((params == NULL) ||
+        !(params->field_mask & UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (iface->internal_ops->iface_set_ep_event_handler == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return iface->internal_ops->iface_set_ep_event_handler(tl_iface, params);
+}
+
+ucs_status_t uct_base_iface_set_ep_event_handler(
+        uct_iface_h tl_iface, const uct_iface_set_ep_event_params_t *params)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    iface->ep_event_cb  = params->cb;
+    iface->ep_event_arg = UCS_PARAM_VALUE(UCT_IFACE_SET_EP_EVENT_PARAM_FIELD,
+                                          params, arg, ARG, NULL);
+    return UCS_OK;
+}
+
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
@@ -715,6 +743,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
                                                     ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
+    self->ep_event_cb       = NULL;
+    self->ep_event_arg      = NULL;
 
     uct_worker_progress_init(&self->prog);
 

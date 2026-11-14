@@ -1437,6 +1437,9 @@ protected:
 
     bool m_require_zcopy_lane = true;
 
+    virtual void check_posted_request(ucs_status_ptr_t sptr) {
+    }
+
     sgl_op_t op() const {
         return static_cast<sgl_op_t>(get_variant_value(2));
     }
@@ -1640,6 +1643,7 @@ protected:
 
         ucs_status_ptr_t sptr = sgl_op_nbx(&local, num, UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
+        check_posted_request(sptr);
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
             EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
@@ -2180,8 +2184,48 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
             REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
+class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
+public:
+    test_ucp_rma_sgl_contig() {
+        modify_config("PROTOS", UCP_MEM_IS_HOST(src_mem_type()) ?
+                                "put/sgl/contig,put/offload/*" :
+                                "put/sgl/contig,put/rndv,rndv/*");
+    }
+
+    virtual void init() override {
+        if (!UCP_MEM_IS_HOST(src_mem_type()) &&
+            mem_buffer::cuda_mem_is_gdr_capable()) {
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        }
+
+        test_ucp_rma_sgl::init();
+        m_require_zcopy_lane = false;
+    }
+
+protected:
+    virtual void check_posted_request(ucs_status_ptr_t sptr) override {
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+            return;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        EXPECT_STREQ("put/sgl/contig", req->send.proto_config->proto->name);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_contig, put) {
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_contig, put_with_callback) {
+    test_sgl(10, UCS_KBYTE, true, true);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_contig, ib, "ib")
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")

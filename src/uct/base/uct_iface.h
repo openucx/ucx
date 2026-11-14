@@ -332,6 +332,11 @@ typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
 
 
+/* Register an endpoint-specific event handler. */
+typedef ucs_status_t (*uct_iface_set_ep_event_func_t)(
+        uct_iface_h iface, const uct_iface_set_ep_event_params_t *params);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_query_v2_func_t        iface_query_v2;
@@ -346,6 +351,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
     uct_ep_get_sgl_zcopy_func_t      ep_get_sgl_zcopy;
     uct_ep_outstanding_purge_func_t  ep_outstanding_purge;
+    uct_iface_set_ep_event_func_t    iface_set_ep_event_handler;
 } uct_iface_internal_ops_t;
 
 
@@ -376,6 +382,8 @@ typedef struct uct_base_iface {
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
+    uct_ep_event_cb_t        ep_event_cb;
+    void                     *ep_event_arg;
 } uct_base_iface_t;
 
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,
@@ -876,6 +884,9 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
+
+ucs_status_t uct_base_iface_set_ep_event_handler(
+        uct_iface_h iface, const uct_iface_set_ep_event_params_t *params);
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);

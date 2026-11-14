@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -550,5 +550,9 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
 void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
                                    const char *file,
                                    ucs_memory_type_t mem_type);
+
+
+unsigned uct_ib_md_memh_alloc_flags(const uct_ib_md_t *md,
+                                    const uct_md_mem_reg_params_t *params);
 
 #endif

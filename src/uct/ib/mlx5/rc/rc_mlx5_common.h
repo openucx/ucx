@@ -342,6 +342,8 @@ typedef union uct_rc_mlx5_dm_copy_data {
 KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
            kh_int64_hash_equal)
 
+struct uct_rc_mlx5_ext_ops;
+
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
     struct {
@@ -416,6 +418,8 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        ddp_enabled_dv;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
+    const struct uct_rc_mlx5_ext_ops   *ext_ops;
+    void                              *ext_ctx;
 } uct_rc_mlx5_iface_common_t;
 
 /**

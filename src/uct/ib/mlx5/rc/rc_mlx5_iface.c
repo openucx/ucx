@@ -866,6 +866,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
+    self->ext_ops             = NULL;
+    self->ext_ctx             = NULL;
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;
@@ -979,6 +981,11 @@ cleanup_stats:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
     uct_rc_iface_cleanup_qps(&self->super);
+    if ((self->ext_ops != NULL) && (self->ext_ops->iface_init != NULL) &&
+        (self->ext_ops->iface_cleanup != NULL)) {
+        self->ext_ops->iface_cleanup(self->ext_ctx);
+    }
+
     uct_rc_mlx5_devx_iface_free_events(self);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
@@ -1001,6 +1008,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                                                         uct_rc_mlx5_iface_config_t);
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    const uct_rc_mlx5_ext_ops_t *ext_ops;
     ucs_status_t status;
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
@@ -1037,6 +1045,23 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         return status;
     }
 
+    ext_ops = uct_ib_mlx5_ext_get_rc_provider();
+    if ((ext_ops != NULL) && (ext_ops->iface_init != NULL)) {
+        status = ext_ops->iface_init(
+                &self->super.super.super.super.super, &self->super.ext_ctx);
+        if (status != UCS_OK) {
+            self->super.ext_ctx = NULL;
+            if (ext_ops->flags & UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH) {
+                return status;
+            }
+
+            ucs_debug("rc mlx5 provider attachment failed: %s",
+                      ucs_status_string(status));
+            return UCS_OK;
+        }
+    }
+
+    self->super.ext_ops = ext_ops;
     return UCS_OK;
 }
 
@@ -1262,7 +1287,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
             .ep_get_sgl_zcopy       = uct_rc_mlx5_ep_get_sgl_zcopy,
-            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge,
+            .iface_set_ep_event_handler = uct_base_iface_set_ep_event_handler
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

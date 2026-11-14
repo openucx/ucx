@@ -655,8 +655,8 @@ UCS_TEST_SKIP_COND_P(test_async, modify_missed_event,
                      GetParam() == UCS_ASYNC_MODE_POLL)
 {
     local_event le(GetParam());
-    const int event_id = le.event_id();
-    ucs_status_t status;
+    const int event_id  = le.event_id();
+    ucs_status_t status = UCS_ERR_LAST;
     int count;
 
     ASSERT_UCS_OK(ucs_async_modify_handler(event_id, UCS_EVENT_SET_EVREAD |

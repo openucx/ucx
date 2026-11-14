@@ -74,11 +74,37 @@ uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ep_attr_t   result    = {.field_mask = ep_attr->field_mask};
+    uct_perf_attr_t perf_attr = {};
     uct_ib_mlx5_md_t *md;
+    ucs_status_t status;
 
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
+        result.tx_token = ep_attr->tx_token;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_BANDWIDTH) {
+        status = UCS_ERR_UNSUPPORTED;
+        if ((iface->ext_ops != NULL) && (iface->ext_ops->ep_query != NULL)) {
+            status = iface->ext_ops->ep_query(ep->ext_ctx, &result);
+        }
+
+        if (status == UCS_ERR_UNSUPPORTED) {
+            perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+            status = uct_iface_estimate_perf(tl_ep->iface, &perf_attr);
+            if (status == UCS_OK) {
+                result.bandwidth = perf_attr.path_bandwidth;
+            }
+        }
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
@@ -87,8 +113,14 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
             return UCS_ERR_UNSUPPORTED;
         }
 
-        return uct_rc_mlx5_ep_query_tx_token(
-                ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t), ep_attr);
+        status = uct_rc_mlx5_ep_query_tx_token(ep, &result);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_BANDWIDTH) {
+        ep_attr->bandwidth = result.bandwidth;
     }
 
     return UCS_OK;
@@ -1031,6 +1063,21 @@ uct_rc_mlx5_ep_is_flush_remote_wqe(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
     return (op != NULL) && uct_rc_mlx5_send_op_is_flush_remote(op);
 }
 
+static int
+uct_rc_mlx5_ep_is_cancel_on_purge_wqe(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
+{
+    uct_rc_iface_send_op_t *op;
+
+    if (ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
+        return 0;
+    }
+    op = ucs_queue_head_elem_non_empty(&ep->super.txqp.outstanding,
+                                       uct_rc_iface_send_op_t, queue);
+    return (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE) &&
+           ((uint16_t)(pi - op->sn) <=
+            (uint16_t)(op->wqe_end_pi - op->sn));
+}
+
 static void uct_rc_mlx5_op_callback_data_fill_iov(
         const uct_ib_mlx5_txwq_t *txwq, const struct mlx5_wqe_data_seg *dptr,
         size_t num_dseg, uct_rc_mlx5_op_callback_data_t *callback_data)
@@ -1793,8 +1840,22 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
 {
     uct_rc_iface_send_op_t *op;
 
+    /* Keep internal bursts queued until every WQE has been skipped. */
     ucs_queue_for_each_extract(op, &ep->super.txqp.outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, pi)) {
+                               UCS_CIRCULAR_COMPARE16(
+                                       (op->flags &
+                                        UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE) ?
+                                               op->wqe_end_pi : op->sn,
+                                       <=, pi)) {
+        if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE) {
+            uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
+            op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE |
+                           UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
+                           UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+            uct_rc_iface_put_send_op(op);
+            continue;
+        }
+
         ucs_assertv_always(uct_rc_mlx5_send_op_is_bcopy(op) ||
                                    uct_rc_mlx5_send_op_is_short_dm(op) ||
                                    uct_rc_mlx5_send_op_is_put_zcopy(op) ||
@@ -1939,7 +2000,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                          uct_rc_mlx5_ep_is_flush_remote_wqe(ep, pi));
         }
 
-        if (!delivered) {
+        if (!delivered && !uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi)) {
             status = uct_rc_mlx5_op_info_fill(iface, ep, txwq, pi, ctrl,
                                               wqe_size, &callback_data, &info);
             if (status == UCS_OK) {
@@ -2393,6 +2454,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
     self->err_handler_inprogress = 0;
+    self->ext_ctx                = NULL;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
@@ -2441,6 +2503,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_base_ep_t, uct_rc_ep_t);
 
+UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t);
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface =
@@ -2470,7 +2534,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     }
 
     self->mp.free = 1;
+    if ((iface->ext_ops != NULL) && (iface->ext_ops->ep_init != NULL)) {
+        status = iface->ext_ops->ep_init(
+                &self->super.super.super.super, iface->ext_ctx,
+                &self->super.ext_ctx);
+        if (status != UCS_OK) {
+            goto err_ext_ep_init;
+        }
+    }
+
     return UCS_OK;
+
+err_ext_ep_init:
+    uct_rc_mlx5_ep_t_cleanup(self);
+    return status;
 
 err_destroy_tm_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
@@ -2493,6 +2570,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+    if ((self->super.ext_ctx != NULL) && (iface->ext_ops->ep_cleanup != NULL)) {
+        iface->ext_ops->ep_cleanup(self->super.ext_ctx);
+    }
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
