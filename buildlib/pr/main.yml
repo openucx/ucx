@@ -6,6 +6,11 @@ variables:
   # when running the ZE lane on Intel GPU hosts.
   DOCKER_OPT_ZE_GPU: ""
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
+  # Persistent pip cache for the UCXX jobs (the wheel test env alone downloads
+  # ~2 GB of cuda/rapids wheels). Docker creates the host dir if it is missing,
+  # so on a node that was never prepared pip finds it unwritable and disables
+  # caching by itself - slower, never fatal.
+  UCXX_PIP_CACHE_VOL: -v /scrap/pip-cache:/pip-cache
 
 resources:
   containers:
@@ -282,6 +287,27 @@ resources:
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_conda
+      # Thin wrapper of rapidsai/ci-conda; see buildlib/dockers/rapidsai-ci-conda.Dockerfile.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
+    - container: ucxx_rapidsai_ci_conda_gpu
+      # No IB/host-net: with IB, UCX binds rc_mlx5 and the AM/tag tests hang here.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
+    # Wheel images are CUDA-pinned: one base per CUDA version (see rapidsai-ci-wheel.Dockerfile).
+    - container: ucxx_rapidsai_ci_wheel_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda13-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
+    - container: ucxx_rapidsai_ci_wheel_cuda13_gpu
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda13-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
+    - container: ucxx_rapidsai_ci_wheel_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
+    - container: ucxx_rapidsai_ci_wheel_cuda12_gpu
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
 
 stages:
   - stage: Codestyle
@@ -298,274 +324,55 @@ stages:
     jobs:
     - template: static_checks.yml
 
-  - stage: Build
-    dependsOn: [Basic_compile]
-    jobs:
-      - template: build_job.yml
-        parameters:
-          name: build_x86_64
-          demands:
-            - ucx_docker
-          displayName: Build on x86_64
+  - template: ucxx_ucx.yml
+    parameters:
+      dependsOn: [Basic_compile]
+      slices:
+        - { name: x86_64_cuda12,  demands: ucx_docker, rapids_cuda_version: '12.9.2' }
+        - { name: x86_64_cuda13,  demands: ucx_docker, rapids_cuda_version: '13.3.0' }
+        - { name: aarch64_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.2' }
+        - { name: aarch64_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.3.0' }
 
-      - template: build_job.yml
-        parameters:
-          name: build_icc_pgi
-          demands:
-            - ucx_docker
-          displayName: Build with ICC and PGI on CentOS7 x86_64
-
-      - template: build_job.yml
-        parameters:
-          name: build_aarch64
-          demands:
-            - ucx_arm64
-          displayName: Build on aarch64
-
-  - stage: ucx_perftest_mad_rte
-    dependsOn: [Basic_compile]
-    displayName: ucx_perftest over MAD RTE
-    lockBehavior: sequential
-    variables:
-      - group: concurrency_lock
-    jobs:
-    - template: mad_tests.yml
-
-  - stage: WireCompat
-    dependsOn: [Basic_compile]
-    jobs:
-    - template: wire_compat.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-    - template: wire_compat.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        container: centos7_cuda11
-        ucx_targets:
-          ucx_1_15:
-            ucx_tag: v1.15.x
-          ucx_1_16:
-            ucx_tag: v1.16.x
-          ucx_1_17:
-            ucx_tag: v1.17.x
-          ucx_1_18:
-            ucx_tag: v1.18.x
-    - template: wire_compat.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-    # Temporarily disable wire-compat tests on rain machines
-    #- template: wire_compat.yml
-    #  parameters:
-    #    name: bond
-    #    demands: ucx_iodemo -equals yes
-
-  - stage: Coverity
-    dependsOn: [Static_check]
-    jobs:
-      - template: coverity.yml
-        parameters:
-          demands: ucx_docker -equals yes
-          container: coverity_rh7
-
-  - stage: Tests
-    dependsOn: [Basic_compile]
-    jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 1
-        container: ubuntu2404_doca31_gpunetio
-        prebuild: yes
-    - template: tests.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 1
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        run_tests: yes
-        test_perf: 0
-
-  - stage: EFA_Tests
-    dependsOn: [Basic_compile]
-    jobs:
-    - template: efa.yml
-      parameters:
-        name: EFA
-        demands: ucx_new -equals yes
-
-  - stage: Namespace_Tests
-    dependsOn: [Basic_compile]
-    jobs:
-    - template: namespace_tests.yml
-      parameters:
-        name: new_namespace
-        demands: ucx_new -equals yes
-    - template: namespace_tests.yml
-      parameters:
-        name: gpu_namespace
-        demands: ucx_gpu -equals yes
-
-  - stage: io_demo
-    dependsOn: [Basic_compile]
-    condition: false
-    jobs:
-    - template: io_demo/io-demo.yml
-
-  - stage: jucx
-    dependsOn: [Basic_compile]
-    jobs:
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: amd64
-          name: gpu
-          demands: ucx_gpu
-
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: aarch64
-          demands: ucx-arm64
-
-  - stage: go
-    dependsOn: [Basic_compile]
-    jobs:
-      - template: go/go-test.yml
-        parameters:
-          name: new
-          demands: ucx_new -equals yes
-      - template: go/go-test.yml
-        parameters:
-            name: gpu
-            demands: ucx_gpu -equals yes
-
-  - stage: Build_Static
-    dependsOn: [Basic_compile]
-    jobs:
-      - job: build_source
-        pool:
-          name: MLNX
-          demands:
-            - ucx_docker -equals yes
-        workspace:
-          clean: all
-        strategy:
-          matrix:
-            centos7:
-              CONTAINER: centos7_ib
-              extra_modules: ucx-ib ucx-cma ucx-rdmacm ucx-ib-mlx5
-              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
-              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
-            ubuntu2204:
-              CONTAINER: ubuntu2204
-              extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
-            ubuntu2404:
-              CONTAINER: ubuntu2404
-              extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
-        container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 340
-
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-            retryCountOnTaskFailure: 5
-
-          - bash: |
-              ./buildlib/tools/build_static.sh
-            displayName: Build
-            env:
-              EXTRA_TLS: $(extra_tls)
-              RUN_TLS: $(run_tls)
-              EXTRA_MODULES: $(extra_modules)
-              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
-
-
-  - stage: Cuda
-    dependsOn: [Basic_compile]
-    jobs:
-      - template: cuda/cuda.yml
-      - job: soname_suffix_cuda_ib
-        displayName: SONAME suffix and deepbind on CUDA/IB
-        pool:
-          name: MLNX
-          demands:
-            - ucx_gpu_test -equals yes
-        container: ubuntu2404_doca31_gpunetio
-        workspace:
-          clean: all
-        timeoutInMinutes: 120
-
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-            retryCountOnTaskFailure: 5
-
-          - bash: |
-              ./buildlib/tools/builds.sh
-            displayName: Build SONAME suffix with CUDA/IB
-            env:
-              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
-              build_mode: soname_suffix
-              soname_suffix_check_hw: yes
-              ucx_gpu: yes
-              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
-
-
-  - stage: AddressSanitizer
-    dependsOn: [Static_check]
-    jobs:
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 0
-        container: centos8_cuda11_asan
-        asan_check: yes
-        prebuild: yes
-    - template: tests.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        test_perf: 0
-        asan_check: yes
-
-
-#  - stage: Cuda_compatible
-#    dependsOn: [Basic_compile]
-#    jobs:
-#    - template: cuda/cuda_compatible.yml
+  - template: ucxx_build.yml
+    parameters:
+      dependsOn: [UCXX_ucx]
+      # Wheel GPU tests run on x86 only (no arm64 GPU runner); cuda12 + cuda13.
+      wheel_tests_ucxx_slices:
+        - { name: x86_64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12_gpu, libucxx_slice: x86_64_cuda12_py312, ucxx_slice: x86_64_cuda12_py312,
+            demands: ucx_gpu, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13_gpu, libucxx_slice: x86_64_cuda13_py312, ucxx_slice: x86_64_cuda13_py312,
+            demands: ucx_gpu, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      conda_cpp_slices:
+        - { name: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      conda_python_slices:
+        - { name: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      # libucxx + ucxx wheels for cuda12 + cuda13, x86_64 + aarch64.
+      wheel_libucxx_slices:
+        - { name: x86_64_cuda12_py312,  container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      wheel_ucxx_slices:
+        - { name: x86_64_cuda12_py312,  container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      docs_slices:
+        - { name: x86_64_cuda13_py312, cpp_slice: x86_64_cuda13_py312, python_slice: x86_64_cuda13_py312,
+            demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      devcontainer_slices:
+        - { name: x86_64_cuda13_py312, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      # Conda tests run the packages of conda_slice; the ucxx package is abi3,
+      # so the GPU slice tests the py312 build on py313.
+      conda_tests_slices:
+        - { name: x86_64_cuda13_py313,  gpu: true,  conda_slice: x86_64_cuda13_py312,  demands: ucx_gpu,    rapids_cuda_version: '13.3.0', rapids_py_version: '3.13' }
+        - { name: x86_64_cuda12_py312,  gpu: false, conda_slice: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  gpu: false, conda_slice: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, gpu: false, conda_slice: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, gpu: false, conda_slice: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
