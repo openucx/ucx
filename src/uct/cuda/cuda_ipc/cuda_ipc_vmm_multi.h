@@ -19,10 +19,6 @@ typedef struct uct_cuda_ipc_vmm_chunk_desc {
     CUmemFabricHandle fabric_handle;
     CUdeviceptr       d_bptr;
     size_t            b_len;
-    /* Identity of the backing allocation. Remote addresses are recycled, so
-     * this is what distinguishes "the same chunk" from "a different allocation
-     * that happens to sit at the same address". */
-    uint64_t          buffer_id;
 } uct_cuda_ipc_vmm_chunk_desc_t;
 
 
@@ -33,6 +29,21 @@ typedef struct uct_cuda_ipc_vmm_chunk_desc {
  * fields changes.
  */
 #define UCT_CUDA_IPC_VMM_MULTI_VERSION 1
+
+
+/**
+ * @brief Check whether the metadata format of a multi-chunk key is supported
+ *
+ * @param info  Inline metadata information of the key
+ *
+ * @return Nonzero if the version and handle type of @a info are supported
+ */
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_ipc_vmm_multi_is_supported(const uct_cuda_ipc_vmm_multi_info_t *info)
+{
+    return (info->version == UCT_CUDA_IPC_VMM_MULTI_VERSION) &&
+           (info->handle_type == UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC);
+}
 
 
 /**
@@ -93,6 +104,24 @@ ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
         uct_cuda_ipc_memh_t *memh, void *address, size_t length,
         const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
         uct_cuda_ipc_vmm_multi_range_t *range_p);
+
+
+/**
+ * @brief Fetch the chunk descriptors a peer published for a multi-chunk key
+ *
+ * @param key        Remote multi-chunk key
+ * @param cu_dev     CUDA device where the metadata is imported
+ * @param chunks_p   Filled with the key's descriptors in address order, which
+ *                   cover the key range. Release with ucs_free().
+ * @param log_level  Log level for failures
+ *
+ * @return UCS_OK on success, or an error status on failure
+ */
+ucs_status_t
+uct_cuda_ipc_vmm_multi_fetch_chunks(const uct_cuda_ipc_rkey_t *key,
+                                    CUdevice cu_dev,
+                                    uct_cuda_ipc_vmm_chunk_desc_t **chunks_p,
+                                    ucs_log_level_t log_level);
 
 
 #endif

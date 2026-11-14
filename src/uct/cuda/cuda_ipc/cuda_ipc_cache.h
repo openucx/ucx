@@ -58,6 +58,50 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache, int close_handles);
 
 
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+/**
+ * @brief Import a VMM allocation from a shareable handle and map it locally
+ *
+ * @param length            Length of the allocation to map
+ * @param cu_dev            CUDA device which is granted access to the mapping
+ * @param mapped_addr       Filled with the local mapped address on success
+ * @param shareable_handle  Shareable handle exported by the peer
+ * @param handle_type       Type of @a shareable_handle
+ * @param log_level         Log level for failures
+ *
+ * @return UCS_OK on success, or an error status on failure
+ */
+ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm(size_t length, CUdevice cu_dev,
+                                CUdeviceptr *mapped_addr,
+                                void *shareable_handle,
+                                CUmemAllocationHandleType handle_type,
+                                ucs_log_level_t log_level);
+#endif
+
+
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief Map a multi-chunk VMM key into one contiguous local reservation
+ *
+ * Fetches the chunk descriptors the peer published, reserves a single VA range
+ * spanning the whole key and maps each chunk into its slot, so the caller gets
+ * one base pointer for the entire range.
+ *
+ * @param key          Multi-chunk remote key
+ * @param cu_dev       CUDA device which is granted access to the mapping
+ * @param mapped_addr  Filled with the local address of the key base on success
+ * @param log_level    Log level for failures
+ *
+ * @return UCS_OK on success, or an error status on failure
+ */
+ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm_multi(const uct_cuda_ipc_rkey_t *key,
+                                      CUdevice cu_dev, CUdeviceptr *mapped_addr,
+                                      ucs_log_level_t log_level);
+#endif
+
+
 /**
  * @brief Map an interprocess memory handle to a local address
  * 
