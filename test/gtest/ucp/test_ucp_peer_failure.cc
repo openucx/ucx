@@ -1175,33 +1175,24 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_fc_pending,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=16K",
-           "RNDV_FRAG_MEM_TYPE=cuda",
-           "KEEPALIVE_INTERVAL=0.3",
-           "KEEPALIVE_NUM_EPS=inf")
-{
+           "RNDV_FRAG_WORKER_MAX_MEM=16K", "RNDV_FRAG_MEM_TYPE=cuda",
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     rndv_fc_pending_abort_test(receiver(), UCP_WORKER_RNDV_FC_OP_RTR);
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_fc_pending,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=16K",
-           "RNDV_FRAG_MEM_TYPE=cuda",
-           "KEEPALIVE_INTERVAL=0.3",
-           "KEEPALIVE_NUM_EPS=inf")
-{
+           "RNDV_FRAG_WORKER_MAX_MEM=16K", "RNDV_FRAG_MEM_TYPE=cuda",
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     rndv_fc_pending_abort_test(sender(), UCP_WORKER_RNDV_FC_OP_PUT);
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_alloc_failure,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=32K",
-           "RNDV_FRAG_MEM_TYPE=cuda",
-           "KEEPALIVE_INTERVAL=0.3",
-           "KEEPALIVE_NUM_EPS=inf")
-{
+           "RNDV_FRAG_WORKER_MAX_MEM=32K", "RNDV_FRAG_MEM_TYPE=cuda",
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     rndv_fc_alloc_failure_abort_test(receiver(), 16 * UCS_KBYTE);
 }
 
@@ -1212,11 +1203,8 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_alloc_failure,
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_alloc_failure,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=32K",
-           "RNDV_FRAG_MEM_TYPE=cuda",
-           "KEEPALIVE_INTERVAL=0.3",
-           "KEEPALIVE_NUM_EPS=inf")
-{
+           "RNDV_FRAG_WORKER_MAX_MEM=32K", "RNDV_FRAG_MEM_TYPE=cuda",
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     rndv_fc_alloc_failure_abort_test(sender(), 8 * UCS_KBYTE);
 }
 
