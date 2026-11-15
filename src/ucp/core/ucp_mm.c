@@ -457,7 +457,7 @@ static int ucp_memh_memtype_map_is_used(ucp_mem_h memh)
 /* Add the memory of a user memory handle to the memtype map, if the map is used
  * instead of the event-driven memtype cache */
 static void
-ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
+ucp_memh_memtype_map_register(ucp_mem_h memh)
 {
     ucp_memory_info_t mem_info;
 
@@ -475,20 +475,24 @@ ucp_memh_memtype_map_register(ucp_context_h context, ucp_mem_h memh)
         mem_info = ucp_memory_info_from_memh(memh);
     } else {
         /* Cache the actual memory type, not the user hint */
-        ucp_memory_detect(context, ucp_memh_address(memh),
+        ucp_memory_detect(memh->context, ucp_memh_address(memh),
                           ucp_memh_length(memh), &mem_info);
     }
 
     ucs_memtype_map_register(ucp_memh_address(memh), ucp_memh_length(memh),
                              mem_info.type, mem_info.sys_dev,
                              mem_info.flags);
+    memh->flags |= UCP_MEMH_FLAG_MEMTYPE_MAP;
 }
 
 static void ucp_memh_memtype_map_unregister(ucp_mem_h memh)
 {
-    if (ucp_memh_memtype_map_is_used(memh)) {
+    /* Do not evaluate the configuration again, it could have changed since the
+     * memory was registered */
+    if (memh->flags & UCP_MEMH_FLAG_MEMTYPE_MAP) {
         ucs_memtype_map_unregister(ucp_memh_address(memh),
                                    ucp_memh_length(memh));
+        memh->flags &= ~UCP_MEMH_FLAG_MEMTYPE_MAP;
     }
 }
 
@@ -1018,7 +1022,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     ucs_assert(ucp_memh_is_user_memh(memh));
-    ucp_memh_memtype_map_register(context, memh);
+    ucp_memh_memtype_map_register(memh);
     return UCS_OK;
 
 err_put_rcache:

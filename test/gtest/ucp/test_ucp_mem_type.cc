@@ -200,6 +200,24 @@ UCS_TEST_P(test_ucp_memtype_explicit, map_unmap) {
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
 }
 
+/* The registration is removed even if the option is changed after the mapping */
+UCS_TEST_P(test_ucp_memtype_explicit, unmap_after_config_change) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    mem_buffer b(size, mem_type());
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh));
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+
+    ucs_global_opts.enable_memtype_cache = UCS_NO;
+    unmap(memh);
+    ucs_global_opts.enable_memtype_cache = UCS_YES;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
 UCS_TEST_P(test_ucp_memtype_explicit, repeated_map) {
     const size_t size = 4096;
     ucs_memory_info_t info;

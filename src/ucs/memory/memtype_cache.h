@@ -158,7 +158,8 @@ void ucs_memtype_map_register(const void *address, size_t size,
 /**
  * Remove one registration of exactly this range, which was added by
  * @ref ucs_memtype_map_register. Ranges that are not registered are ignored.
- * Must be called only if @ref ucs_memtype_map_is_enabled returns 1.
+ * Does not depend on the current configuration, so it must be called for every
+ * range which was registered, even if the configuration has changed.
  *
  * @param [in]  address         Start address passed to register.
  * @param [in]  size            Size passed to register.

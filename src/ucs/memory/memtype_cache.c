@@ -421,7 +421,7 @@ void ucs_memtype_map_register(const void *address, size_t size,
                               ucs_memory_type_t mem_type,
                               ucs_sys_device_t sys_dev, uint8_t mem_flags)
 {
-    ucs_pgt_addr_t start = (uintptr_t)address;
+    uint64_t start = (uintptr_t)address;
     ucs_memtype_map_entry_t *entry;
 
     ucs_assert(ucs_memtype_map_is_enabled());
@@ -456,10 +456,9 @@ void ucs_memtype_map_register(const void *address, size_t size,
 
 void ucs_memtype_map_unregister(const void *address, size_t size)
 {
-    ucs_pgt_addr_t start = (uintptr_t)address;
+    uint64_t start = (uintptr_t)address;
     ucs_memtype_map_entry_t *entry;
 
-    ucs_assert(ucs_memtype_map_is_enabled());
     ucs_assertv((size > 0) && (size <= UINTPTR_MAX - start),
                 "address=%p size=%zu", address, size);
 
