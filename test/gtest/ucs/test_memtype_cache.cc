@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
+#include <common/memtype_explicit_guard.h>
 
 #include <ucs/sys/sys.h>
 #include <ucs/config/global_opts.h>
@@ -581,21 +582,8 @@ class test_memtype_explicit : public ucs::test {
 protected:
     virtual void init() {
         ucs::test::init();
-        m_enable_events = ucm_global_opts.enable_events;
         modify_config("MEMTYPE_CACHE", "y");
-        ucm_global_opts.enable_events = 0;
-        reset_cache();
-    }
-
-    virtual void cleanup() {
-        reset_cache();
-        ucm_global_opts.enable_events = m_enable_events;
-        ucs::test::cleanup();
-    }
-
-    static void reset_cache() {
-        ucs_memtype_cache_cleanup();
-        ucs_memtype_cache_global_init();
+        m_guard.enable();
     }
 
     ucs_status_t lookup(const void *base, size_t offset, size_t size,
@@ -632,7 +620,8 @@ protected:
         ucs_memtype_map_unregister(UCS_PTR_BYTE_OFFSET(base, offset), size);
     }
 
-    int m_enable_events;
+private:
+    memtype_explicit_guard m_guard;
 };
 
 UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
@@ -753,7 +742,7 @@ UCS_TEST_F(test_memtype_explicit, leftover_registrations) {
     reg(base, 0, 0x1000);
     reg(base, 0x2000, 0x1000);
 
-    reset_cache();
+    memtype_explicit_guard::reset_cache();
     expect_miss(base, 0, 0x100);
     expect_miss(base, 0x2000, 0x100);
 }

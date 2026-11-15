@@ -7,6 +7,7 @@
 
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
+#include <common/memtype_explicit_guard.h>
 
 extern "C" {
 #include <ucm/event/event.h>
@@ -104,37 +105,6 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
-
-/* Disables UCM events and resets the global memory type cache, and restores
- * both on destruction, also when the test fails or is skipped in init() */
-class memtype_explicit_guard {
-public:
-    memtype_explicit_guard() : m_enable_events(0), m_active(false) {
-    }
-
-    ~memtype_explicit_guard() {
-        if (m_active) {
-            reset_cache();
-            ucm_global_opts.enable_events = m_enable_events;
-        }
-    }
-
-    void enable() {
-        m_enable_events               = ucm_global_opts.enable_events;
-        m_active                      = true;
-        ucm_global_opts.enable_events = 0;
-        reset_cache();
-    }
-
-private:
-    static void reset_cache() {
-        ucs_memtype_cache_cleanup();
-        ucs_memtype_cache_global_init();
-    }
-
-    int  m_enable_events;
-    bool m_active;
-};
 
 /* Memory type cache without UCM events: only ranges mapped by ucp_mem_map() are
  * cached, and they are removed by ucp_mem_unmap() */
