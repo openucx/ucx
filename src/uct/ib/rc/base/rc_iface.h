@@ -107,11 +107,7 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
-    /*
-     * Internal PUT burst from the iface ops buffer. Requires a completion that
-     * clears this flag before pool reuse. Uses wqe_end_pi instead of length and
-     * is canceled on purge rather than exposed for replay.
-     */
+    /* Cancel this internal operation on purge instead of exposing it for replay. */
     UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE = UCS_BIT(10),
     UCT_RC_IFACE_SEND_OP_STATUS     = UCS_BIT(11), /* status field is valid */
 #ifdef NVALGRIND
@@ -348,8 +344,7 @@ struct uct_rc_iface_send_op {
     uint16_t                      flags;
     union {
         unsigned                  length;
-        /* Last WQE PI, inclusive; set after send-op initialization. */
-        uint16_t                  wqe_end_pi;
+        uint16_t                  wqe_end_pi; /* cancel-on-purge WQE range */
     };
     union {
         void                      *buffer;     /* atomics / desc /
