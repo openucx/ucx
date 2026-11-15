@@ -122,6 +122,11 @@ typedef struct {
     /* Topology detection modules to use */
     ucs_config_names_array_t   topo_prio;
 
+    /* Whether peer-to-peer traffic between PCI devices (e.g. NIC and GPU)
+       goes through the root complex: detect it, or assume it for all devices
+       or for none */
+    ucs_on_off_auto_value_t    topo_p2p_redirect;
+
     /* Enable VFS monitoring */
     int                        vfs_enable;
 
