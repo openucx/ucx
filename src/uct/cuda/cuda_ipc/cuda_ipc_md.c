@@ -118,32 +118,48 @@ static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
     return supported;
 }
 
+typedef struct {
+    int      found;   /* Whether an accessible IMEX channel was found */
+    uint32_t channel; /* Lowest accessible IMEX channel number */
+} uct_cuda_ipc_md_imex_channel_t;
+
 static ucs_status_t
 uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
 {
     static const char channel_prefix[] = "channel";
-    int *found                         = arg;
+    uct_cuda_ipc_md_imex_channel_t *imex_channel = arg;
+    const char *number;
+    unsigned long channel;
     char path[PATH_MAX];
+    char *end;
 
     if (strncmp(entry->d_name, channel_prefix,
                 sizeof(channel_prefix) - 1) != 0) {
         return UCS_OK;
     }
 
+    number  = entry->d_name + sizeof(channel_prefix) - 1;
+    channel = strtoul(number, &end, 10);
+    if ((*number == '\0') || (*end != '\0') || (channel > UINT32_MAX)) {
+        return UCS_OK;
+    }
+
     ucs_snprintf_safe(path, sizeof(path), "%s/%s",
                       UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
-    if (access(path, R_OK | W_OK) == 0) {
-        *found = 1;
+    if ((access(path, R_OK | W_OK) == 0) &&
+        (!imex_channel->found || (channel < imex_channel->channel))) {
+        imex_channel->found   = 1;
+        imex_channel->channel = channel;
     }
 
     return UCS_OK;
 }
 #endif
 
-static int uct_cuda_ipc_md_check_fabric_support(void)
+static int uct_cuda_ipc_md_check_fabric_support(uint32_t *imex_channel_p)
 {
 #if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
-    int imex_channel_found = 0;
+    uct_cuda_ipc_md_imex_channel_t imex_channel = {};
     ucs_status_t status;
     CUdevice cu_device;
 
@@ -155,13 +171,20 @@ static int uct_cuda_ipc_md_check_fabric_support(void)
 
     if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
                         uct_cuda_ipc_md_check_imex_channel_cb,
-                        &imex_channel_found) != UCS_OK) {
+                        &imex_channel) != UCS_OK) {
         return 0;
     }
 
-    ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
-              imex_channel_found ? "enabled" : "disabled");
-    return imex_channel_found;
+    if (!imex_channel.found) {
+        ucs_debug("CUDA fabric IPC support on device %d is disabled: no "
+                  "accessible IMEX channel", cu_device);
+        return 0;
+    }
+
+    ucs_debug("CUDA fabric IPC support on device %d is enabled, IMEX "
+              "channel %u", cu_device, imex_channel.channel);
+    *imex_channel_p = imex_channel.channel;
+    return 1;
 #else
     return 0;
 #endif
@@ -965,7 +988,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops        = &md_ops;
     md->super.component  = &uct_cuda_ipc_component.super;
-    md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
+    md->fabric_supported = uct_cuda_ipc_md_check_fabric_support(
+            &md->imex_channel);
     uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,

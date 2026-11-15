@@ -30,10 +30,12 @@ typedef struct {
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
 
 
-/* Device address extended with the NVLink domain, sent if FLAG_MNNVL is set */
+/* Device address extended with the multi-node NVLINK info, sent if FLAG_MNNVL
+ * is set */
 typedef struct {
     uct_cuda_ipc_device_addr_t super;
     uint64_t                   nvlink_domain;
+    uint32_t                   imex_channel; /* Valid if FLAG_FABRIC is set */
 } UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
 
 

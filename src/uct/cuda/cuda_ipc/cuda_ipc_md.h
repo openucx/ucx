@@ -77,6 +77,10 @@ typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
     int                      fabric_supported;  /**< CUDA fabric support status */
+    /** IMEX channel used to export and import fabric handles, valid if
+     *  fabric_supported. Fabric handles can be imported only by a process
+     *  which has access to the same IMEX channel. */
+    uint32_t                 imex_channel;
     /** NVLink domain of the GPU fabric, valid if enable_mnnvl. GPUs on
      *  different nodes can reach each other over multi-node NVLINK only if
      *  both are equal. */
