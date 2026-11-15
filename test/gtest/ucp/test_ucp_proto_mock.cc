@@ -4194,11 +4194,21 @@ public:
 
         modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
         modify_config("MAX_RMA_RAILS", "2");
+        const unsigned num_paths = this->num_paths();
         for (unsigned i = 0; i < 2; ++i) {
             add_mock_iface("mock_" + std::to_string(i) + ":1",
-                    [](uct_iface_attr_t &attr) {
-                        attr.bandwidth = {0, 32.0 * UCS_GBYTE};
-                        attr.latency   = {500e-9, 0};
+                    [num_paths](uct_iface_attr_t &attr) {
+                        attr.bandwidth     = {0, 32.0 * UCS_GBYTE};
+                        attr.latency       = {500e-9, 0};
+                        attr.dev_num_paths = num_paths;
+                    },
+                    [num_paths](uct_perf_attr_t &perf_attr) {
+                        /* The paths share the device, as on RoCE LAG */
+                        if (perf_attr.field_mask &
+                            UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+                            perf_attr.path_bandwidth = {
+                                0, 32.0 * UCS_GBYTE / num_paths};
+                        }
                     });
         }
         test_ucp_proto_mock::init();
@@ -4212,6 +4222,11 @@ public:
     }
 
 protected:
+    virtual unsigned num_paths() const
+    {
+        return 1;
+    }
+
     void install_hooks(ucp_ep_h ep)
     {
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -4248,22 +4263,45 @@ protected:
                            UCT_EP_EVENT_PATH_SPEED_CHANGE);
     }
 
-    /* Provide a sample per lane and deliver the event from worker progress */
+    /* Transport endpoints of the RMA bandwidth lanes */
+    static std::vector<uct_ep_h> rma_bw_lane_eps(ucp_ep_h ep)
+    {
+        const auto &key = ucp_ep_config(ep)->key;
+        std::vector<uct_ep_h> tl_eps;
+
+        for (ucp_lane_index_t i = 0;
+             (i < UCP_MAX_LANES) && (key.rma_bw_lanes[i] != UCP_NULL_LANE);
+             ++i) {
+            tl_eps.push_back(ucp_ep_get_lane(ep, key.rma_bw_lanes[i]));
+        }
+
+        return tl_eps;
+    }
+
+    /* Provide the samples and deliver the event of each lane from worker
+     * progress */
+    void set_samples(const std::map<uct_ep_h, double> &samples)
+    {
+        for (const auto &sample : samples) {
+            m_samples[sample.first] = sample.second;
+            ucs_callbackq_add_oneshot(&sender().worker()->uct->progress_q,
+                    this, [](void *arg) -> unsigned {
+                        invoke_event(static_cast<uct_ep_h>(arg));
+                        return 1;
+                    }, sample.first);
+        }
+
+        while (progress()) {
+        }
+    }
+
     void set_samples(ucp_ep_h ep, double first, double second)
     {
         uct_ep_h tl_eps[] = {lane_ep(ep, 0), lane_ep(ep, 1)};
 
         ASSERT_NE(nullptr, tl_eps[0]);
         ASSERT_NE(nullptr, tl_eps[1]);
-        m_samples[tl_eps[0]] = first;
-        m_samples[tl_eps[1]] = second;
-        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, this,
-                [](void *arg) -> unsigned {
-                    invoke_event(static_cast<uct_ep_h>(arg));
-                    return 1;
-                }, tl_eps[1]);
-        while (progress()) {
-        }
+        set_samples({{tl_eps[0], first}, {tl_eps[1], second}});
     }
 
     void fail_query(uct_ep_h tl_ep, ucs_status_t status)
@@ -4423,6 +4461,127 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, destroy_with_pending_update)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, mm_cma, "posix,cma")
+
+
+/* Progress of a single-thread worker does not hold the async lock */
+class test_ucp_proto_mock_path_bw_single_thread :
+        public test_ucp_proto_mock_path_bw {
+public:
+    void init() override
+    {
+        test_ucp_proto_mock_path_bw::init();
+
+        /* With error handling, wireup completes and replaces the lanes later */
+        flush_workers();
+        install_hooks(sender().ep());
+    }
+
+protected:
+    ucp_worker_params_t get_worker_params() override
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+
+        params.thread_mode = UCS_THREAD_MODE_SINGLE;
+        return params;
+    }
+
+    /* Error handling allows to force close the endpoint */
+    ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_proto_mock_path_bw::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                         ucs_empty_function);
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw_single_thread, close_during_worker_flush,
+           "FLUSH_WORKER_EPS=n")
+{
+    auto worker = sender().worker();
+    auto ep     = sender().ep();
+
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    ASSERT_NE(nullptr, path_bw(ep));
+
+    /* An operation in flight keeps the worker flush going, and the flush holds
+     * a reference to the first endpoint until it completes */
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_worker_flush_ops_count_add(worker, 1);
+    }
+
+    void *flush_req = sender().flush_worker_nb();
+    ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+
+    void *close_req     = sender().disconnect_nb(0, 0,
+                                                 UCP_EP_CLOSE_FLAG_FORCE);
+    ucs_time_t deadline = ucs::get_deadline();
+    while (!is_request_completed(close_req) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    sender().close_ep_req_free(close_req);
+    ASSERT_NE(nullptr, path_bw(ep));
+
+    /* The flush releases the last reference from worker progress, which
+     * destroys the endpoint without the async lock */
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_worker_flush_ops_count_add(worker, -1);
+    }
+
+    ASSERT_UCS_OK(request_wait(flush_req));
+    EXPECT_EQ(nullptr, path_bw(ep));
+}
+
+/* With error handling, the mock cma devices get no RMA lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_single_thread, rcx,
+                              "rc_x")
+
+
+class test_ucp_proto_mock_path_bw_multi_path :
+        public test_ucp_proto_mock_path_bw {
+protected:
+    unsigned num_paths() const override
+    {
+        return 2;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw_multi_path, recovery)
+{
+    auto ep     = sender().ep();
+    auto tl_eps = rma_bw_lane_eps(ep);
+    std::map<uct_ep_h, double> samples;
+
+    ASSERT_FALSE(tl_eps.empty());
+
+    /* A healthy path reports the path estimate, a share of the device */
+    for (auto tl_ep : tl_eps) {
+        samples[tl_ep] = 16.0 * UCS_GBYTE;
+    }
+    set_samples(samples);
+    EXPECT_FALSE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
+
+    samples[tl_eps.front()] = 8.0 * UCS_GBYTE;
+    set_samples(samples);
+    EXPECT_TRUE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
+
+    samples[tl_eps.front()] = 16.0 * UCS_GBYTE;
+    set_samples(samples);
+    EXPECT_FALSE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_multi_path, rcx,
+                              "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_multi_path, mm_cma,
+                              "posix,cma")
 
 
 #if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
