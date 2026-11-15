@@ -9,7 +9,6 @@
 #endif
 
 #include "ib_mlx5_ext.h"
-#include "ib_mlx5.h"
 
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
