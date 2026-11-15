@@ -3206,7 +3206,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, bandwidth_with_tx_token,
     auto *peer  = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
     uct_rc_mlx5_ext_ops_t ops       = {};
     uct_rc_mlx5_tx_token_t tx_token = {};
-    uct_ep_attr_t attr             = {};
+    uct_ep_attr_t attr              = {};
     ucs::handle<uct_rc_mlx5_iface_common_t*, const uct_rc_mlx5_ext_ops_t*>
             restore(iface, [](uct_rc_mlx5_iface_common_t *iface,
                               const uct_rc_mlx5_ext_ops_t *ops) {
