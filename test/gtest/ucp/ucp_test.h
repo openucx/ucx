@@ -365,7 +365,7 @@ protected:
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
-        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+        ucs_time_t loop_end_limit = ucs::get_deadline(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
             progress();
         }
