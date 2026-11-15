@@ -239,11 +239,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_POS_DOUBLE},
 
   {"DEVICE_LANES_FALLBACK", "y",
-   "Select fallback device API lanes from the transports which can access both\n"
-   "CUDA and host memory, in addition to the lanes selected for CUDA or ROCm\n"
-   "memory only. The fallback lanes are used when the remote memory is not\n"
-   "reachable by the other lanes. If disabled, fewer resources are allocated\n"
-   "during connection establishment, but no fallback is available.",
+   "Select fallback device API lanes from the transports which can access\n"
+   "both CUDA and host memory, in addition to the lanes selected for CUDA or\n"
+   "ROCm memory only. The fallback lanes are used when the remote memory is\n"
+   "not reachable by the other lanes. If disabled, fewer resources are\n"
+   "allocated during connection establishment, but no fallback is available.",
    ucs_offsetof(ucp_context_config_t, device_lanes_fallback),
    UCS_CONFIG_TYPE_BOOL},
 
