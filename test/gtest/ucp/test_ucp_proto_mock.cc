@@ -4317,14 +4317,14 @@ protected:
         return (it == kh_end(hash)) ? nullptr : kh_value(hash, it);
     }
 
-    /* Stored per-process sample of a lane, or NaN if there is none */
+    /* Per-process sample of a degraded lane, or NaN if there is none */
     double sample(ucp_ep_h ep, unsigned lane_id) const
     {
         auto state            = path_bw(ep);
         ucp_lane_index_t lane = ucp_ep_lookup_lane(ep, lane_ep(ep, lane_id));
 
         if ((state == nullptr) || (lane == UCP_NULL_LANE) ||
-            !(state->valid & UCS_BIT(lane))) {
+            (state->bandwidth[lane] < 0)) {
             return std::numeric_limits<double>::quiet_NaN();
         }
 
@@ -4388,10 +4388,15 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, samples_follow_events)
 
 UCS_TEST_P(test_ucp_proto_mock_path_bw, samples_per_process, "NUM_PPN=8")
 {
-    /* Same per-process share as the static lane model */
-    set_samples(sender().ep(), 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
-    EXPECT_EQ(1.0 * UCS_GBYTE, sample(sender().ep(), 0));
-    EXPECT_EQ(4.0 * UCS_GBYTE, sample(sender().ep(), 1));
+    auto ep = sender().ep();
+
+    /* Same per-process share as the static lane model and the path estimate */
+    set_samples(ep, 8.0 * UCS_GBYTE, 16.0 * UCS_GBYTE);
+    EXPECT_EQ(1.0 * UCS_GBYTE, sample(ep, 0));
+    EXPECT_EQ(2.0 * UCS_GBYTE, sample(ep, 1));
+
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_TRUE(std::isnan(sample(ep, 1)));
 }
 
 UCS_TEST_P(test_ucp_proto_mock_path_bw, unusable_samples)
@@ -4407,7 +4412,7 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, unusable_samples)
     fail_query(lane_ep(ep, 0), UCS_ERR_TIMED_OUT);
     set_samples(ep, 16.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
     EXPECT_EQ(8.0 * UCS_GBYTE, sample(ep, 0));
-    EXPECT_EQ(32.0 * UCS_GBYTE, sample(ep, 1));
+    EXPECT_TRUE(std::isnan(sample(ep, 1)));
     EXPECT_TRUE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
 }
 
@@ -4440,21 +4445,11 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, reconfig_resets_samples)
 
 UCS_TEST_P(test_ucp_proto_mock_path_bw, destroy_with_pending_update)
 {
-    auto worker = sender().worker();
-    auto ep     = sender().ep();
+    auto ep = sender().ep();
 
-    /* The update is deferred to progress; cleanup must cancel it */
-    invoke_event(lane_ep(ep, 0));
-    ASSERT_NE(nullptr, path_bw(ep));
-    {
-        ucs::scoped_async_lock lock(worker->async);
-        ucp_worker_ep_path_bw_cleanup(ep);
-    }
-    while (progress()) {
-    }
-    EXPECT_EQ(nullptr, path_bw(ep));
-
-    /* Leave an update pending for the endpoint destruction in cleanup */
+    /* The update is deferred to progress, so leave it pending for the
+     * destruction of the endpoint and the interfaces in cleanup */
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
     invoke_event(lane_ep(ep, 0));
     EXPECT_NE(nullptr, path_bw(ep));
 }

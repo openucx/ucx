@@ -132,8 +132,9 @@ enum {
     UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-    UCP_WORKER_IFACE_FLAG_EP_EVENTS         = UCS_BIT(4)  /**< Endpoint events are
-                                                               supported */
+    UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING   = UCS_BIT(4)  /**< Path bandwidth of the
+                                                               endpoints is to be
+                                                               sampled */
 };
 
 
@@ -226,14 +227,14 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
-/* Path estimates of one configuration and set of lanes of an endpoint,
- * allocated only for endpoints receiving events. */
+/* Path samples of one configuration and set of lanes of an endpoint,
+ * allocated for endpoints on interfaces which report path events. */
 typedef struct {
-    uint8_t                pending;         /* An update is scheduled */
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
     uint32_t               lane_generation; /* Lanes of the samples */
-    ucp_lane_map_t         valid;           /* Lanes which have a sample */
-    double                 bandwidth[];     /* Lane bandwidths */
+    double                 bandwidth[];     /* Lane bandwidth below the path
+                                               estimate, or negative if the
+                                               path is not degraded */
 } ucp_ep_path_bw_t;
 
 
@@ -496,8 +497,6 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);
 
 void ucp_worker_ep_path_bw_cleanup(ucp_ep_h ep);
-
-void ucp_worker_ep_path_bw_refresh(ucp_ep_h ep, ucp_ep_path_bw_t *state);
 
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
 
