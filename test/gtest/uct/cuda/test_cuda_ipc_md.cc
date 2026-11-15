@@ -861,7 +861,11 @@ UCS_TEST_F(test_cuda_ipc_cache_overlap, aligned_overlap)
     EXPECT_EQ("co", m_events);
     auto region = ucs_pgtable_lookup(&m_cache->pgtable,
                                      BASE_ADDR + 2 * REGION_SIZE - 1);
-    ASSERT_NE(nullptr, region);
+    if (region == nullptr) {
+        ADD_FAILURE() << "aligned region is missing from cache";
+        return;
+    }
+
     EXPECT_EQ(BASE_ADDR + 2 * REGION_SIZE - UCS_PGT_ADDR_ALIGN, region->start);
     EXPECT_EQ(BASE_ADDR + 2 * REGION_SIZE + UCS_PGT_ADDR_ALIGN, region->end);
     check_cache(1, 2);
