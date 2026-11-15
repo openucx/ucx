@@ -38,6 +38,7 @@ if [ -z "$BUILD_NUMBER" ]; then
 	RUN_TESTS=yes
 	TEST_PERF=1
 	TIMEOUT=""
+	APP_TIMEOUT=""
 else
 	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
@@ -46,6 +47,7 @@ else
 	else
 		TIMEOUT="timeout 200m"
 	fi
+	APP_TIMEOUT="timeout -k 1m 20m"
 fi
 
 
@@ -162,6 +164,24 @@ slice_affinity() {
 	set -x
 }
 
+#
+# Wait for a background test application, kill it on timeout
+#
+wait_app() {
+	local app_pid=$1
+
+	if ! $APP_TIMEOUT tail -s 0.1 --pid=${app_pid} -f /dev/null
+	then
+		log_error "Process ${app_pid} did not exit within the timeout, killing it"
+		# SIGABRT makes UCX print a backtrace
+		kill -ABRT ${app_pid} || true
+		timeout 10 tail -s 0.1 --pid=${app_pid} -f /dev/null || kill -9 ${app_pid} || true
+		exit 1
+	fi
+
+	wait ${app_pid}
+}
+
 run_loopback_app() {
 	test_exe=$1
 	test_args="-l $2"
@@ -171,7 +191,7 @@ run_loopback_app() {
 	taskset -c $affinity ${test_exe} ${test_args} &
 	pid=$!
 
-	wait ${pid} || true
+	wait_app ${pid} || true
 }
 
 expect_failure() {
@@ -179,7 +199,7 @@ expect_failure() {
 	local output
 	shift
 
-	if output=$("$@" 2>&1); then
+	if output=$($APP_TIMEOUT "$@" 2>&1); then
 		printf '%s\n' "$output"
 		log_error "Command unexpectedly succeeded: $*"
 		return 1
@@ -218,7 +238,7 @@ run_client_server_app() {
 	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
-	wait ${client_pid}
+	wait_app ${client_pid}
 
 	if [ $error_emulation -eq 1 ]
 	then
@@ -229,7 +249,7 @@ run_client_server_app() {
 	then
 		kill -9 ${server_pid} || true # ignore failure
 	fi
-	wait ${server_pid} || true
+	wait_app ${server_pid} || true
 }
 
 run_hello() {
@@ -273,7 +293,7 @@ run_hello() {
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
-	if ./src/tools/info/ucx_info -e -u twe|grep ERROR
+	if $APP_TIMEOUT ./src/tools/info/ucx_info -e -u twe|grep ERROR
 	then
 		return # skip if cannot create ucp ep
 	fi
@@ -719,13 +739,13 @@ run_ucx_perftest() {
 
 		expect_failure "device API is not supported for" \
 			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
-		"$ucx_perftest" -t tag_lat -m cuda:0,host -s 8 -n 1 -w 0 -l -f
+		$APP_TIMEOUT "$ucx_perftest" -t tag_lat -m cuda:0,host -s 8 -n 1 -w 0 -l -f
 		expect_failure "device ids must match in loopback mode" \
 			"$ucx_perftest" -t tag_lat -m cuda:0,cuda:1 -l
 		expect_failure "cuda device index 2147483647 is invalid" \
 			"$ucx_perftest" -t tag_lat -m cuda:2147483647 -s 8 -l
 
-		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
+		if $APP_TIMEOUT $ucx_perftest -h 2>&1 | grep -q "cuda-async"
 		then
 			echo "==== Running ucx_perf with cuda-async memory ===="
 			cuda_async_test_args="-t tag_lat -D contig,contig"
@@ -847,8 +867,8 @@ run_ucx_perftest_with_daemon() {
 
 		kill ${client_dmn_pid} || true # ignore failure
 		kill ${server_dmn_pid} || true # ignore failure
-		wait $client_dmn_pid || true
-		wait $server_dmn_pid || true
+		wait_app $client_dmn_pid || true
+		wait_app $server_dmn_pid || true
 
 		unset UCX_TLS
 		unset UCX_NET_DEVICES
@@ -987,7 +1007,7 @@ run_mpi_tests() {
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
 
-			MPIRUN_COMMON="mpirun \
+			MPIRUN_COMMON="$APP_TIMEOUT mpirun \
 					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
@@ -1052,9 +1072,9 @@ test_profiling() {
 
 	build_ucx_profiling_test
 
-	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
+	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof $APP_TIMEOUT ./ucx_profiling
 
-	UCX_READ_PROFILE=${ucx_inst}/bin/ucx_read_profile
+	UCX_READ_PROFILE="$APP_TIMEOUT ${ucx_inst}/bin/ucx_read_profile"
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep "printf" -C 20
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "calc_pi"
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "print_pi"
@@ -1071,7 +1091,7 @@ test_ucs_load() {
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
-	strace ./ucx_profiling &> strace.log
+	$APP_TIMEOUT strace ./ucx_profiling &> strace.log
 	! grep '^socket' strace.log
 }
 
@@ -1080,11 +1100,11 @@ test_ucs_dlopen() {
 
 	# Make sure UCM is not unloaded
 	echo "==== Running UCS dlopen test with memhooks ===="
-	./test/apps/test_ucs_dlopen
+	$APP_TIMEOUT ./test/apps/test_ucs_dlopen
 
 	# Test global config list integrity after loading/unloading of UCT
 	echo "==== Running test_dlopen_cfg_print ===="
-	./test/apps/test_dlopen_cfg_print
+	$APP_TIMEOUT ./test/apps/test_dlopen_cfg_print
 }
 
 test_ucp_dlopen() {
@@ -1093,13 +1113,13 @@ test_ucp_dlopen() {
 	if [ -n "$LIB_CMA" ]
 	then
 		echo "==== Running UCP library loading test ===="
-		./test/apps/test_ucp_dlopen | grep 'cma'
+		$APP_TIMEOUT ./test/apps/test_ucp_dlopen | grep 'cma'
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
 
 	# Test module allow-list
-	UCX_MODULES=^ib,rdmacm ./src/tools/info/ucx_info -d |& tee ucx_info_noib.log
+	UCX_MODULES=^ib,rdmacm $APP_TIMEOUT ./src/tools/info/ucx_info -d |& tee ucx_info_noib.log
 	if grep -in "component:\s*ib$" ucx_info_noib.log
 	then
 		echo "IB module was loaded even though it was disabled"
@@ -1107,7 +1127,7 @@ test_ucp_dlopen() {
 	fi
 
 	# Test module allow-list passed through ucp_config_modify()
-	./test/apps/test_ucp_config -c "UCX_MODULES=^ib,rdmacm" |& tee ucx_config_noib.log
+	$APP_TIMEOUT ./test/apps/test_ucp_config -c "UCX_MODULES=^ib,rdmacm" |& tee ucx_config_noib.log
 	if grep -in "component:\s*ib$" ucx_config_noib.log
 	then
 		echo "IB module was loaded even though it was disabled"
@@ -1148,33 +1168,33 @@ test_init_mt() {
 
 test_memtrack() {
 	echo "==== Running memtrack test ===="
-	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
+	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity $TIMEOUT make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB $APP_TIMEOUT ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
+	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB $APP_TIMEOUT ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
 }
 
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
+	UCX_IB_PORTS=mlx5_0:1 $APP_TIMEOUT ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
 
 	# Check that suggestions for similar ucx env vars are printed
 	echo "==== Running fuzzy match test ===="
-	../test/apps/test_fuzzy_match.py --ucx_info ./src/tools/info/ucx_info
+	$APP_TIMEOUT ../test/apps/test_fuzzy_match.py --ucx_info ./src/tools/info/ucx_info
 }
 
 test_env_var_aliases() {
 	echo "==== Running MLX5 env var aliases test ===="
-	if [[ `./src/tools/info/ucx_info -b | grep -P 'HW_TM *1$'` ]]
+	if [[ `$APP_TIMEOUT ./src/tools/info/ucx_info -b | grep -P 'HW_TM *1$'` ]]
 	then
 		vars=( "TM_ENABLE" "TM_LIST_SIZE" "TX_MAX_BB" )
 		for var in "${vars[@]}"
 		do
 			for tl in "RC_MLX5" "DC_MLX5"
 			do
-				val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+				val=$($APP_TIMEOUT ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
 				if [ -z $val ]
 				then
 					echo "UCX_${tl}_${var} does not exist in UCX config"
@@ -1188,7 +1208,7 @@ test_env_var_aliases() {
 				for var_alias in "RC" $tl
 				do
 					var_name=UCX_${var_alias}_${var}
-					val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+					val_set=$(export $var_name=$magic_val; $APP_TIMEOUT ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
 					if [ "$val_set" != "$magic_val" ]
 					then
 						echo "Can't set $var_name"
@@ -1206,7 +1226,7 @@ test_malloc_hook() {
 	echo "==== Running malloc hooks test ===="
 	if [ -x ./test/apps/test_tcmalloc ]
 	then
-		./test/apps/test_tcmalloc
+		$APP_TIMEOUT ./test/apps/test_tcmalloc
 	fi
 }
 
@@ -1214,7 +1234,7 @@ test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
 	if [ "X$have_cuda" != "Xno" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
-		./test/apps/test_no_cuda_ctx
+		$APP_TIMEOUT ./test/apps/test_no_cuda_ctx
 	fi
 }
 
@@ -1228,7 +1248,7 @@ run_gtest_watchdog_test() {
 
 	start_time=`date +%s`
 
-	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+	$TIMEOUT env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
 		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
 		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
@@ -1459,18 +1479,18 @@ run_gtest_release() {
 run_ucx_info() {
 	echo "==== Running ucx_info ===="
 
-	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M -T -M
+	$APP_TIMEOUT ./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M -T -M
 }
 
 run_ucx_tl_check() {
 	# Test transport selection
-	../test/apps/test_ucx_tls.py -p $ucx_inst
+	$APP_TIMEOUT ../test/apps/test_ucx_tls.py -p $ucx_inst
 
 	# Test setting many lanes
 	UCX_IB_NUM_PATHS=8 \
 		UCX_MAX_EAGER_LANES=4 \
 		UCX_MAX_RNDV_LANES=4 \
-		./src/tools/info/ucx_info -u t -e
+		$APP_TIMEOUT ./src/tools/info/ucx_info -u t -e
 }
 
 #
@@ -1491,7 +1511,7 @@ run_release_mode_tests() {
 run_nt_buffer_transfer_tests() {
     build release --enable-gtest --enable-optimizations
     echo "==== Running test_arch tests with optimizations ===="
-    ./test/gtest/gtest --gtest_filter="test_arch.*"
+    $TIMEOUT ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
 set_ucx_common_test_env() {
