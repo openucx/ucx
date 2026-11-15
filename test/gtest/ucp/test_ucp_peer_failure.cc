@@ -194,11 +194,11 @@ ucp_test::entity& test_ucp_peer_failure::failing_receiver() {
 
 void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey)
 {
-    ucp_request_param_t param;
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
-                         UCP_OP_ATTR_FIELD_CALLBACK;
-    param.datatype     = DATATYPE;
-    param.cb.send      = send_cb;
+    ucp_request_param_t param = {};
+    param.op_attr_mask        = UCP_OP_ATTR_FIELD_DATATYPE |
+                                UCP_OP_ATTR_FIELD_CALLBACK;
+    param.datatype            = DATATYPE;
+    param.cb.send             = send_cb;
     if (get_variant_value() & TEST_AM) {
         return ucp_am_send_nbx(ep, AM_ID, NULL, 0, m_sbuf->ptr(), m_sbuf->size(),
                                &param);

@@ -853,6 +853,11 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep)
         return status;
     }
 
+    status = ucs_tcp_base_set_maxseg(ep->fd, tcp_sockcm->maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return ucs_tcp_base_set_user_timeout(ep->fd, tcp_sockcm->user_timeout);
 }
 

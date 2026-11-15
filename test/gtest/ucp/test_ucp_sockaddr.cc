@@ -397,7 +397,7 @@ public:
                send_recv_type_t send_type, ucp_send_nbx_callback_t cb,
                void *user_data, size_t ep_index = 0)
     {
-        ucp_request_param_t params;
+        ucp_request_param_t params = {};
 
         params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                               UCP_OP_ATTR_FIELD_USER_DATA;
@@ -447,7 +447,7 @@ public:
     void* recv(entity& to, void *contig_buffer, size_t length,
                ucp_stream_recv_nbx_callback_t cb, void *user_data)
     {
-        ucp_request_param_t params;
+        ucp_request_param_t params = {};
 
         params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK |
                                 UCP_OP_ATTR_FIELD_USER_DATA |

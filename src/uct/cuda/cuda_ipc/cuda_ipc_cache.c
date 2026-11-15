@@ -300,14 +300,6 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
 }
 
 #if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
-static void
-uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
-{
-    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    access_desc->location.id   = cu_dev;
-}
-
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                 CUdeviceptr *mapped_addr,
@@ -670,29 +662,29 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     pthread_rwlock_unlock(&cache->lock);
 }
 
-void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
-                                  uintptr_t d_bptr, const void *mapped_addr,
+void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_mapping_t *mapping,
                                   CUdevice cu_dev, int cache_enabled)
 {
-    const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
+    const uct_cuda_ipc_cache_hash_key_t key = {mapping->pid, mapping->pid_ns,
+                                               cu_dev};
     uct_cuda_ipc_cache_t *cache;
 
     /* checking if the mapped address is the same as the d_bptr
      * this is true for the case of single process memory mapping
      * see uct_cuda_ipc_map_memhandle for more details */
-    if ((d_bptr == (uintptr_t)mapped_addr) &&
-        uct_cuda_ipc_is_rkey_local(pid, pid_ns)) {
+    if ((mapping->d_bptr == (uintptr_t)mapping->mapped_addr) &&
+        uct_cuda_ipc_is_rkey_local(mapping->pid, mapping->pid_ns)) {
         return;
     }
 
     ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
     cache = uct_cuda_ipc_remote_cache_get(key);
     if (cache != NULL) {
-        uct_cuda_ipc_cache_destroy_region(cache, d_bptr, mapped_addr,
-                                          cache_enabled);
+        uct_cuda_ipc_cache_destroy_region(cache, mapping->d_bptr,
+                                          mapping->mapped_addr, cache_enabled);
     } else {
-        ucs_debug("no remote cache found for key: %d:%u:%d", pid, pid_ns,
-                  cu_dev);
+        ucs_debug("no remote cache found for key: %d:%u:%d", mapping->pid,
+                  mapping->pid_ns, cu_dev);
     }
 
     ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
@@ -848,20 +840,21 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_status_t status;
     CUuuid uuid;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
-    if (status != UCS_OK) {
-        return status;
-    }
+    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns)) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) &&
-        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
-        /* TODO: added for test purpose to enable cuda_ipc tests in gtest
-         * mapped addrr is set to be same as d_bptr avoiding any calls to
-         * uct_cuda_ipc_open_memhandle which would fail with invalid argument
-         * error
-         */
-        *mapped_addr = (CUdeviceptr*)key->d_bptr;
-        return UCS_OK;
+        if (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) {
+            /* TODO: added for test purpose to enable cuda_ipc tests in gtest
+             * mapped addrr is set to be same as d_bptr avoiding any calls to
+             * uct_cuda_ipc_open_memhandle which would fail with invalid
+             * argument error
+             */
+            *mapped_addr = (CUdeviceptr*)key->d_bptr;
+            return UCS_OK;
+        }
     }
 
     ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);

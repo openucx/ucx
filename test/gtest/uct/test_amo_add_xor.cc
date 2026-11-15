@@ -64,6 +64,14 @@ UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64,
     test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
+/* The mlx5 memory domain without DevX has no indirect atomic keys */
+UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64_no_devx,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64) ||
+                     !has_ib(),
+                     "IB_MLX5_DEVX?=n") {
+    test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
+}
+
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, xor32,
                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_XOR>(xor_op<uint32_t>);

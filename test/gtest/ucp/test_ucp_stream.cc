@@ -47,7 +47,7 @@ size_t test_ucp_stream_base::wait_stream_recv(void *request)
 ucs_status_ptr_t
 test_ucp_stream_base::stream_send_nb(const ucp::data_type_desc_t& dt_desc)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
 
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = dt_desc.dt();
@@ -622,9 +622,9 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     ucs::fill_random(buf, buf.size());
     std::vector<ucp_dt_iov_t> v(iov_num);
 
-    ucp_request_param_t param;
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
-    param.datatype     = DATATYPE_IOV;
+    ucp_request_param_t param = {};
+    param.op_attr_mask        = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype            = DATATYPE_IOV;
 
     for (size_t size = min_size; size < max_size; size += step_size) {
         size_t slen = 0;
@@ -856,7 +856,7 @@ ucs_status_ptr_t
 test_ucp_stream_many2one::stream_send_nb(size_t sender_idx,
                                          const ucp::data_type_desc_t& dt_desc)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
 
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = dt_desc.dt();

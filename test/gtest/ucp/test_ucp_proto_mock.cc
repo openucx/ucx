@@ -5,6 +5,7 @@
  */
 
 #include "ucp_test.h"
+#include "test_ucp_wireup.h"
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -1160,6 +1161,145 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_slow_dev : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_slow_dev()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* With the default MULTI_LANE_MAX_RATIO=4, mock_1:1 is fast enough to
+         * be used together with mock_0:1, and mock_2:1 is too slow */
+        add_mock_iface("mock_0:1", iface_attr_func(20e9));
+        add_mock_iface("mock_1:1", iface_attr_func(6e9));
+        add_mock_iface("mock_2:1", iface_attr_func(4e9));
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    using lane_devs_t = std::multiset<std::pair<unsigned, unsigned>>;
+    using dev_names_t = std::set<std::string>;
+
+    static iface_attr_func_t iface_attr_func(double bandwidth)
+    {
+        return [bandwidth](uct_iface_attr_t &iface_attr) {
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        };
+    }
+
+    /* Local and remote system devices of each lane, swapped if requested */
+    static lane_devs_t lane_devs(ucp_ep_h ep, bool swap)
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+        lane_devs_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            const unsigned local_sys_dev  =
+                    ucp_ep_get_tl_rsc(ep, lane)->sys_device;
+            const unsigned remote_sys_dev = key.lanes[lane].dst_sys_dev;
+
+            if (swap) {
+                result.emplace(remote_sys_dev, local_sys_dev);
+            } else {
+                result.emplace(local_sys_dev, remote_sys_dev);
+            }
+        }
+
+        return result;
+    }
+
+    /* Local devices of all lanes */
+    static dev_names_t lane_dev_names(ucp_ep_h ep)
+    {
+        dev_names_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            result.insert(ucp_ep_get_tl_rsc(ep, lane)->dev_name);
+        }
+
+        return result;
+    }
+
+    /* Select the sender lanes from the receiver address as if the receiver had
+     * the given release version */
+    void select_lanes(unsigned dst_version, ucp_ep_config_key_t &key)
+    {
+        unpacked_address receiver_address(receiver().worker());
+
+        receiver_address.unpack(sender().worker());
+        receiver_address.address.dst_version = dst_version;
+        ::select_lanes(sender(), receiver_address.address, key);
+    }
+
+    /* Local and remote system devices of the sender lanes of the given type */
+    lane_devs_t
+    lane_devs(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
+    {
+        ucp_context_h context = sender().ucph();
+        lane_devs_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            if (key.lanes[lane].lane_types & UCS_BIT(lane_type)) {
+                const ucp_rsc_index_t rsc_index = key.lanes[lane].rsc_index;
+
+                result.emplace(context->tl_rscs[rsc_index].tl_rsc.sys_device,
+                               key.lanes[lane].dst_sys_dev);
+            }
+        }
+
+        return result;
+    }
+};
+
+/* The receiver selects its lanes from the address in the wireup request, which
+ * has only the devices of the sender lanes and so lacks the device which is too
+ * slow to be used. Both sides must still select matching lanes. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, wireup_request_lanes,
+           "IB_NUM_PATHS?=2")
+{
+    const dev_names_t fast_devs = {"mock_0:1", "mock_1:1"};
+    ucp_worker_h worker         = receiver().worker();
+
+    wait_for_value(&worker->num_all_eps, 1u);
+    ASSERT_EQ(1u, worker->num_all_eps);
+    ucp_ep_h receiver_ep = ucs_list_head(&worker->all_eps, ucp_ep_ext_t,
+                                         ep_list)->ep;
+
+    EXPECT_EQ(fast_devs, lane_dev_names(sender().ep()));
+    EXPECT_EQ(fast_devs, lane_dev_names(receiver_ep));
+    EXPECT_EQ(lane_devs(sender().ep(), false), lane_devs(receiver_ep, true));
+}
+
+/* A peer of an older release selects the slow lanes and drops them only after
+ * the selection, so one of the 4 AM_BW lanes is selected on the slow device and
+ * dropped. The selection with such a peer must be the same, so that both sides
+ * get the same lanes. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, older_peer_lanes,
+           "IB_NUM_PATHS?=2", "MAX_EAGER_RAILS=4")
+{
+    const unsigned dev0 = get_mock_sys_dev_by_name("mock_0:1");
+    const unsigned dev1 = get_mock_sys_dev_by_name("mock_1:1");
+    ucp_ep_config_key_t key;
+
+    /* Both paths of both fast devices */
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES, key);
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1},
+                           {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
+
+    /* The slow device takes the lane of the second path of mock_1:1 and is
+     * dropped */
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES - 1, key);
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_dev, rcx, "rc_x")
+
 /* Base class for RMA protocol selection on CUDA memory, over a single mocked
  * high bandwidth device */
 class test_ucp_proto_mock_rcx_cuda : public test_ucp_proto_mock {
@@ -2018,6 +2158,81 @@ public:
         mock_cuda_ipc_remote_pid(sender().worker());
         mock_cuda_ipc_remote_pid(receiver().worker());
     }
+
+protected:
+    /* Return the memory domain index of the cuda_ipc lane, or
+     * UCP_NULL_RESOURCE if no such lane was selected. */
+    ucp_md_index_t cuda_ipc_md_index()
+    {
+        ucp_context_h context         = sender().ucph();
+        const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
+
+        for (auto lane = 0; lane < config->key.num_lanes; ++lane) {
+            const ucp_rsc_index_t rsc_index = config->key.lanes[lane].rsc_index;
+            if ((rsc_index != UCP_NULL_RESOURCE) &&
+                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
+                 "cuda_ipc")) {
+                return context->tl_rscs[rsc_index].md_index;
+            }
+        }
+
+        return UCP_NULL_RESOURCE;
+    }
+
+    /* Return the protocols selected for every message size range to receive
+     * rendezvous data into a CUDA buffer from the given remote key config */
+    proto_select_data_vec_t
+    rndv_recv_select_data(ucp_worker_cfg_index_t rkey_cfg_index)
+    {
+        ucp_worker_h worker        = sender().worker();
+        ucp_memory_info_t mem_info = {UCS_MEMORY_TYPE_CUDA,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN,
+                                      UCS_MEM_FLAG_REGISTRABLE};
+        proto_select_data_vec_t data_vec;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_proto_query_attr_t attr;
+        size_t range_start;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                worker,
+                &ucp_worker_rkey_config(worker, rkey_cfg_index)->proto_select,
+                1, ep_config_index(sender()), rkey_cfg_index, &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << "rendezvous receive protocols were not selected";
+            return data_vec;
+        }
+
+        range_start = 0;
+        while (ucp_proto_select_elem_query(worker, select_elem, range_start,
+                                           &attr)) {
+            data_vec.emplace_back(range_start, attr);
+            if (attr.max_msg_length == SIZE_MAX) {
+                break;
+            }
+
+            range_start = attr.max_msg_length + 1;
+        }
+
+        if (data_vec.empty() || (data_vec.back().range_end != SIZE_MAX)) {
+            ADD_FAILURE() << "protocols are not selected for all message sizes";
+            dump_select_info(sender(), select_param, *select_elem,
+                             rkey_cfg_index);
+        }
+
+        return data_vec;
+    }
+
+    static bool uses_cuda_ipc(const proto_select_data_vec_t &data_vec)
+    {
+        return std::any_of(data_vec.begin(), data_vec.end(),
+                           [](const proto_select_data &data) {
+                               return data.config.find("cuda_ipc") !=
+                                      std::string::npos;
+                           });
+    }
 };
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "ZCOPY_THRESH=1")
@@ -2032,6 +2247,44 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "ZCOPY_THRESH=1")
     test_cuda_rma(UCP_OP_ID_GET, {
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
+}
+
+/*
+ * When cuda_ipc rkey unpack fails, the nested remote protocol estimation must
+ * not assume the peer can use cuda_ipc to access the local buffer either,
+ * including the staging buffers of rndv/rtr/mtype.
+ */
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, rndv_recv_unreachable,
+           "ZCOPY_THRESH=1")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_worker_cfg_index_t rkey_cfg_index, unreachable_cfg_index;
+    ucp_rkey_config_key_t rkey_config_key;
+    proto_select_data_vec_t data_vec;
+    ucp_rkey_config_t *rkey_config;
+    ucp_md_index_t md_index;
+
+    md_index = cuda_ipc_md_index();
+    ASSERT_NE(UCP_NULL_RESOURCE, md_index) << "no cuda_ipc lane";
+
+    rkey_cfg_index = send_recv_rma(UCS_MBYTE, UCP_OP_ID_PUT,
+                                   UCS_MEMORY_TYPE_CUDA);
+    ASSERT_NE(UCP_WORKER_CFG_INDEX_NULL, rkey_cfg_index);
+
+    rkey_config = ucp_worker_rkey_config(worker, rkey_cfg_index);
+    ASSERT_TRUE(rkey_config->key.md_map & UCS_BIT(md_index));
+    data_vec = rndv_recv_select_data(rkey_cfg_index);
+    EXPECT_TRUE(uses_cuda_ipc(data_vec)) << ::testing::PrintToString(data_vec);
+
+    /* Same remote key, but cuda_ipc rkey unpack failed */
+    rkey_config_key                     = rkey_config->key;
+    rkey_config_key.md_map             &= ~UCS_BIT(md_index);
+    rkey_config_key.unreachable_md_map |= UCS_BIT(md_index);
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                             rkey_config->lanes_distance,
+                                             &unreachable_cfg_index));
+    data_vec = rndv_recv_select_data(unreachable_cfg_index);
+    EXPECT_FALSE(uses_cuda_ipc(data_vec)) << ::testing::PrintToString(data_vec);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
@@ -2071,25 +2324,6 @@ public:
     }
 
 protected:
-    /* Return the memory domain index of the cuda_ipc lane, or
-     * UCP_NULL_RESOURCE if no such lane was selected. */
-    ucp_md_index_t cuda_ipc_md_index()
-    {
-        ucp_context_h context = sender().ucph();
-
-        for (auto lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
-            const ucp_rsc_index_t rsc_index =
-                    m_ep_config->key.lanes[lane].rsc_index;
-            if ((rsc_index != UCP_NULL_RESOURCE) &&
-                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
-                 "cuda_ipc")) {
-                return context->tl_rscs[rsc_index].md_index;
-            }
-        }
-
-        return UCP_NULL_RESOURCE;
-    }
-
     /* Return the memory domains which rndv/rtr would pack into the RTR message
      * for a CUDA receive buffer with the given memory flags. */
     ucp_md_map_t rtr_md_map(uint8_t mem_flags)
@@ -3996,16 +4230,17 @@ public:
         }, key, 1);
 
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
+        // Each new EP config adds two rkey configs: RMA and rendezvous
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -4015,19 +4250,19 @@ public:
         // Reduce port_speed of mock_1:1 to be equal with mock_0:1,
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
-        send(3);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        send(4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
             {0, INF,  "zero-copy", "50% on rc_mlx5/mock_1:1 and 50% on rc_mlx5/mock_0:1"},
-        }, key, 3);
+        }, key, 4);
 
         // Reset port_speeds to initial values, should switch to initial configs
         set_port_speed("mock_0:1", 28e9);
         set_port_speed("mock_1:1", 24e9);
         send(1);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 

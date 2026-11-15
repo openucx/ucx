@@ -21,6 +21,7 @@ typedef struct uct_tcp_sockcm {
     size_t              sockopt_rcvbuf;  /** SO_RCVBUF */
     unsigned            syn_cnt;         /** TCP_SYNCNT */
     ucs_time_t          user_timeout;    /** TCP_USER_TIMEOUT */
+    size_t              maxseg;          /** TCP_MAXSEG */
     ucs_list_link_t     ep_list;         /** List of endpoints */
 } uct_tcp_sockcm_t;
 
@@ -33,6 +34,7 @@ typedef struct uct_tcp_sockcm_config {
     uct_tcp_send_recv_buf_config_t  sockopt;
     unsigned                        syn_cnt;
     ucs_time_t                      user_timeout;
+    size_t                          maxseg;
 } uct_tcp_sockcm_config_t;
 
 

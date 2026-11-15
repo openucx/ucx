@@ -174,6 +174,23 @@ check_nv_peer_mem() {
     fi
 }
 
+# UCM modules (libucm_cuda, libucm_rocm, ...) must not call into libucs: they
+# are loaded with dlopen and do not link libucs, so when UCX itself is loaded
+# with RTLD_LOCAL the symbol is not found, and lazy binding hides this until
+# the call runs. Run from the build directory.
+check_ucm_no_ucs_symbols() {
+    ucm_modules=$(find src/ucm -path '*/.libs/libucm_*.so*' -type f)
+    if [ -z "${ucm_modules}" ]; then
+        azure_log_error "No UCM modules found in $(pwd)/src/ucm"
+        exit 1
+    fi
+
+    if nm -D --undefined-only ${ucm_modules} | grep -E '\bU ucs_'; then
+        azure_log_error "UCM modules have undefined libucs symbols"
+        exit 1
+    fi
+}
+
 #
 # try load cuda modules if nvidia driver is installed
 #
