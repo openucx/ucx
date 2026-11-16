@@ -535,7 +535,7 @@ out_ctx_pop:
 
 static int uct_cuda_copy_md_is_localized_pool(const void *address)
 {
-#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+#if HAVE_DECL_CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL
     int locality_domain = -1;
 
     /* Queried separately, as older drivers fail on the unknown attribute */
@@ -572,7 +572,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     CUdevice cuda_device;
     int32_t pref_loc;
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
-    int is_gdr_capable;
+    int is_gdr_capable = 0;
 #endif
     int is_vmm;
     CUresult cu_err;
@@ -817,21 +817,24 @@ uct_cuda_copy_md_detect_memtype_copy_flags(const ucs_memory_info_t *mem_info)
 #endif
 }
 
-static int uct_cuda_copy_md_is_mps_device(ucs_sys_device_t sys_dev)
+/* Whether the device is known not to be shared through MPS */
+static int uct_cuda_copy_md_is_mps_disabled(ucs_sys_device_t sys_dev)
 {
 #if CUDA_VERSION >= 12030
     CUdevice cuda_device = uct_cuda_get_cuda_device(sys_dev);
     int mps_enabled;
 
     if ((cuda_device == CU_DEVICE_INVALID) ||
-        (cuDeviceGetAttribute(&mps_enabled, CU_DEVICE_ATTRIBUTE_MPS_ENABLED,
-                              cuda_device) != CUDA_SUCCESS)) {
-        return -1; /* Unknown */
+        (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                 cuDeviceGetAttribute(&mps_enabled,
+                                      CU_DEVICE_ATTRIBUTE_MPS_ENABLED,
+                                      cuda_device)) != UCS_OK)) {
+        return 0;
     }
 
-    return mps_enabled;
+    return !mps_enabled;
 #else
-    return -1; /* Unknown */
+    return 0;
 #endif
 }
 
@@ -869,9 +872,10 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
         return dmabuf->fd != UCT_DMABUF_FD_INVALID;
     }
 
-    /* Avoid the costly dmabuf export when its outcome is known. Memory is
-     * GPUDirect RDMA capable only when not localized, e.g. by MPS MLOPart, and
-     * the driver then exports it. */
+    /* Avoid the costly dmabuf export when its outcome is known. The driver
+     * exports GPUDirect RDMA capable memory: MPS MLOPart does not localize it,
+     * and localized memory is GPUDirect RDMA capable without PCIe only when
+     * the default RDMA mapping supports it. */
     if (props->gdr_capable == UCT_CUDA_COPY_GDR_CAPABLE_YES) {
         return 1;
     }
@@ -886,7 +890,7 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
      * MLOPart, which the memory does not report. Locality is unknown without
      * locality domain support in the CUDA headers, assume it not localized. */
     if ((props->gdr_capable == UCT_CUDA_COPY_GDR_CAPABLE_NO) &&
-        (uct_cuda_copy_md_is_mps_device(mem_info->sys_dev) == 0)) {
+        uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev)) {
         return 1;
     }
 

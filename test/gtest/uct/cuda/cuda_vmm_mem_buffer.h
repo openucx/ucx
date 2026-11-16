@@ -311,7 +311,6 @@ protected:
         if ((cuMemAllocFromPoolAsync(&m_ptr, size, m_pool, 0) !=
              CUDA_SUCCESS) ||
             (cuStreamSynchronize(0) != CUDA_SUCCESS)) {
-            m_ptr = 0;
             UCS_TEST_SKIP_R("failed to allocate from a CUDA memory pool");
         }
     }
@@ -321,9 +320,9 @@ private:
     CUdeviceptr m_ptr   = 0;
 };
 
-/* Device memory from an exportable stream-ordered pool. Exportability makes the
- * allocation dmabuf-exportable, and therefore registrable, which plain
- * stream-ordered memory from 'mem_buffer' is not guaranteed to be. */
+/* Device memory from a stream-ordered pool exportable to other processes,
+ * unlike the default pool used by 'mem_buffer'. Memory from either pool is
+ * dmabuf-exportable, and therefore registrable. */
 class cuda_exportable_mem_pool_buffer : public cuda_mem_pool_buffer {
 public:
     cuda_exportable_mem_pool_buffer(size_t size)

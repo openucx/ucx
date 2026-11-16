@@ -713,8 +713,8 @@ UCS_TEST_P(test_mem_alloc_device, managed_mem_not_gdr_capable)
 }
 
 #if CUDA_VERSION >= 11020
-/* Stream-ordered memory is not GDR capable, even when an exportable pool makes
- * it registrable. This is the combination gdr_copy has to reject. */
+/* Stream-ordered memory is not GDR capable, even though it is registrable. This
+ * is the combination gdr_copy has to reject. */
 UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
                      exportable_mem_pool_not_gdr_capable,
                      !check_registrable(UCS_MEMORY_TYPE_CUDA),
