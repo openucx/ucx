@@ -4,8 +4,8 @@
  * See file LICENSE for terms.
  */
 
-#ifndef MEMTYPE_EXPLICIT_GUARD_H_
-#define MEMTYPE_EXPLICIT_GUARD_H_
+#ifndef MEMTYPE_MAP_GUARD_H_
+#define MEMTYPE_MAP_GUARD_H_
 
 extern "C" {
 #include <ucm/api/ucm.h>
@@ -15,12 +15,12 @@ extern "C" {
 
 /* Disables UCM events and resets the global memory type cache, and restores
  * both on destruction, also when the test fails or is skipped in init() */
-class memtype_explicit_guard {
+class memtype_map_guard {
 public:
-    memtype_explicit_guard() : m_enable_events(0), m_active(false) {
+    memtype_map_guard() : m_enable_events(0), m_active(false) {
     }
 
-    ~memtype_explicit_guard() {
+    ~memtype_map_guard() {
         if (m_active) {
             reset_cache();
             ucm_global_opts.enable_events = m_enable_events;

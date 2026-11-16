@@ -526,6 +526,8 @@ static void ucs_memtype_map_cleanup(void)
 
     while ((node = ucs_interval_map_extract_first(&ucs_memtype_map)) != NULL) {
         entry = ucs_derived_of(node, ucs_memtype_map_entry_t);
+        /* Print the device index, since the topology device names are already
+         * released when the cleanup runs from ucs_cleanup() */
         ucs_debug("memtype_map: leftover registration %p [0x%lx..0x%lx] %s "
                   "dev %u flags 0x%x", entry, node->start, node->end,
                   ucs_memory_type_names[entry->mem_type], entry->sys_dev,

@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
-#include <common/memtype_explicit_guard.h>
+#include <common/memtype_map_guard.h>
 
 #include <ucs/sys/sys.h>
 #include <ucs/config/global_opts.h>
@@ -578,7 +578,7 @@ UCS_MT_TEST_P(test_memtype_cache_deferred_create, mt_cache_init, 8) {
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
-class test_memtype_explicit : public ucs::test {
+class test_memtype_map : public ucs::test {
 protected:
     virtual void init() {
         ucs::test::init();
@@ -621,10 +621,10 @@ protected:
     }
 
 private:
-    memtype_explicit_guard m_guard;
+    memtype_map_guard m_guard;
 };
 
-UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
+UCS_TEST_F(test_memtype_map, lookup_and_unregister) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x10000);
 
@@ -648,7 +648,7 @@ UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
 
 /* A=[0,0x2000) and B=[0x1000,0x3000) partially overlap, C=[0x8000,0xc000)
  * contains D=[0x9000,0xa000) */
-UCS_TEST_F(test_memtype_explicit, overlapping_registrations) {
+UCS_TEST_F(test_memtype_map, overlapping_registrations) {
     const void *base = reinterpret_cast<void*>(0x20000);
 
     reg(base, 0, 0x2000);
@@ -686,7 +686,7 @@ UCS_TEST_F(test_memtype_explicit, overlapping_registrations) {
 
 /* An unregistration removes only the registration of exactly this range, and
  * only one registration of it */
-UCS_TEST_F(test_memtype_explicit, unregister_exact_range) {
+UCS_TEST_F(test_memtype_map, unregister_exact_range) {
     const void *base = reinterpret_cast<void*>(0x30000);
 
     /* Same start and different ends are distinct registrations */
@@ -709,7 +709,7 @@ UCS_TEST_F(test_memtype_explicit, unregister_exact_range) {
     expect_miss(base, 0, 0x100);
 }
 
-UCS_TEST_F(test_memtype_explicit, host_registration) {
+UCS_TEST_F(test_memtype_map, host_registration) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x3d000);
 
@@ -721,9 +721,9 @@ UCS_TEST_F(test_memtype_explicit, host_registration) {
     expect_miss(base, 0, 0x1000);
 }
 
-/* The event-driven cache is not created in explicit mode, and a detection
+/* The event-driven cache is not created in memtype map mode, and a detection
  * result cannot be cached without free events */
-UCS_TEST_F(test_memtype_explicit, no_event_cache) {
+UCS_TEST_F(test_memtype_map, no_event_cache) {
     const void *base = reinterpret_cast<void*>(0x39000);
 
     ucs_memtype_cache_global_create();
@@ -736,19 +736,19 @@ UCS_TEST_F(test_memtype_explicit, no_event_cache) {
 }
 
 /* Registrations which were not released are dropped by the cleanup */
-UCS_TEST_F(test_memtype_explicit, leftover_registrations) {
+UCS_TEST_F(test_memtype_map, leftover_registrations) {
     const void *base = reinterpret_cast<void*>(0x3f000);
 
     reg(base, 0, 0x1000);
     reg(base, 0x2000, 0x1000);
 
-    memtype_explicit_guard::reset_cache();
+    memtype_map_guard::reset_cache();
     expect_miss(base, 0, 0x100);
     expect_miss(base, 0x2000, 0x100);
 }
 
-/* Explicit mode requires the cache to be enabled and UCM events to be off */
-UCS_TEST_F(test_memtype_explicit, mode_selection) {
+/* The memtype map mode requires the cache to be enabled and UCM events to be off */
+UCS_TEST_F(test_memtype_map, mode_selection) {
     EXPECT_TRUE(ucs_memtype_map_is_enabled());
 
     modify_config("MEMTYPE_CACHE", "n");
