@@ -4326,7 +4326,7 @@ protected:
         ucp_lane_index_t lane = ucp_ep_lookup_lane(ep, lane_ep(ep, lane_id));
 
         if ((state == nullptr) || (lane == UCP_NULL_LANE) ||
-            (state->bandwidth[lane] < 0)) {
+            (state->bandwidth[lane] == UCP_EP_PATH_BW_INVALID)) {
             return std::numeric_limits<double>::quiet_NaN();
         }
 

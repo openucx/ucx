@@ -227,13 +227,18 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+/* Bandwidth of a lane whose path is not degraded */
+#define UCP_EP_PATH_BW_INVALID (-1.0)
+
+
 /* Path samples of one configuration and set of lanes of an endpoint,
  * allocated for endpoints on interfaces which report path events. */
 typedef struct {
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
     uint32_t               lane_generation; /* Lanes of the samples */
     double                 bandwidth[];     /* Lane bandwidth below the path
-                                               estimate, or negative if the
+                                               estimate, or
+                                               UCP_EP_PATH_BW_INVALID if the
                                                path is not degraded */
 } ucp_ep_path_bw_t;
 
