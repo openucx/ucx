@@ -20,19 +20,7 @@ public:
     static std::vector<const resource*>
     enum_resources(const std::string &tl_name)
     {
-        std::vector<const resource*> resources =
-                uct_p2p_rma_test::enum_resources(tl_name);
-        std::vector<const resource*> result;
-
-        for (const resource *rsc : resources) {
-            const p2p_resource *p2p_rsc = dynamic_cast<const p2p_resource*>(
-                    rsc);
-            if ((p2p_rsc != NULL) && p2p_rsc->loopback) {
-                result.push_back(rsc);
-            }
-        }
-
-        return result;
+        return enum_loopback_resources(tl_name);
     }
 
 protected:
