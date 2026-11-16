@@ -4420,13 +4420,16 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, unusable_samples)
 
 UCS_TEST_P(test_ucp_proto_mock_path_bw, reconfig_resets_samples)
 {
-    auto ep     = sender().ep();
-    auto worker = sender().worker();
+    /* PUT short takes a fast path which does not check the worker epoch, so
+     * send a message above the short limit to reconfigure the endpoint */
+    const size_t size = 64 * UCS_KBYTE;
+    auto ep           = sender().ep();
+    auto worker       = sender().worker();
 
     set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
     /* The rkey configuration must exist before the port speed change, so the
      * next PUT sees a new epoch and reconfigures the endpoint */
-    send_recv_rma(UCS_KBYTE, UCP_OP_ID_PUT);
+    send_recv_rma(size, UCP_OP_ID_PUT);
 
     /* A port speed change moves the endpoint to another configuration */
     const auto cfg_index = ep->cfg_index;
@@ -4435,7 +4438,7 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, reconfig_resets_samples)
     ++ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane))->port_speed;
     ++worker->epoch;
     fail_query(lane_ep(ep, 0), UCS_ERR_TIMED_OUT);
-    send_recv_rma(UCS_KBYTE, UCP_OP_ID_PUT);
+    send_recv_rma(size, UCP_OP_ID_PUT);
     ASSERT_NE(cfg_index, ep->cfg_index);
 
     /* A sample of the previous configuration is not kept */
