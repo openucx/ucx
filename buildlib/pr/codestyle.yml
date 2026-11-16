@@ -79,7 +79,10 @@ jobs:
 
           # Match bindings/ucxx/.pre-commit-config.yaml; UCX uses a custom formatter.
           python3 -m venv /tmp/ucxx-clang-format-env
-          /tmp/ucxx-clang-format-env/bin/pip install clang-format==20.1.8
+          # The image's pip predates manylinux_x_y wheel support.
+          /tmp/ucxx-clang-format-env/bin/pip install --upgrade pip
+          /tmp/ucxx-clang-format-env/bin/pip install --only-binary=:all: \
+              clang-format==20.1.8
           format_diff=$(git-clang-format --diff "$base_revision" "$BUILD_SOURCEVERSION" \
               --binary /tmp/ucxx-clang-format-env/bin/clang-format --extensions h,cpp \
               -- bindings/ucxx)
