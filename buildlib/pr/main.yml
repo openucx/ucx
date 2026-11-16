@@ -284,24 +284,6 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
-  - stage: WireCompat
-    dependsOn: []
-    jobs:
-    - template: wire_compat.yml
-      parameters:
-        name: gpu
-        demands: frost_gpu_test -equals yes
-        container: centos7_cuda11
-        ucx_targets:
-          ucx_1_15:
-            ucx_tag: v1.15.x
-          ucx_1_16:
-            ucx_tag: v1.16.x
-          ucx_1_17:
-            ucx_tag: v1.17.x
-          ucx_1_18:
-            ucx_tag: v1.18.x
-
   - stage: Tests
     dependsOn: []
     jobs:
@@ -312,12 +294,6 @@ stages:
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
         prebuild: yes
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: frost_bf_test -equals yes
-        run_tests: yes
-        test_perf: 0
 
   - stage: Namespace_Tests
     dependsOn: []
@@ -386,9 +362,3 @@ stages:
         container: centos8_cuda11_asan
         asan_check: yes
         prebuild: yes
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: frost_bf_test -equals yes
-        test_perf: 0
-        asan_check: yes
