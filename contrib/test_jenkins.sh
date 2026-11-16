@@ -317,10 +317,10 @@ run_ucp_hello() {
 run_uct_hello() {
 	mem_types_list="host "
 
-	if [ "X$have_cuda" != "Xno" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	if [ "X$have_cuda" != "Xno" ] && (lsmod | grep -q 'nv.*_peer.*mem')
 	then
 		mem_types_list+="cuda-managed "
-		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+		if (lsmod | grep -q 'nv.*_peer.*mem')
 		then
 			# test RDMA GPUDirect
 			mem_types_list+="cuda "
