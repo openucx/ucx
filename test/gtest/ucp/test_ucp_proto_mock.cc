@@ -4534,7 +4534,9 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw_single_thread, close_during_worker_flush,
     }
 
     ASSERT_UCS_OK(request_wait(flush_req));
-    EXPECT_EQ(nullptr, path_bw(ep));
+    /* The endpoint is released, so use it only as a key */
+    EXPECT_EQ(kh_end(&worker->ep_path_bw),
+              kh_get(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep));
 }
 
 /* With error handling, the mock cma devices get no RMA lanes */
