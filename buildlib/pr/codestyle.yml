@@ -53,7 +53,8 @@ jobs:
           git log -1 HEAD^
           BASE_SOURCEVERSION=$(git rev-parse HEAD^)
           echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
-          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} \
+              -- . ':(exclude)bindings/ucxx' > format.patch
           echo "Generated patch file:"
           cat format.patch
           if [ "`cat format.patch`" = "no modified files to format" ]; then
@@ -65,6 +66,28 @@ jobs:
               url="https://github.com/openucx/ucx/wiki/Code-style-checking"
               azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
           fi
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+
+      - bash: |
+          source ./buildlib/az-helpers.sh
+          set -eEx
+          base_revision=$(git rev-parse HEAD^)
+          if git diff --quiet "$base_revision" "$BUILD_SOURCEVERSION" -- \
+              ':(glob)bindings/ucxx/**/*.h' ':(glob)bindings/ucxx/**/*.cpp'; then
+              exit 0
+          fi
+
+          # Match bindings/ucxx/.pre-commit-config.yaml; UCX uses a custom formatter.
+          python3 -m venv /tmp/ucxx-clang-format-env
+          /tmp/ucxx-clang-format-env/bin/pip install clang-format==20.1.8
+          format_diff=$(git-clang-format --diff "$base_revision" "$BUILD_SOURCEVERSION" \
+              --binary /tmp/ucxx-clang-format-env/bin/clang-format --extensions h,cpp \
+              -- bindings/ucxx)
+          printf '%s\n' "$format_diff"
+          if [[ "$format_diff" == 'diff --git '* ]]; then
+              azure_complete_with_issues "UCXX code is not formatted according to its .clang-format."
+          fi
+        displayName: Check UCXX code format
         condition: eq(variables['Build.Reason'], 'PullRequest')
 
   - job: author
