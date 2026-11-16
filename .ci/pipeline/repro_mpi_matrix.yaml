@@ -68,15 +68,26 @@ steps:
            -mca coll '^hcoll,ml,ucc' -np 1)
       run_case() {
           local name=$1
+          local preload_path=$2
           local status=0
           local output diagnostic_status
-          shift
+          local preload_args=()
+          local debugger_args=()
+          shift 2
+
+          if [[ -n "${preload_path}" ]]; then
+              preload_args=(-x "LD_PRELOAD=${preload_path}")
+              debugger_args=(-ex 'set startup-with-shell off'
+                             -ex "set environment LD_PRELOAD ${preload_path}")
+          fi
 
           echo "MPI malloc_hooks/reloc ${name}, 30-second deadline"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           echo "UCX_MEM_MMAP_HOOK_MODE=${UCX_MEM_MMAP_HOOK_MODE-unset}"
+          echo "MPI test LD_PRELOAD=${preload_path:-unset}"
           output=$(timeout --foreground --signal=TERM --kill-after=5s 30s \
-              "${mpi[@]}" "$@" ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
+              "${mpi[@]}" "$@" "${preload_args[@]}" \
+              ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
           printf '%s\n' "${output}"
           echo "MPI ${name} process exit status ${status}"
           if [[ "${status}" -eq 0 ]]; then
@@ -94,6 +105,7 @@ steps:
                       "${mpi[@]}" "$@" \
                       timeout --foreground --signal=INT --kill-after=5s 30s \
                       gdb -batch -ex 'set pagination off' -ex 'set confirm off' \
+                      -ex 'set backtrace limit 64' "${debugger_args[@]}" \
                       -ex 'handle SIGABRT stop print nopass' -ex run \
                       -ex 'thread apply all bt full' -ex 'info sharedlibrary' \
                       -ex 'info proc mappings' --args \
@@ -107,15 +119,18 @@ steps:
           return "${status}"
       }
 
-      statuses=(0 0 0)
-      run_case installed-first || statuses[0]=$?
+      statuses=(0 0 0 0)
+      run_case installed-first "" || statuses[0]=$?
       buildtree_path="${PWD}/src/ucs/.libs:${PWD}/src/ucm/.libs:${LD_LIBRARY_PATH}"
       LD_LIBRARY_PATH="${buildtree_path}" \
-          run_case buildtree-first -x LD_LIBRARY_PATH || statuses[1]=$?
+          run_case buildtree-first "" -x LD_LIBRARY_PATH || statuses[1]=$?
       LD_LIBRARY_PATH="${buildtree_path}" UCX_MEM_MMAP_HOOK_MODE=reloc \
-          run_case buildtree-first-reloc -x LD_LIBRARY_PATH \
+          run_case buildtree-first-reloc "" -x LD_LIBRARY_PATH \
           -x UCX_MEM_MMAP_HOOK_MODE || statuses[2]=$?
-      printf 'MPI case exit statuses: installed-first=%s buildtree-first=%s buildtree-first-reloc=%s\n' \
+      LD_LIBRARY_PATH="${buildtree_path}" UCX_MEM_MMAP_HOOK_MODE=reloc \
+          run_case buildtree-first-reloc-preload "${PWD}/src/ucm/.libs/libucm.so" \
+          -x LD_LIBRARY_PATH -x UCX_MEM_MMAP_HOOK_MODE || statuses[3]=$?
+      printf 'MPI case exit statuses: installed-first=%s buildtree-first=%s buildtree-first-reloc=%s buildtree-first-reloc-preload=%s\n' \
           "${statuses[@]}"
       status=0
       for case_status in "${statuses[@]}"; do
