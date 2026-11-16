@@ -4,6 +4,7 @@
 # See file LICENSE for terms.
 #
 
+# Modules load in this order: keep a module before those linking with it
 uct_modules=""
 m4_include([src/uct/cuda/configure.m4])
 m4_include([src/uct/ib/configure.m4])
