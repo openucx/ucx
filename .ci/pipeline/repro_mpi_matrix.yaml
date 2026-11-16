@@ -66,29 +66,63 @@ steps:
            -mca pml ob1 -mca osc '^ucx' -mca btl tcp,self
            -mca btl_tcp_if_include lo -mca orte_allowed_exit_without_sync 1
            -mca coll '^hcoll,ml,ucc' -np 1)
-      echo "MPI malloc_hooks/reloc baseline, 30-second deadline"
-      status=0
-      output=$(timeout --foreground --signal=TERM --kill-after=5s 30s \
-          "${mpi[@]}" ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
-      printf '%s\n' "${output}"
-      echo "MPI memory-hook baseline exit status ${status}"
-      if [[ "${status}" -ne 0 ]]; then
-          if command -v gdb >/dev/null; then
-              echo "Replay the failed malloc_hooks/reloc case under GDB"
-              diagnostic_status=0
-              UCX_HANDLE_ERRORS=none timeout --foreground --signal=TERM \
-                  --kill-after=5s 40s "${mpi[@]}" \
-                  timeout --foreground --signal=INT --kill-after=5s 30s \
-                  gdb -batch -ex 'set pagination off' -ex 'set confirm off' \
-                  -ex 'handle SIGABRT stop print nopass' -ex run \
-                  -ex 'thread apply all bt full' -ex 'info sharedlibrary' \
-                  -ex 'info proc mappings' --args \
-                  ./test/mpi/test_memhooks -t malloc_hooks -m reloc || diagnostic_status=$?
-              echo "MPI GDB diagnostic exit status ${diagnostic_status}"
-          else
-              echo "GDB is unavailable; the failing baseline result is retained"
+      run_case() {
+          local name=$1
+          local status=0
+          local output diagnostic_status
+          shift
+
+          echo "MPI malloc_hooks/reloc ${name}, 30-second deadline"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+          echo "UCX_MEM_MMAP_HOOK_MODE=${UCX_MEM_MMAP_HOOK_MODE-unset}"
+          output=$(timeout --foreground --signal=TERM --kill-after=5s 30s \
+              "${mpi[@]}" "$@" ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
+          printf '%s\n' "${output}"
+          echo "MPI ${name} process exit status ${status}"
+          if [[ "${status}" -eq 0 ]]; then
+              if [[ "${output}" != *"malloc_hooks: initialized"* ||
+                    "${output}" != *"malloc_hooks: PASS"* ]]; then
+                  echo "MPI ${name} is missing required initialization or PASS output"
+                  status=1
+              fi
           fi
-          exit "${status}"
-      fi
-      [[ "${output}" == *"malloc_hooks: initialized"* ]]
-      [[ "${output}" == *"malloc_hooks: PASS"* ]]
+          if [[ "${status}" -ne 0 ]]; then
+              if command -v gdb >/dev/null; then
+                  echo "Replay failed MPI ${name} under GDB"
+                  diagnostic_status=0
+                  timeout --foreground --signal=TERM --kill-after=5s 40s \
+                      "${mpi[@]}" "$@" \
+                      timeout --foreground --signal=INT --kill-after=5s 30s \
+                      gdb -batch -ex 'set pagination off' -ex 'set confirm off' \
+                      -ex 'handle SIGABRT stop print nopass' -ex run \
+                      -ex 'thread apply all bt full' -ex 'info sharedlibrary' \
+                      -ex 'info proc mappings' --args \
+                      ./test/mpi/test_memhooks -t malloc_hooks -m reloc || diagnostic_status=$?
+                  echo "MPI ${name} GDB diagnostic exit status ${diagnostic_status}"
+              else
+                  echo "GDB is unavailable; the failed MPI ${name} result is retained"
+              fi
+          fi
+          echo "MPI ${name} case exit status ${status}"
+          return "${status}"
+      }
+
+      statuses=(0 0 0)
+      run_case installed-first || statuses[0]=$?
+      buildtree_path="${PWD}/src/ucs/.libs:${PWD}/src/ucm/.libs:${LD_LIBRARY_PATH}"
+      LD_LIBRARY_PATH="${buildtree_path}" \
+          run_case buildtree-first -x LD_LIBRARY_PATH || statuses[1]=$?
+      LD_LIBRARY_PATH="${buildtree_path}" UCX_MEM_MMAP_HOOK_MODE=reloc \
+          run_case buildtree-first-reloc -x LD_LIBRARY_PATH \
+          -x UCX_MEM_MMAP_HOOK_MODE || statuses[2]=$?
+      printf 'MPI case exit statuses: installed-first=%s buildtree-first=%s buildtree-first-reloc=%s\n' \
+          "${statuses[@]}"
+      status=0
+      for case_status in "${statuses[@]}"; do
+          if [[ "${case_status}" -ne 0 ]]; then
+              status=${case_status}
+              break
+          fi
+      done
+      echo "MPI aggregate exit status ${status}"
+      exit "${status}"
