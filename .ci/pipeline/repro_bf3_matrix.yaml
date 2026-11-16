@@ -40,7 +40,7 @@ env:
   UCX_PROTO_REQUEST_RESET: "y"
   UCX_PROTO_INFO: "y"
   UCX_IB_ROCE_SUBNET_PREFIX_LEN: inf
-  GTEST_REPORT_LONGEST_TESTS: "1"
+  UCX_LOG_LEVEL: data
 
 steps:
   - name: Build and probe DC receive alignment
