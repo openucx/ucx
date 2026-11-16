@@ -63,7 +63,6 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
     void *result;
 
     req->send.lane = spriv->super.lane;
-    uct_ep         = ucp_ep_get_fast_lane(ep, req->send.lane);
     tl_rkey        = ucp_rkey_get_tl_rkey(req->send.amo.rkey,
                                           spriv->super.rkey_index);
 
@@ -102,6 +101,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
+    /* Handling the fence may replace the UCT endpoint on this lane. */
+    uct_ep = ucp_ep_get_fast_lane(ep, req->send.lane);
     value  = req->send.amo.value;
     result = is_memtype ? &req->send.amo.result : req->send.amo.reply_buffer;
 
