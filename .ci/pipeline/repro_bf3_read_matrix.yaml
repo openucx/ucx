@@ -31,7 +31,7 @@ matrix:
 taskName: '${name}/${arch}'
 
 steps:
-  - name: Probe raw DC and RC READ completion
+  - name: Probe raw DC READ completion
     parallel: false
     timeout: 18
     run: |
@@ -90,7 +90,7 @@ steps:
 
       failed = False
       for index, (transport, size) in enumerate(
-              (t, s) for t in ("DC", "RC") for s in (536870912, 1073741824)):
+              (t, 1073741824) for t in ("DC",)):
           port = 18523 + index
           command = [
               "taskset", "-c", cpu_set, "stdbuf", "-oL", "ib_read_bw",
@@ -101,7 +101,7 @@ steps:
           ] + no_reorder
           peers, outputs = [], {}
           started = time.monotonic()
-          deadline = started + 180
+          deadline = started + 300
           print("CASE", transport, size, shlex.join(command), flush=True)
           try:
               if listening(port):
@@ -153,6 +153,7 @@ steps:
                                "-iex", "set debuginfod enabled off",
                                "-batch", "-ex", "set pagination off",
                                "-ex", "set backtrace limit 64",
+                               "-ex", "info proc mappings", "-ex", "x/24i $pc-32",
                                "-ex", "thread apply all bt full", "-p", str(proc.pid)],
                               text=True, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, timeout=15)
