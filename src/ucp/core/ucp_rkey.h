@@ -77,6 +77,15 @@ struct ucp_rkey_config_key {
 
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
+
+    /* Subset of unreachable_md_map: MDs for which the rkey is not reachable
+     * because the local device cannot access the remote device at all (e.g.
+     * no P2P support between two GPUs), regardless of the remote buffer. In
+     * this case the peer is not expected to access local buffers through these
+     * MDs either. For the other unreachable MDs only the specific remote
+     * buffer is not accessible (e.g. it has no IPC handle), and the peer may
+     * still be able to access local buffers, such as the rndv fragments. */
+    ucp_md_map_t           peer_unreachable_md_map;
 };
 
 

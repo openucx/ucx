@@ -864,9 +864,11 @@ ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map,
+                  peer_unreachable_md_map),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 ucp_md_map_t peer_unreachable_md_map)
 {
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_worker_h worker              = ep->worker;
@@ -882,10 +884,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey->cache.ep_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
     /* Look up remote key's configuration */
-    rkey_config_key.ep_cfg_index       = ep->cfg_index;
-    rkey_config_key.md_map             = rkey->md_map;
-    rkey_config_key.mem_type           = rkey->mem_type;
-    rkey_config_key.unreachable_md_map = unreachable_md_map;
+    rkey_config_key.ep_cfg_index            = ep->cfg_index;
+    rkey_config_key.md_map                  = rkey->md_map;
+    rkey_config_key.mem_type                = rkey->mem_type;
+    rkey_config_key.unreachable_md_map      = unreachable_md_map;
+    rkey_config_key.peer_unreachable_md_map = peer_unreachable_md_map;
 
     ucp_rkey_extract_sys_dev(ep_config, rkey, &p, buffer_end, &rkey_config_key);
 
@@ -925,6 +928,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     const void *p                    = buffer;
     ucp_md_map_t md_map, remote_md_map, unreachable_md_map;
+    ucp_md_map_t peer_unreachable_md_map;
     uct_rkey_unpack_params_t unpack_params;
     ucp_rsc_index_t cmpt_index;
     unsigned remote_md_index;
@@ -946,10 +950,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     ucs_log_indent(1);
 
     /* MD map for the unpacked rkey */
-    remote_md_map      = *ucs_serialize_next(&p, const ucp_md_map_t);
-    md_map             = remote_md_map & unpack_md_map;
-    md_count           = ucs_popcount(md_map);
-    unreachable_md_map = 0;
+    remote_md_map           = *ucs_serialize_next(&p, const ucp_md_map_t);
+    md_map                  = remote_md_map & unpack_md_map;
+    md_count                = ucs_popcount(md_map);
+    unreachable_md_map      = 0;
+    peer_unreachable_md_map = 0;
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
      * allocations are done from a memory pool.
@@ -1023,11 +1028,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
                       remote_md_index, tl_rkey->rkey.rkey);
             ++rkey_index;
-        } else if (status == UCS_ERR_UNREACHABLE) {
+        } else if ((status == UCS_ERR_UNREACHABLE) ||
+                   (status == UCS_ERR_UNSUPPORTED)) {
+            /* UCS_ERR_UNREACHABLE: the remote device is not reachable at all;
+             * UCS_ERR_UNSUPPORTED: only this remote buffer is not accessible */
             rkey->md_map       &= ~UCS_BIT(remote_md_index);
             unreachable_md_map |= UCS_BIT(remote_md_index);
-            ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
-                      rkey_index, remote_md_index, tl_rkey->rkey.rkey);
+            if (status == UCS_ERR_UNREACHABLE) {
+                peer_unreachable_md_map |= UCS_BIT(remote_md_index);
+            }
+            ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable: %s",
+                      rkey_index, remote_md_index, tl_rkey->rkey.rkey,
+                      ucs_status_string(status));
         } else {
             rkey->md_map &= UCS_MASK(remote_md_index);
             ucs_error("failed to unpack remote key from remote md[%d]: %s",
@@ -1039,7 +1051,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map,
+                                        peer_unreachable_md_map);
         if (status != UCS_OK) {
             goto err_destroy;
         }

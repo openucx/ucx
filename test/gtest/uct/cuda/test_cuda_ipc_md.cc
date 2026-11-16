@@ -293,6 +293,51 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 #endif
 }
 
+/*
+ * Memory without an exportable IPC handle (e.g. from the default memory pool)
+ * cannot be mapped by any peer, but this does not mean that the peer device is
+ * unreachable, so the rkey unpack must return UCS_ERR_UNSUPPORTED rather than
+ * UCS_ERR_UNREACHABLE.
+ */
+UCS_TEST_P(test_cuda_ipc_md, unpack_no_ipc_handle)
+{
+#if HAVE_CUDA_FABRIC
+    constexpr size_t size = 4096;
+    uct_cuda_ipc_extended_rkey_t rkey;
+    CUstream cu_stream;
+    CUdeviceptr ptr;
+    uct_mem_h memh;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuStreamCreate(&cu_stream, CU_STREAM_NON_BLOCKING));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAllocAsync(&ptr, size, cu_stream));
+    ASSERT_EQ(CUDA_SUCCESS, cuStreamSynchronize(cu_stream));
+
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), (void*)ptr, size, NULL, &memh));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void*)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC, rkey.super.ph.handle_type);
+
+    /* Bypass the same-process shortcut; NVML cannot resolve this UUID */
+    auto uuid64 = reinterpret_cast<int64_t*>(rkey.super.uuid.bytes);
+    uuid64[0]   = 0xDEADLL;
+    uuid64[1]   = 0xBEEFLL;
+
+    uct_rkey_unpack_params_t unpack_params = {0};
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params, NULL));
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFreeAsync(ptr, cu_stream));
+    EXPECT_EQ(CUDA_SUCCESS, cuStreamSynchronize(cu_stream));
+    EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(cu_stream));
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD

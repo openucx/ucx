@@ -91,10 +91,28 @@ typedef struct {
 } uct_cuda_ipc_uuid_hash_key_t;
 
 
+/* Accessibility of a remote device from a local device, cached in
+ * uct_cuda_ipc_dev_cache_t */
+typedef enum {
+    /* Not checked yet */
+    UCT_CUDA_IPC_ACCESS_UNKNOWN = 0,
+    /* Remote memory handles can be mapped */
+    UCT_CUDA_IPC_ACCESS_OK,
+    /* Only remote memory handles of this type cannot be used: the remote
+     * buffer has no IPC handle, or mapping failed although NVML reports P2P
+     * access between the devices. Other memory of the same peer (e.g. with a
+     * different handle type) may still be accessible, and vice versa. */
+    UCT_CUDA_IPC_ACCESS_NO_HANDLE,
+    /* The remote device is not accessible: NVML reports no native P2P access,
+     * or mapping failed and NVML could not tell whether P2P access exists */
+    UCT_CUDA_IPC_ACCESS_UNREACHABLE
+} uct_cuda_ipc_access_t;
+
+
 typedef struct {
     /* GPU Device number */
     int     dev_num;
-    /* Cache of accessible devices (ucs_ternary_auto_value_t) */
+    /* Cache of accessible devices (uct_cuda_ipc_access_t) */
     uint8_t accessible[0];
 } uct_cuda_ipc_dev_cache_t;
 
