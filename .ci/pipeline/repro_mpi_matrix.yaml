@@ -39,6 +39,7 @@ steps:
       ulimit -c 0
       test -w "${WORKSPACE}"
       export MPI_HOME=/hpc/local/benchmarks/daily/ga/2026-10-06/hpcx-gcc-ubuntu24.04/ompi5
+      export OPAL_PREFIX="${MPI_HOME}"
       test -x "${MPI_HOME}/bin/mpirun"
       test -x "${MPI_HOME}/bin/mpicc"
       export PATH="${MPI_HOME}/bin:${PATH}"
