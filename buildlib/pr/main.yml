@@ -2,6 +2,8 @@ variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
+  # GPU options plus IMEX channel 0, needed for CUDA fabric handles
+  DOCKER_OPT_GPU_IMEX: $(DOCKER_OPT_GPU) -e NVIDIA_IMEX_CHANNELS=0
   # Set to e.g. "--device=/dev/dri --group-add render --group-add video"
   # when running the ZE lane on Intel GPU hosts.
   DOCKER_OPT_ZE_GPU: ""
@@ -65,7 +67,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2404_doca31_gpunetio
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU_IMEX)
     # No-GPU Level Zero builder (ZE loader + null driver), built from
     # buildlib/dockers/ze-builder.Dockerfile.
     - container: ubuntu2404_ze
@@ -251,7 +253,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11_asan
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed23-cuda11_asan:1
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU_IMEX)
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
