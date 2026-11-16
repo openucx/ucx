@@ -601,10 +601,25 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_fetch_rejects_bad_layout) {
               uct_cuda_ipc_vmm_multi_fetch_chunks(&bad_key, cu_dev, &chunks,
                                                   UCS_LOG_LEVEL_DEBUG));
 
+    /* A key which covers no chunks */
+    bad_key                         = key;
+    bad_key.ph.vmm_multi.num_chunks = 0;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_cuda_ipc_vmm_multi_fetch_chunks(&bad_key, cu_dev, &chunks,
+                                                  UCS_LOG_LEVEL_DEBUG));
+
     /* Slots beyond the metadata buffer */
     bad_key                          = key;
     bad_key.ph.vmm_multi.first_chunk = key.ph.vmm_multi.meta_size /
                                        sizeof(uct_cuda_ipc_vmm_chunk_desc_t);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_cuda_ipc_vmm_multi_fetch_chunks(&bad_key, cu_dev, &chunks,
+                                                  UCS_LOG_LEVEL_DEBUG));
+
+    /* A key base which is not the base of its first chunk */
+    bad_key         = key;
+    bad_key.d_bptr += alloc.chunk_size() / 2;
+    bad_key.b_len  -= alloc.chunk_size() / 2;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               uct_cuda_ipc_vmm_multi_fetch_chunks(&bad_key, cu_dev, &chunks,
                                                   UCS_LOG_LEVEL_DEBUG));
