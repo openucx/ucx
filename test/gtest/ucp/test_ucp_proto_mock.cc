@@ -836,6 +836,8 @@ protected:
         EXPECT_EQ(UCS_OK, request_wait(sptr));
 
         if (op_id == UCP_OP_ID_PUT) {
+            /* PUT completes locally, so its data may not be at the target */
+            flush_ep(sender());
             recv_buf.pattern_check(2);
         } else if (op_id == UCP_OP_ID_GET) {
             send_buf.pattern_check(1);
