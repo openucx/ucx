@@ -74,6 +74,7 @@ const char *uct_ib_reachability_modes[] = {
     [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
     [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
     [UCT_IB_REACHABILITY_MODE_ALL]          = "all",
+    [UCT_IB_REACHABILITY_MODE_KERNEL]       = "kernel",
     [UCT_IB_REACHABILITY_MODE_LAST]         = NULL
 };
 
@@ -221,7 +222,9 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "The mode used for performing the reachability check\n"
    " - route        - all routable addresses are assumed as reachable\n"
    " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
-   " - all          - all addresses are assumed as reachable, without any check",
+   " - all          - all addresses are assumed as reachable, without any check\n"
+   " - kernel       - like route, but the kernel selects the route, applying policy routing\n"
+   "                  rules. Falls back to route if the kernel does not support it.",
    ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
@@ -697,24 +700,38 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
+static ucs_status_t
+uct_ib_iface_roce_ndev_index(uct_ib_iface_t *iface, uint8_t gid_index,
+                             const uct_iface_is_reachable_params_t *params,
+                             unsigned *ndev_index_p)
+{
+    ucs_status_t status;
+
+    status = uct_ib_device_get_roce_ndev_index(uct_ib_iface_device(iface),
+                                               iface->config.port_num,
+                                               gid_index, ndev_index_p);
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(params,
+                                    "no ndev for " UCT_IB_IFACE_FMT " gid[%u]",
+                                    UCT_IB_IFACE_ARG(iface), gid_index);
+    }
+
+    return status;
+}
+
 static int
 uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
                               const uct_iface_is_reachable_params_t *params)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uint8_t port_num     = iface->config.port_num;
     unsigned lo_ndev_index = 0;
     char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ], local_ifname[IFNAMSIZ];
     char remote_str[128];
     int local_ndev_index;
     unsigned ndev_index;
 
-    if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
-                                          &ndev_index) != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "no ndev for " UCT_IB_IFACE_FMT " gid[%u]",
-                                    UCT_IB_IFACE_ARG(iface), gid_index);
+    if (uct_ib_iface_roce_ndev_index(iface, gid_index, params, &ndev_index) !=
+        UCS_OK) {
         return 0;
     }
 
@@ -758,6 +775,51 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
             ucs_ndev_index_to_ifname(lo_ndev_index, lo_ifname,
                                      sizeof(lo_ifname)),
             lo_ndev_index);
+    return 0;
+}
+
+static int uct_ib_iface_roce_is_kernel_routable(
+        uct_ib_iface_t *iface, uint8_t gid_index,
+        const struct sockaddr *sa_local, struct sockaddr *sa_remote,
+        const uct_iface_is_reachable_params_t *params)
+{
+    char ndev_ifname[IFNAMSIZ], remote_str[UCS_SOCKADDR_STRING_LEN];
+    uint8_t best_prefix_len;
+    unsigned ndev_index;
+    ucs_status_t status;
+
+    if (uct_ib_iface_roce_ndev_index(iface, gid_index, params, &ndev_index) !=
+        UCS_OK) {
+        return 0;
+    }
+
+    /* A same-host address can be in another VRF than the RoCE netdev */
+    if (ucs_netlink_is_host_addr(sa_remote)) {
+        return 1;
+    }
+
+    /* The kernel resolves the remote address with the same parameters */
+    status = ucs_netlink_kernel_route_matches(ndev_index, sa_remote, sa_local,
+                                              &best_prefix_len);
+    if (status == UCS_OK) {
+        return 1;
+    } else if (status == UCS_ERR_UNSUPPORTED) {
+        return uct_ib_iface_roce_is_routable(iface, gid_index, sa_remote,
+                                             params);
+    }
+
+    ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str));
+    ucs_ndev_index_to_ifname(ndev_index, ndev_ifname, sizeof(ndev_ifname));
+    if (best_prefix_len > 0) {
+        uct_iface_fill_info_str_buf(
+                params, "default route to %s via %s, while a /%u route exists",
+                remote_str, ndev_ifname, best_prefix_len);
+    } else {
+        uct_iface_fill_info_str_buf(params, "kernel route to %s via %s: %s",
+                                    remote_str, ndev_ifname,
+                                    ucs_status_string(status));
+    }
+
     return 0;
 }
 
@@ -865,6 +927,13 @@ uct_ib_iface_roce_is_reachable(uct_ib_iface_t *iface,
         return uct_ib_iface_roce_is_routable(iface, local_gid_info.gid_index,
                                              (struct sockaddr *)&sa_remote,
                                              params);
+    }
+
+    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_KERNEL) {
+        return uct_ib_iface_roce_is_kernel_routable(
+                iface, local_gid_info.gid_index,
+                (const struct sockaddr*)&sa_local, (struct sockaddr*)&sa_remote,
+                params);
     }
 
     ucs_assert(iface->config.reachability_mode ==

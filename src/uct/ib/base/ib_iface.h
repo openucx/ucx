@@ -116,6 +116,7 @@ typedef enum {
     UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
     UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
     UCT_IB_REACHABILITY_MODE_ALL          = 2,
+    UCT_IB_REACHABILITY_MODE_KERNEL       = 3,
     UCT_IB_REACHABILITY_MODE_LAST
 } uct_ib_iface_reachability_mode_t;
 
