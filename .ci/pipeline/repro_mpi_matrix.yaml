@@ -18,7 +18,6 @@ runs_on_dockers:
   - name: mpi
     url: harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
     arch: x86_64
-    caps_add: "[ SYS_PTRACE ]"
 
 matrix:
   axes:
@@ -31,7 +30,7 @@ env:
   UCX_ERROR_SIGNALS: SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE
 
 steps:
-  - name: Reproduce MPI memory-hook initialization
+  - name: Verify MPI memory-hook cases
     parallel: false
     timeout: 25
     run: |
@@ -61,83 +60,12 @@ steps:
       make -j6
       make install
       ldd ./test/mpi/test_memhooks
-      mpi=(mpirun --allow-run-as-root --bind-to none
-           -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS
-           -mca pml ob1 -mca osc '^ucx' -mca btl tcp,self
-           -mca btl_tcp_if_include lo -mca orte_allowed_exit_without_sync 1
-           -mca coll '^hcoll,ml,ucc' -np 1)
-      run_case() {
-          local name=$1
-          local preload_path=$2
-          local status=0
-          local output diagnostic_status
-          local preload_args=()
-          local debugger_args=()
-          shift 2
-
-          if [[ -n "${preload_path}" ]]; then
-              preload_args=(-x "LD_PRELOAD=${preload_path}")
-              debugger_args=(-ex 'set startup-with-shell off'
-                             -ex "set environment LD_PRELOAD ${preload_path}")
-          fi
-
-          echo "MPI malloc_hooks/reloc ${name}, 30-second deadline"
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
-          echo "UCX_MEM_MMAP_HOOK_MODE=${UCX_MEM_MMAP_HOOK_MODE-unset}"
-          echo "MPI test LD_PRELOAD=${preload_path:-unset}"
-          output=$(timeout --foreground --signal=TERM --kill-after=5s 30s \
-              "${mpi[@]}" "$@" "${preload_args[@]}" \
-              ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
-          printf '%s\n' "${output}"
-          echo "MPI ${name} process exit status ${status}"
-          if [[ "${status}" -eq 0 ]]; then
-              if [[ "${output}" != *"malloc_hooks: initialized"* ||
-                    "${output}" != *"malloc_hooks: PASS"* ]]; then
-                  echo "MPI ${name} is missing required initialization or PASS output"
-                  status=1
-              fi
-          fi
-          if [[ "${status}" -ne 0 ]]; then
-              if command -v gdb >/dev/null; then
-                  echo "Replay failed MPI ${name} under GDB"
-                  diagnostic_status=0
-                  timeout --foreground --signal=TERM --kill-after=5s 40s \
-                      "${mpi[@]}" "$@" \
-                      timeout --foreground --signal=INT --kill-after=5s 30s \
-                      gdb -batch -ex 'set pagination off' -ex 'set confirm off' \
-                      -ex 'set backtrace limit 64' "${debugger_args[@]}" \
-                      -ex 'handle SIGABRT stop print nopass' -ex run \
-                      -ex 'thread apply all bt full' -ex 'info sharedlibrary' \
-                      -ex 'info proc mappings' --args \
-                      ./test/mpi/test_memhooks -t malloc_hooks -m reloc || diagnostic_status=$?
-                  echo "MPI ${name} GDB diagnostic exit status ${diagnostic_status}"
-              else
-                  echo "GDB is unavailable; the failed MPI ${name} result is retained"
-              fi
-          fi
-          echo "MPI ${name} case exit status ${status}"
-          return "${status}"
-      }
-
-      statuses=(0 0 0 0)
-      run_case installed-first "" || statuses[0]=$?
-      buildtree_path="${PWD}/src/ucs/.libs:${PWD}/src/ucm/.libs:${LD_LIBRARY_PATH}"
-      LD_LIBRARY_PATH="${buildtree_path}" \
-          run_case buildtree-first "" -x LD_LIBRARY_PATH || statuses[1]=$?
-      LD_LIBRARY_PATH="${buildtree_path}" UCX_MEM_MMAP_HOOK_MODE=reloc \
-          run_case buildtree-first-reloc "" -x LD_LIBRARY_PATH \
-          -x UCX_MEM_MMAP_HOOK_MODE || statuses[2]=$?
-      LD_LIBRARY_PATH="${buildtree_path}" UCX_MEM_MMAP_HOOK_MODE=reloc \
-          run_case buildtree-first-reloc-preload "${PWD}/src/ucm/.libs/libucm.so" \
-          -x LD_LIBRARY_PATH -x UCX_MEM_MMAP_HOOK_MODE || statuses[3]=$?
-      printf 'MPI case exit statuses: installed-first=%s buildtree-first=%s buildtree-first-reloc=%s buildtree-first-reloc-preload=%s\n' \
-          "${statuses[@]}"
+      export MPIRUN="timeout --foreground --signal=TERM --kill-after=5s 30s mpirun --allow-run-as-root --bind-to none -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca osc ^ucx -mca btl tcp,self -mca btl_tcp_if_include lo -mca orte_allowed_exit_without_sync 1 -mca coll ^hcoll,ml,ucc"
+      function_definition=$(sed -n '/^test_malloc_hooks_mpi() {$/,/^}$/p' ../contrib/test_jenkins.sh)
       status=0
-      for case_status in "${statuses[@]}"; do
-          if [[ "${case_status}" -ne 0 ]]; then
-              status=${case_status}
-              break
-          fi
-      done
-      echo "MPI aggregate exit status ${status}"
-      exit "${status}"
+      output=$(bash -euc "${function_definition}"$'\n''test_malloc_hooks_mpi' 2>&1) || status=$?
+      printf '%s\n' "${output}"
+      echo "MPI memory-hook matrix exit status ${status}"
+      test "${status}" -eq 0
+      test "$(grep -c ': initialized$' <<< "${output}")" -eq 10
+      test "$(grep -c ': PASS$' <<< "${output}")" -eq 10
