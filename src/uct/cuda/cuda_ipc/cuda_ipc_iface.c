@@ -134,18 +134,11 @@ uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
             UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
 }
 
-/* Return the device address extended with the multi-node NVLINK info, or NULL
- * if the peer did not send it */
-static const uct_cuda_ipc_mnnvl_device_addr_t *
-uct_cuda_ipc_iface_mnnvl_dev_addr(const uct_device_addr_t *addr,
-                                  size_t dev_addr_len)
-{
-    if (dev_addr_len < sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
-        return NULL;
-    }
-
-    return (const uct_cuda_ipc_mnnvl_device_addr_t*)addr;
-}
+/* Whether the peer sent the given field of the MNNVL device address */
+#define UCT_CUDA_IPC_MNNVL_ADDR_HAS_FIELD(_dev_addr_len, _field) \
+    ((_dev_addr_len) >= \
+     (ucs_offsetof(uct_cuda_ipc_mnnvl_device_addr_t, _field) + \
+      ucs_field_sizeof(uct_cuda_ipc_mnnvl_device_addr_t, _field)))
 
 static int
 uct_cuda_ipc_iface_remote_fabric_supported(
@@ -200,11 +193,11 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         /* Multi-node NVLINK connects only GPUs in the same NVLink domain. All
          * GPUs of a host are assumed to be in the same domain (it is probed
          * from GPU 0), so the domain is checked only against other hosts. */
-        mnnvl_addr = uct_cuda_ipc_iface_mnnvl_dev_addr(params->device_addr,
-                                                       dev_addr_len);
-        if (mnnvl_addr == NULL) {
-            ucs_debug("peer does not advertise NVLink domain and IMEX "
-                      "channel, using legacy MNNVL reachability");
+        mnnvl_addr = (const uct_cuda_ipc_mnnvl_device_addr_t*)
+                             params->device_addr;
+        if (!UCT_CUDA_IPC_MNNVL_ADDR_HAS_FIELD(dev_addr_len, nvlink_domain)) {
+            ucs_debug("peer does not advertise NVLink domain, using legacy "
+                      "MNNVL reachability");
         } else if (mnnvl_addr->nvlink_domain != md->nvlink_domain) {
             uct_iface_fill_info_str_buf(
                     params,
@@ -227,7 +220,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
             return 0;
         }
 
-        if ((mnnvl_addr != NULL) &&
+        if (UCT_CUDA_IPC_MNNVL_ADDR_HAS_FIELD(dev_addr_len, imex_channel) &&
             (mnnvl_addr->imex_channel != md->imex_channel)) {
             uct_iface_fill_info_str_buf(
                     params, "different IMEX channel local %u vs %u",

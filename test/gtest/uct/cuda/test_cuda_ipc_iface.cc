@@ -94,7 +94,9 @@ protected:
     {
         mnnvl_addr(dev_addr)->super.flags &=
                 ~UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
-        mnnvl_addr(dev_addr)->imex_channel = 0;
+        if (dev_addr.size() == sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
+            mnnvl_addr(dev_addr)->imex_channel = 0;
+        }
     }
 
     /* Same peer, but running a UCX which does not send the NVLink domain and
@@ -102,6 +104,14 @@ protected:
     static void set_older_peer(std::string &dev_addr)
     {
         dev_addr.resize(sizeof(uct_cuda_ipc_device_addr_t));
+    }
+
+    /* Same peer, but running UCX v1.23.2, which sends the NVLink domain
+     * without the IMEX channel */
+    static void set_v1_23_2_peer(std::string &dev_addr)
+    {
+        dev_addr.resize(ucs_offsetof(uct_cuda_ipc_mnnvl_device_addr_t,
+                                     imex_channel));
     }
 
     bool is_reachable(entity &sender, entity &receiver,
@@ -181,6 +191,34 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
     set_other_domain(dev_addr);
     EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info));
     EXPECT_EQ(0u, info.find("different NVLink domain")) << info;
+}
+
+/* A remote peer running v1.23.2 sends the NVLink domain but not the IMEX
+ * channel: the domain is checked, and the channel is not. */
+UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_2_peer)
+{
+    entity *e1           = create_mnnvl_entity();
+    entity *e2           = create_mnnvl_entity();
+    std::string dev_addr = get_device_address(*e2);
+    std::string remote_addr;
+    std::string info;
+
+    set_remote_host(dev_addr);
+    set_other_imex_channel(dev_addr);
+    set_v1_23_2_peer(dev_addr);
+    EXPECT_EQ(17u, dev_addr.size());
+    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
+
+    remote_addr = dev_addr;
+    set_other_domain(remote_addr);
+    EXPECT_FALSE(is_reachable(*e1, *e2, remote_addr, info));
+    EXPECT_EQ(0u, info.find("different NVLink domain")) << info;
+
+    remote_addr = dev_addr;
+    set_no_fabric(remote_addr);
+    EXPECT_FALSE(is_reachable(*e1, *e2, remote_addr, info));
+    EXPECT_EQ(0u, info.find("different machine and FABRIC support local=1 "
+                            "remote=0")) << info;
 }
 
 /* Peers on another host in the same NVLink domain are reachable only if both
