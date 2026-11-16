@@ -126,7 +126,7 @@ typedef struct {
 static ucs_status_t
 uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
 {
-    static const char channel_prefix[] = "channel";
+    static const char channel_prefix[]           = "channel";
     uct_cuda_ipc_md_imex_channel_t *imex_channel = arg;
     const char *number;
     unsigned long channel;
