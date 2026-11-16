@@ -11,7 +11,7 @@ jobs:
     steps:
       - checkout: self
         clean: true
-        fetchDepth: 100
+        fetchDepth: 0
         retryCountOnTaskFailure: 5
 
       - bash: |
@@ -105,7 +105,7 @@ jobs:
     steps:
       - checkout: self
         clean: true
-        fetchDepth: 100
+        fetchDepth: 0
         retryCountOnTaskFailure: 5
 
       - bash: |
