@@ -1,0 +1,93 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-mpi-memhooks-repro
+failFast: true
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - name: mpi
+    url: harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
+    arch: x86_64
+    caps_add: "[ SYS_PTRACE ]"
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+env:
+  UCX_HANDLE_ERRORS: bt
+  UCX_ERROR_SIGNALS: SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE
+
+steps:
+  - name: Reproduce MPI memory-hook initialization
+    parallel: false
+    timeout: 25
+    run: |
+      set -euo pipefail
+      ulimit -c 0
+      test -w "${WORKSPACE}"
+      export MPI_HOME=/hpc/local/benchmarks/daily/ga/2026-10-06/hpcx-gcc-ubuntu24.04/ompi5
+      test -x "${MPI_HOME}/bin/mpirun"
+      test -x "${MPI_HOME}/bin/mpicc"
+      export PATH="${MPI_HOME}/bin:${PATH}"
+      export LD_LIBRARY_PATH="${WORKSPACE}/install/lib:${MPI_HOME}/lib:"
+      unset LD_PRELOAD UCX_MEM_MMAP_HOOK_MODE
+      git rev-parse HEAD
+      uname -a
+      gcc --version | head -1
+      mpi_version=$(mpirun --version)
+      printf '%s\n' "${mpi_version}"
+      [[ "${mpi_version}" == *"5.0.10rc2"* ]]
+      mpicc --showme
+      ./autogen.sh
+      mkdir build-mpi-repro
+      cd build-mpi-repro
+      ../contrib/configure-release-mt --prefix="${WORKSPACE}/install" \
+          --without-java --with-mpi --enable-assertions \
+          LDFLAGS="-Wl,-rpath-link,${PWD}/src/ucs/.libs:${PWD}/src/ucm/.libs:${PWD}/src/uct/.libs:${PWD}/src/ucp/.libs"
+      make -j6
+      make install
+      ldd ./test/mpi/test_memhooks
+      mpi=(mpirun --allow-run-as-root --bind-to none
+           -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS
+           -mca pml ob1 -mca osc '^ucx' -mca btl tcp,self
+           -mca btl_tcp_if_include lo -mca orte_allowed_exit_without_sync 1
+           -mca coll '^hcoll,ml,ucc' -np 1)
+      echo "MPI malloc_hooks/reloc baseline, 30-second deadline"
+      status=0
+      output=$(timeout --foreground --signal=TERM --kill-after=5s 30s \
+          "${mpi[@]}" ./test/mpi/test_memhooks -t malloc_hooks -m reloc 2>&1) || status=$?
+      printf '%s\n' "${output}"
+      echo "MPI memory-hook baseline exit status ${status}"
+      if [[ "${status}" -ne 0 ]]; then
+          if command -v gdb >/dev/null; then
+              echo "Replay the failed malloc_hooks/reloc case under GDB"
+              diagnostic_status=0
+              UCX_HANDLE_ERRORS=none timeout --foreground --signal=TERM \
+                  --kill-after=5s 40s "${mpi[@]}" \
+                  timeout --foreground --signal=INT --kill-after=5s 30s \
+                  gdb -batch -ex 'set pagination off' -ex 'set confirm off' \
+                  -ex 'handle SIGABRT stop print nopass' -ex run \
+                  -ex 'thread apply all bt full' -ex 'info sharedlibrary' \
+                  -ex 'info proc mappings' --args \
+                  ./test/mpi/test_memhooks -t malloc_hooks -m reloc || diagnostic_status=$?
+              echo "MPI GDB diagnostic exit status ${diagnostic_status}"
+          else
+              echo "GDB is unavailable; the failing baseline result is retained"
+          fi
+          exit "${status}"
+      fi
+      [[ "${output}" == *"malloc_hooks: initialized"* ]]
+      [[ "${output}" == *"malloc_hooks: PASS"* ]]
