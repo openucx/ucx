@@ -465,6 +465,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     uct_ib_iface_init_attr_t init_attr = {0};
     ucs_mpool_params_t mp_params;
     struct efadv_device_attr efa_attr;
+    size_t ctl_req_size;
     ucs_status_t status;
     int mtu, ret;
 
@@ -515,6 +516,17 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {
         goto err_cleanup_stats_node;
+    }
+
+    /* Connection requests carry the device address and are sent inline */
+    ctl_req_size = sizeof(uct_srd_ctl_hdr_t) + self->super.addr_size;
+    if (ctl_req_size > self->config.max_inline) {
+        ucs_error(UCT_IB_IFACE_FMT
+                  ": connection request size %zu exceeds max inline size %u",
+                  UCT_IB_IFACE_ARG(&self->super), ctl_req_size,
+                  self->config.max_inline);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_cleanup_qp;
     }
 
     ucs_mpool_params_reset(&mp_params);

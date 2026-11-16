@@ -37,6 +37,16 @@ void test_uct_ib::init() {
     test_uct_ib::m_ib_am_handler_counter = 0;
 }
 
+void test_uct_ib::cleanup_entities()
+{
+    m_e1->destroy_eps();
+    m_e2->destroy_eps();
+    m_entities.remove(m_e1);
+    m_entities.remove(m_e2);
+    m_e1 = NULL;
+    m_e2 = NULL;
+}
+
 ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
                                         size_t length, unsigned flags) {
     recv_desc_t *my_desc  = (recv_desc_t *) arg;
@@ -329,15 +339,6 @@ protected:
         m_entities.push_back(m_e2);
     }
 
-    void cleanup_entities() {
-        m_e1->destroy_eps();
-        m_e2->destroy_eps();
-        m_entities.remove(m_e1);
-        m_entities.remove(m_e2);
-        m_e1 = NULL;
-        m_e2 = NULL;
-    }
-
     void get_device_address(entity *e, std::vector<uint8_t> &dev_addr) {
         dev_addr.resize(e->iface_attr().device_addr_len);
         ASSERT_UCS_OK(uct_iface_get_device_address(
@@ -467,6 +468,20 @@ UCS_TEST_P(test_uct_ib_fabric_id, missing_remote_id_is_unreachable) {
     EXPECT_NE(std::string::npos, info.find("fabric id"));
 
     cleanup_entities();
+}
+
+UCS_TEST_P(test_uct_ib_fabric_id, out_of_range_id_is_rejected)
+{
+    entity *e = uct_test::create_entity(0);
+    m_entities.push_back(e);
+
+    modify_config("IB_FABRIC_ID", "65536");
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    uct_iface_h iface;
+    ucs_status_t status = uct_iface_open(e->md(), e->worker(),
+                                         &e->iface_params(), m_iface_config,
+                                         &iface);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_fabric_id);

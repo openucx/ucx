@@ -1893,7 +1893,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (config->fabric_id > UINT16_MAX) {
         ucs_error("fabric id %u is out of range, must be at most %u",
                   config->fabric_id, UINT16_MAX);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
     }
 
     self->config.fabric_id          = config->fabric_id;
