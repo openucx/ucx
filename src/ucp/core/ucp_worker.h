@@ -234,14 +234,20 @@ typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t
 /* Sources of path bandwidth samples */
 typedef enum {
     UCP_EP_PATH_BW_OP_PUT,
+    /* Put of the peer, as sampled and sent by the peer. The data of get
+     * crosses the same paths, so it splits get of this side. */
+    UCP_EP_PATH_BW_OP_PEER_PUT,
     UCP_EP_PATH_BW_OP_LAST
 } ucp_ep_path_bw_op_t;
 
 
 /* Path samples of one configuration and set of lanes of an endpoint,
- * allocated for endpoints on interfaces which report path events. */
+ * allocated for endpoints on interfaces which report path events, or with
+ * samples of the peer. */
 typedef struct {
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
+    uint8_t                sync_peer;       /* The peer may hold other put
+                                               samples than this side */
     uint32_t               lane_generation; /* Lanes of the samples */
     /* Lane bandwidth of each source below the path estimate, or
      * UCP_EP_PATH_BW_INVALID if the path is not degraded */
@@ -326,6 +332,10 @@ struct ucp_worker_iface {
                                                     offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
     uint8_t                       port_speed;    /* Quantized port speed */
+    uint8_t                       path_bw_speed; /* Port speed of path_bw */
+    uint8_t                       path_bw_valid; /* Sources in path_bw */
+    /* Path estimates, which the samples of each source are compared with */
+    double                        path_bw[UCP_EP_PATH_BW_OP_LAST];
 };
 
 

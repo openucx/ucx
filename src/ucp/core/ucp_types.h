@@ -248,6 +248,7 @@ typedef enum {
                                           carrying remote ep and PSN for
                                           tracking */
     UCP_AM_ID_AM_MIDDLE_PSN     =  28,
+    UCP_AM_ID_EP_PATH_BW        =  29, /* Put bandwidth of the endpoint paths */
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 
@@ -382,7 +383,9 @@ enum {
     /* The token trailer of the LANES_ADDR messages */
     UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN         = 24,
     /* The slow BW lanes are skipped during the pairwise selection */
-    UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES    = 24
+    UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES    = 24,
+    /* The put bandwidth of the endpoint paths, see UCP_AM_ID_EP_PATH_BW */
+    UCP_MIN_DST_VERSION_EP_PATH_BW                = 24
 };
 
 

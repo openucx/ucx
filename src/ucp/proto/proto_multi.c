@@ -136,6 +136,7 @@ const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
 {
     ucp_ep_h ep                          = req->send.ep;
     khash_t(ucp_worker_ep_path_bw) *hash = &ep->worker->ep_path_bw;
+    ucp_ep_path_bw_op_t op               = ucp_proto_rma_path_bw_op(req);
     const ucp_ep_path_bw_t *state;
     size_t length;
     khiter_t it;
@@ -164,8 +165,8 @@ const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
         return lpriv;
     }
 
-    return ucp_proto_rma_split_lane(mpriv, state, UCP_EP_PATH_BW_OP_PUT,
-                                    length, lpriv, adjusted);
+    return ucp_proto_rma_split_lane(mpriv, state, op, length, lpriv,
+                                    adjusted);
 }
 
 

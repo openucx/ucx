@@ -61,13 +61,26 @@ ucp_proto_multi_scaled_length(uint32_t weight, size_t length)
            UCP_PROTO_MULTI_WEIGHT_SHIFT;
 }
 
+/* Source of the samples which split the operation: the data of get crosses
+ * the paths on which the peer puts */
+static UCS_F_ALWAYS_INLINE ucp_ep_path_bw_op_t
+ucp_proto_rma_path_bw_op(const ucp_request_t *req)
+{
+    return (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+            UCP_OP_ID_GET) ? UCP_EP_PATH_BW_OP_PEER_PUT :
+                             UCP_EP_PATH_BW_OP_PUT;
+}
+
 static UCS_F_ALWAYS_INLINE const ucp_proto_multi_lane_priv_t *
 ucp_proto_rma_lane_priv(ucp_request_t *req,
                         const ucp_proto_multi_priv_t *mpriv,
                         const ucp_proto_multi_lane_priv_t *lpriv,
                         ucp_proto_multi_lane_priv_t *adjusted)
 {
-    if (ucs_unlikely(req->send.ep->flags & UCP_EP_FLAG_PATH_DEGRADED)) {
+    ucp_ep_h ep = req->send.ep;
+
+    if (ucs_unlikely(ep->flags & UCP_EP_FLAG_PATH_DEGRADED) &&
+        (ep->ext->path_bw_degraded & UCS_BIT(ucp_proto_rma_path_bw_op(req)))) {
         return ucp_proto_rma_adjust_lane(req, mpriv, lpriv, adjusted);
     }
 
