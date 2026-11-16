@@ -1,0 +1,35 @@
+#cpp code owners
+cpp/                                @rapidsai/ucxx-cpp-codeowners
+
+#python code owners
+python/                             @rapidsai/ucxx-python-codeowners
+
+#cmake code owners
+cpp/CMakeLists.txt                                  @rapidsai/ucxx-cmake-codeowners
+cpp/python/CMakeLists.txt                           @rapidsai/ucxx-cmake-codeowners
+cpp/examples/CMakeLists.txt                         @rapidsai/ucxx-cmake-codeowners
+cpp/benchmarks/CMakeLists.txt                       @rapidsai/ucxx-cmake-codeowners
+cpp/tests/CMakeLists.txt                            @rapidsai/ucxx-cmake-codeowners
+python/libucxx/CMakeLists.txt                       @rapidsai/ucxx-cmake-codeowners
+python/ucxx/CMakeLists.txt                          @rapidsai/ucxx-cmake-codeowners
+python/ucxx/ucxx/examples/CMakeLists.txt            @rapidsai/ucxx-cmake-codeowners
+python/ucxx/ucxx/_lib/CMakeLists.txt                @rapidsai/ucxx-cmake-codeowners
+python/ucxx/ucxx/_lib/tests_cython/CMakeLists.txt   @rapidsai/ucxx-cmake-codeowners
+**/cmake/                                           @rapidsai/ucxx-cmake-codeowners
+
+#CI code owners
+/ci/                     @rapidsai/ci-codeowners
+/.github/                @rapidsai/ci-codeowners
+/.pre-commit-config.yaml @rapidsai/ci-codeowners
+/.shellcheckrc           @rapidsai/ci-codeowners
+/.yamllint.yaml          @rapidsai/ci-codeowners
+
+#packaging code owners
+/.devcontainer/    @rapidsai/packaging-codeowners
+/conda/            @rapidsai/packaging-codeowners
+/dependencies.yaml @rapidsai/packaging-codeowners
+/build.sh          @rapidsai/packaging-codeowners
+pyproject.toml     @rapidsai/packaging-codeowners
+
+# Ops code owners
+/SECURITY.md             @rapidsai/ops-codeowners
