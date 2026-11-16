@@ -484,13 +484,14 @@ static ucs_status_t
 ucs_memtype_map_lookup(uint64_t start, size_t size,
                        ucs_memory_info_t *mem_info)
 {
+    const size_t probe_size = ucs_max(size, 1);
     const ucs_memtype_map_entry_t *entry;
     ucs_interval_map_node_t *node;
     ucs_status_t status;
 
     /* A racing registration is not visible yet, same as a miss */
     if ((ucs_interval_map_count(&ucs_memtype_map) == 0) ||
-        (size > UINTPTR_MAX - start)) {
+        (probe_size > UINTPTR_MAX - start)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -498,8 +499,8 @@ ucs_memtype_map_lookup(uint64_t start, size_t size,
     /* Any registration containing the whole range may be returned, so with
      * nested ones the base address and length may be of either; partial
      * overlaps are misses */
-    node = ucs_interval_map_find_containing(&ucs_memtype_map,
-                                            start, start + ucs_max(size, 1));
+    node = ucs_interval_map_find_containing(&ucs_memtype_map, start,
+                                            start + probe_size);
     if (node == NULL) {
         ucs_trace("memtype_map: [0x%lx..0x%lx] not contained in a "
                   "registration", start, start + size);

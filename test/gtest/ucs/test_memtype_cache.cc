@@ -642,6 +642,11 @@ UCS_TEST_F(test_memtype_map, lookup_and_unregister) {
     expect_miss(base, 0xff0, 0x20);
     expect_miss(base, 0x1000, 0x10);
 
+    /* A zero-size lookup is a lookup of one byte, and must not overflow */
+    expect_hit(base, 0x100, 0, 0, 0x1000);
+    expect_miss(base, 0x1000, 0);
+    expect_miss(reinterpret_cast<void*>(UINTPTR_MAX), 0, 0);
+
     unreg(base, 0, 0x1000);
     expect_miss(base, 0, 0x100);
 }
