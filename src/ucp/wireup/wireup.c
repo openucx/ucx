@@ -1006,14 +1006,16 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
 
     ucp_ep_match_remove_ep(worker, ep);
 
-    /* The EP already accepted a connection request from another remote EP,
-     * which means that remote EP was destroyed after sending the request
-     * (e.g. force closed), and the peer created a new EP to reply us */
+    /* The EP is already bound to another remote EP (set when a connection
+     * request from it was processed, whether accepted or ignored as a
+     * simultaneous connect). A reply from a different remote EP means the
+     * bound one was destroyed after sending its request (e.g. force closed)
+     * and the peer created a new EP to reply to us. */
     if ((ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
         (msg->src_ep_id != ucp_ep_remote_id(ep))) {
         ucs_diag("ep %p: got wireup reply from remote ep 0x%" PRIx64
-                 " while connected to remote ep 0x%" PRIxPTR, ep,
-                 msg->src_ep_id, ucp_ep_remote_id(ep));
+                 " while bound to remote ep 0x%" PRIxPTR,
+                 ep, msg->src_ep_id, ucp_ep_remote_id(ep));
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
         return;
     }

@@ -986,6 +986,34 @@ public:
     }
 
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+
+    void force_close_simultaneous_connect(bool close_winner)
+    {
+        if (get_variant_value() & NO_EP_MATCH) {
+            UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
+        }
+
+        /* The connection request of the worker with the lower UUID is
+         * accepted by the peer and the other request is ignored. Either way
+         * the receiving EP is bound to the requesting EP, so force close the
+         * requesting EP before its request is handled */
+        bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
+        entity &winner   = sender_wins ? sender() : receiver();
+        entity &peer     = sender_wins ? receiver() : sender();
+        entity &closer   = close_winner ? winner : peer;
+        entity &other    = close_winner ? peer : winner;
+
+        winner.connect(&peer, get_ep_params());
+        peer.connect(&winner, get_ep_params());
+        disconnect(closer, true);
+
+        closer.connect(&other, get_ep_params());
+        if (get_variant_value() & TEST_TAG) {
+            send_recv(closer.ep(), other.worker(), NULL, 1, 1);
+        }
+        flush_worker(closer);
+        disconnect(other, true);
+    }
 };
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
@@ -1033,27 +1061,12 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
     }
 }
 
-UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect) {
-    if (get_variant_value() & NO_EP_MATCH) {
-        UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
-    }
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_winner) {
+    force_close_simultaneous_connect(true);
+}
 
-    /* The connection request of the worker with the lower UUID is respected
-     * by the peer, so force close its EP before its request is handled */
-    bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
-    entity &winner   = sender_wins ? sender() : receiver();
-    entity &peer     = sender_wins ? receiver() : sender();
-
-    winner.connect(&peer, get_ep_params());
-    peer.connect(&winner, get_ep_params());
-    disconnect(winner, true);
-
-    winner.connect(&peer, get_ep_params());
-    if (get_variant_value() & TEST_TAG) {
-        send_recv(winner.ep(), peer.worker(), NULL, 1, 1);
-    }
-    flush_worker(winner);
-    disconnect(peer, true);
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_peer) {
+    force_close_simultaneous_connect(false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
