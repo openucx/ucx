@@ -863,6 +863,8 @@ void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
+void ucp_ep_close_force(ucp_ep_h ep);
+
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,

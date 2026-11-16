@@ -497,7 +497,8 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 /* must be called with async lock held */
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
-/* must be called with async lock held */
+/* must be called with async lock held; @a discarded_cb is called only if
+ * UCS_INPROGRESS is returned, maybe before the function returns */
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,

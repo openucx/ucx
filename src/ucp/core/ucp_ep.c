@@ -1607,6 +1607,9 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         }
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+        /* The callback may be called before ucp_worker_discard_uct_ep()
+         * returns, so count it in advance */
+        ++discard_arg->discard_counter;
         status = ucp_worker_discard_uct_ep(ep, uct_ep,
                                            ucp_ep_get_rsc_index(ep, lane),
                                            ep_flush_flags,
@@ -1614,8 +1617,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                            UCS_STATUS_PTR(discard_status),
                                            ucp_ep_discard_lanes_callback,
                                            discard_arg);
-        if (status == UCS_INPROGRESS) {
-            ++discard_arg->discard_counter;
+        if (status != UCS_INPROGRESS) {
+            --discard_arg->discard_counter;
         }
     }
 
@@ -3661,6 +3664,16 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return ucp_ep_close_nbx(ep, &param);
 }
 
+void ucp_ep_close_force(ucp_ep_h ep)
+{
+    /* Discard all lanes before destroying the endpoint: the lanes become
+     * failed, so the requests canceled from their pending queues are completed
+     * and not restarted on a failover endpoint */
+    ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)), UCS_ERR_CANCELED,
+                         ep->cfg_index);
+    ucp_ep_disconnected(ep, 1);
+}
+
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
@@ -3686,9 +3699,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
-                             UCS_ERR_CANCELED, ep->cfg_index);
-        ucp_ep_disconnected(ep, 1);
+        ucp_ep_close_force(ep);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
                                         ucp_ep_close_flushed_callback, "close",
