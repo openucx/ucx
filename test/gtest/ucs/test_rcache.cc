@@ -10,6 +10,7 @@ extern "C" {
 #include <ucs/sys/math.h>
 #include <ucs/stats/stats.h>
 #include <ucs/memory/rcache.h>
+#include <ucs/memory/rcache.inl>
 #include <ucs/memory/rcache_int.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
@@ -680,6 +681,32 @@ UCS_MT_TEST_F(test_rcache, shared_region, 6) {
     usleep(100);
     put(region2);
 
+    shared_free(mem);
+}
+
+UCS_MT_TEST_F(test_rcache, lookup_shared_region, 6) {
+    static const size_t size = 64 * 1024;
+    const int count          = 100000 / ucs::test_time_multiplier();
+    void *mem                = shared_malloc(size);
+    region *region1          = get(mem, size);
+    int hits                 = 0;
+    ucs_rcache_region_t *rregion;
+
+    for (int i = 0; i < count; ++i) {
+        rregion = ucs_rcache_lookup(m_rcache, mem, size, UCS_PGT_ADDR_ALIGN,
+                                    PROT_READ | PROT_WRITE);
+        if (rregion != NULL) {
+            EXPECT_EQ(&region1->super, rregion);
+            ++hits;
+            ucs_rcache_region_put(m_rcache, rregion);
+        }
+    }
+
+    EXPECT_GT(hits, 0);
+    barrier();
+    EXPECT_EQ(1u + num_threads(), region1->super.refcount);
+    barrier();
+    put(region1);
     shared_free(mem);
 }
 
