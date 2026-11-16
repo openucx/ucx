@@ -208,7 +208,7 @@ try_load_cuda_env() {
     # Check peer mem driver. Required on Azure only; other clusters (dlcluster,
     # funk) may provide GPUDirect RDMA through dmabuf without nvidia_peermem.
     if [ "x$RUNNING_IN_AZURE" = "xyes" ]; then
-        [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+        lsmod | grep -qP "^nv.*_peer.*mem\W" || return 0
     fi
 
     # Check number of available GPUs
