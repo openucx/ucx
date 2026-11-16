@@ -157,12 +157,6 @@ elif [[ "${RUN_CONTEXT}" == "release" ]]; then
     sed_runner "s|/blob/main/|/blob/release/${NEXT_SHORT_TAG}/|g" docs/ucxx/source/send_recv.rst
 fi
 
-# CI files - context-aware branch references
-for FILE in .github/workflows/*.yaml; do
-  sed_runner "/shared-workflows/ s|@.*|@${RAPIDS_BRANCH_NAME}|g" "${FILE}"
-  sed_runner "s|:[0-9]*\\.[0-9]*-|:${NEXT_RAPIDS_SHORT_TAG}-|g" "${FILE}"
-done
-
 # .devcontainer files
 find .devcontainer/ -type f -name devcontainer.json -print0 | while IFS= read -r -d '' filename; do
     sed_runner "s@rapidsai/devcontainers:[0-9.]*@rapidsai/devcontainers:${NEXT_RAPIDS_SHORT_TAG}@g" "${filename}"
