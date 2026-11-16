@@ -46,9 +46,6 @@ public:
                                    rma_op | TEST_OP_FLUSH,
                                    op_name(rma_op | TEST_OP_FLUSH));
         }
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
-                               TEST_OP_WIREUP | TEST_OP_PUT,
-                               op_name(TEST_OP_WIREUP | TEST_OP_PUT));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
                                op_name(TEST_OP_AM));
         add_variant_with_value(variants, UCP_FEATURE_AM,
@@ -376,9 +373,7 @@ protected:
     void test_put_am_flush_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
         const std::string op_str = op_name(op_mask);
 
-        if (!is_target_wireup(op_mask, failure_side)) {
-            flush_workers();
-        }
+        flush_workers();
 
         std::vector<ucp_lane_index_t> lanes = get_lanes(op_mask);
 
@@ -414,18 +409,9 @@ protected:
                     ucp_ep_flush_nbx(sender().ep(0, INJECTED_EP_INDEX),
                                      &m_req_empty_param));
 
-            if (lane_idx == 0) {
-                if (expect_completed(op_mask, failure_side, [&]() {
-                        return requests_wait(status_ptrs);
-                    })) {
-                    return;
-                }
-            } else {
-                status = requests_wait(status_ptrs);
-                EXPECT_EQ(UCS_OK, status) << op_str
-                                          << " completed with status: "
-                                          << ucs_status_string(status);
-            }
+            status = requests_wait(status_ptrs);
+            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                      << ucs_status_string(status);
 
             // Check that no other lanes have been affected
             for (ucp_lane_index_t valid_lane = lane_idx + 1; valid_lane < lanes.size();
@@ -449,21 +435,18 @@ protected:
     void test_am_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
         const std::string op_str = op_name(op_mask);
 
-        if (!is_target_wireup(op_mask, failure_side)) {
-            flush_workers();
+        flush_workers();
 
-            UCS_TEST_MESSAGE << "Attempting " << op_str
-                             << " operation before failure injection...";
-            ucs_status_t status = do_am_send_and_wait(
-                    sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                    op_mask & TEST_OP_FLUSH);
-            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
-                                      << ucs_status_string(status);
-        }
+        UCS_TEST_MESSAGE << "Attempting " << op_str
+                         << " operation before failure injection...";
+        ucs_status_t status = do_am_send_and_wait(
+                sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+                op_mask & TEST_OP_FLUSH);
+        EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                  << ucs_status_string(status);
 
         std::vector<ucp_lane_index_t> am_bw_lanes = get_lanes(op_mask);
 
-        ucs_status_t status;
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t num_lanes_to_fail = (op_mask & TEST_OP_ALL_LANES_FAILED) ? am_bw_lanes.size() :
                                         (am_bw_lanes.size() - 1),
@@ -493,22 +476,12 @@ protected:
                              << size_t(lane) << '/' << am_bw_lanes.size() << "...";
 
             if (!last_lane) {
-                if (lane_idx == 0) {
-                    if (expect_completed(op_mask, failure_side, [&]() {
-                            return do_am_send_and_wait(
-                                    sender().ep(0, INJECTED_EP_INDEX),
-                                    am_msg_size(), op_mask & TEST_OP_FLUSH);
-                        })) {
-                        return;
-                    }
-                } else {
-                    status = do_am_send_and_wait(
-                            sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                            op_mask & TEST_OP_FLUSH);
-                    EXPECT_EQ(UCS_OK, status) << op_str
-                                              << " completed with status: "
-                                              << ucs_status_string(status);
-                }
+                status = do_am_send_and_wait(
+                        sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+                        op_mask & TEST_OP_FLUSH);
+                EXPECT_EQ(UCS_OK, status) << op_str
+                                          << " completed with status: "
+                                          << ucs_status_string(status);
 
                 ASSERT_EQ(0, m_total_err_count)
                         << "Error callback invoked " << m_total_err_count
@@ -568,19 +541,16 @@ protected:
             rbuf.pattern_fill(m_seed);
         }
 
-        if (!is_target_wireup(op_mask, failure_side)) {
-            flush_workers();
+        flush_workers();
 
-            UCS_TEST_MESSAGE << "Attempting " << op_str
-                             << " operation before failure injection...";
-            ucs_status_t status = do_rma_and_wait(
-                    sender().ep(0, INJECTED_EP_INDEX), op_mask, lbuf, rbuf,
-                    rkey.get(), size);
-            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
-                                      << ucs_status_string(status);
-        }
+        UCS_TEST_MESSAGE << "Attempting " << op_str
+                         << " operation before failure injection...";
+        ucs_status_t status = do_rma_and_wait(
+                sender().ep(0, INJECTED_EP_INDEX), op_mask, lbuf, rbuf,
+                rkey.get(), size);
+        EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                  << ucs_status_string(status);
 
-        ucs_status_t status;
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t lane_idx = 0; lane_idx < rma_bw_lanes.size() - 1; ++lane_idx) {
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
@@ -597,21 +567,10 @@ protected:
                              << " operation after failure injection on lane "
                              << size_t(lane) << '/' << rma_bw_lanes.size()
                              << "...";
-            if (lane_idx == 0) {
-                if (expect_completed(op_mask, failure_side, [&]() {
-                        return do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                               op_mask, lbuf, rbuf, rkey.get(),
-                                               size);
-                    })) {
-                    return;
-                }
-            } else {
-                status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                         op_mask, lbuf, rbuf, rkey.get(), size);
-                EXPECT_EQ(UCS_OK, status) << op_str
-                                          << " completed with status: "
-                                          << ucs_status_string(status);
-            }
+            status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op_mask,
+                                     lbuf, rbuf, rkey.get(), size);
+            EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
+                                      << ucs_status_string(status);
 
             for (ucp_lane_index_t valid_lane = lane_idx + 1; valid_lane < rma_bw_lanes.size();
                  ++valid_lane) {
@@ -690,8 +649,50 @@ protected:
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
+    /* Destroy the peer before any wait, so the handshake cannot finish. */
+    void test_target_wireup() {
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        mem_buffer sbuf(am_msg_size(), UCS_MEMORY_TYPE_HOST);
+        ucs_status_t status;
+        ucs_time_t deadline;
+
+        sender().set_ib_ud_peer_timeout(3.);
+        {
+            scoped_log_handler slh(hide_errors_logger);
+
+            receiver().destroy_worker();
+            status = request_wait(ucp_am_send_nbx(ep, AM_ID, NULL, 0,
+                                                  sbuf.ptr(), am_msg_size(),
+                                                  &m_req_empty_param));
+        }
+
+        EXPECT_NE(UCS_INPROGRESS, status) <<
+                "operation timed out during wireup";
+
+        deadline = ucs::get_deadline();
+        while ((m_total_err_count == 0) && (ucs_get_time() < deadline)) {
+            short_progress_loop();
+        }
+
+        EXPECT_NE(0u, m_total_err_count) << "Error callback was not invoked";
+
+        /* Peer is gone, so cleanup must force-close instead of flushing. */
+        sender().add_err(UCS_ERR_ENDPOINT_TIMEOUT);
+    }
+
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
+
+        if (is_target_wireup(op_mask, failure_side)) {
+            test_target_wireup();
+            return;
+        }
+
+        if (op_mask & TEST_OP_WIREUP) {
+            /* The flush before injection completes the handshake. */
+            UCS_TEST_SKIP_R("initial wireup failure is covered by "
+                            "target_failure");
+        }
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
             test_put_am_flush_with_injected_failure(failure_side, op_mask);
@@ -701,11 +702,6 @@ protected:
         } else {
             ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_rma_with_injected_failure(failure_side, op_mask);
-        }
-
-        if (is_target_wireup(op_mask, failure_side) &&
-            (m_total_err_count > 0)) {
-            return;
         }
 
         test_recovery(op_mask);
@@ -980,33 +976,6 @@ protected:
     static ucs::mock        *m_probe_mock;
     static unsigned          m_probe_count;
 
-    bool wireup_op_failed(unsigned op_mask, failure_side_t failure_side,
-                          ucs_status_t status);
-
-    template <typename Op>
-    bool expect_completed(unsigned op_mask, failure_side_t failure_side, Op op)
-    {
-        ucs_status_t status;
-        {
-            std::unique_ptr<scoped_log_handler> slh;
-
-            if (is_target_wireup(op_mask, failure_side)) {
-                slh.reset(new scoped_log_handler(hide_errors_logger));
-            }
-
-            status = op();
-        }
-
-        if (wireup_op_failed(op_mask, failure_side, status)) {
-            return true;
-        }
-
-        EXPECT_EQ(UCS_OK, status) << op_name(op_mask)
-                                  << " completed with status: "
-                                  << ucs_status_string(status);
-        return false;
-    }
-
     void run_initiator_failure();
     void run_target_failure();
     void run_probe_gated_recovery();
@@ -1238,43 +1207,6 @@ void test_ucp_fault_tolerance::run_initiator_failure()
     }
 
     do_test(FAILURE_SIDE_INITIATOR);
-}
-
-bool test_ucp_fault_tolerance::wireup_op_failed(unsigned op_mask,
-                                                 failure_side_t failure_side,
-                                                 ucs_status_t status)
-{
-    ucs_time_t deadline;
-
-    if (!is_target_wireup(op_mask, failure_side) || (status == UCS_OK)) {
-        return false;
-    }
-
-    /* ASSERT_* returns void and cannot be used in this bool function. */
-    EXPECT_NE(UCS_INPROGRESS, status)
-            << "operation timed out during wireup";
-    if (status == UCS_INPROGRESS) {
-        return true;
-    }
-
-    deadline = ucs::get_deadline();
-    while ((m_total_err_count == 0) && (ucs_get_time() < deadline)) {
-        short_progress_loop();
-    }
-
-    if (failure_side == FAILURE_SIDE_INITIATOR) {
-        EXPECT_EQ(1, m_initiator_err_count)
-                << "Error callback invoked " << m_initiator_err_count
-                << " times";
-        EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
-                << "Error callback invoked " << m_total_err_count
-                << " times";
-    } else {
-        EXPECT_NE(0u, m_total_err_count)
-                << "Error callback was not invoked";
-    }
-
-    return true;
 }
 
 void test_ucp_fault_tolerance::run_target_failure()
