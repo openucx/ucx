@@ -1005,6 +1005,7 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
                        ucp_ep_num_lanes(ep) * sizeof(*state->bandwidth),
                        "ep_path_bw");
     if (state == NULL) {
+        ucs_error("ep %p: failed to allocate path bandwidth state", ep);
         return NULL;
     }
 
@@ -1016,6 +1017,7 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
 
     it = kh_put(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("ep %p: failed to add path bandwidth state to hash", ep);
         ucs_free(state);
         return NULL;
     }
