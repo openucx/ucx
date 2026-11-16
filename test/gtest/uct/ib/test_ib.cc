@@ -372,6 +372,15 @@ protected:
         return reachable;
     }
 
+    void check_unreachable(entity *from, entity *to,
+                           const std::string &expected_info)
+    {
+        std::string info;
+
+        EXPECT_FALSE(check_is_reachable(from, to, info));
+        EXPECT_EQ(expected_info, info);
+    }
+
     /* Packed device address length of an interface with the given fabric id */
     size_t fabric_id_addr_len(const std::string &fabric_id) {
         std::vector<uint8_t> dev_addr;
@@ -430,42 +439,30 @@ UCS_TEST_P(test_uct_ib_fabric_id, same_id_is_reachable) {
 }
 
 UCS_TEST_P(test_uct_ib_fabric_id, full_id_range) {
-    std::string info;
-
     create_entities("65534", "65535");
 
-    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id local 65534"));
-    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id local 65535"));
+    check_unreachable(m_e1, m_e2, "fabric id local 65534 remote 65535");
+    check_unreachable(m_e2, m_e1, "fabric id local 65535 remote 65534");
 
     cleanup_entities();
 }
 
 UCS_TEST_P(test_uct_ib_fabric_id, different_id_is_unreachable) {
-    std::string info;
-
     create_entities("10", "11");
 
-    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id"));
-    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id"));
+    check_unreachable(m_e1, m_e2, "fabric id local 10 remote 11");
+    check_unreachable(m_e2, m_e1, "fabric id local 11 remote 10");
 
     cleanup_entities();
 }
 
 UCS_TEST_P(test_uct_ib_fabric_id, missing_remote_id_is_unreachable) {
-    std::string info;
-
     create_entities("10", "0");
 
     /* An unset identifier is the default fabric, not a wildcard, so both
      * directions are rejected */
-    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id"));
-    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
-    EXPECT_NE(std::string::npos, info.find("fabric id"));
+    check_unreachable(m_e1, m_e2, "fabric id local 10 remote 0");
+    check_unreachable(m_e2, m_e1, "fabric id local 0 remote 10");
 
     cleanup_entities();
 }

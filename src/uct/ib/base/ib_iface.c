@@ -241,14 +241,15 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
 
   {"FABRIC_ID", "0",
-   "Administrative identifier of the fabric this device is attached to, as a\n"
-   "decimal number. The interface only considers peers whose device reports\n"
-   "the same identifier, so it must be configured consistently on every\n"
-   "process in the job. Value 0 selects the default fabric, which is\n"
-   "enforced as well: an interface on the default fabric and one on any\n"
-   "other fabric cannot reach each other. Values above 65535 are rejected.\n"
-   "Requires peers running a UCX version which supports this option, older\n"
-   "peers report the default fabric and may still consider us reachable.",
+   "Administrative identifier of the fabric, as a decimal number. The same\n"
+   "value applies to every device used by the process. An interface only\n"
+   "considers peers whose device reports the same identifier, so it must be\n"
+   "configured consistently on every process in the job. Value 0 selects the\n"
+   "default fabric, which is enforced as well: an interface on the default\n"
+   "fabric and one on any other fabric cannot reach each other. Values above\n"
+   "65535 are rejected. Requires peers running a UCX version which supports\n"
+   "this option, older peers report the default fabric and may still\n"
+   "consider us reachable.",
    ucs_offsetof(uct_ib_iface_config_t, fabric_id), UCS_CONFIG_TYPE_UINT},
 
   {"PATH_MTU", "default",
