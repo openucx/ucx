@@ -110,9 +110,12 @@ typedef enum {
  * @ingroup UCS_RESOURCE
  * Properties of a system device, set by the owning transport.
  */
+/* clang-format off */
 typedef enum {
-    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0) /**< DPU device (e.g. BlueField) */
+    UCS_TOPO_DEVICE_FLAG_DPU   = UCS_BIT(0), /**< DPU device (e.g. BlueField) */
+    UCS_TOPO_DEVICE_FLAG_RUBIN = UCS_BIT(1)  /**< NVIDIA Rubin GPU */
 } ucs_topo_device_flags_t;
+/* clang-format on */
 
 
 /**
@@ -481,6 +484,16 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 ucs_status_t
 ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                               ucs_topo_device_class_t device_class);
+
+/**
+ * Get the device class of a given system device.
+ *
+ * @param [in]  sys_dev  System device index.
+ *
+ * @return Class of the device, or @ref UCS_TOPO_DEVICE_CLASS_UNKNOWN if the
+ *         system device is unknown or invalid.
+ */
+ucs_topo_device_class_t ucs_topo_sys_device_get_class(ucs_sys_device_t sys_dev);
 
 /**
  * Add flags to a given system device.

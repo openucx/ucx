@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -56,6 +56,7 @@
     _macro(nvmlDeviceGetFieldValues, _fail_action); \
     _macro(nvmlDeviceGetP2PStatus, _fail_action); \
     _macro(nvmlDeviceGetNvLinkRemotePciInfo, _fail_action); \
+    _macro(nvmlDeviceGetArchitecture, _fail_action); \
     _macro(nvmlShutdown, _fail_action)
 
 #define UCT_CUDA_NVML_FPTR_CALL(_func, ...) \

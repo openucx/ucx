@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,6 +11,10 @@
 #include <ucs/type/status.h>
 
 #include <nvml.h>
+
+
+/* NVML_DEVICE_ARCH_RUBIN of NVML r610, missing in older versions of nvml.h  */
+#define UCT_CUDA_NVML_DEVICE_ARCH_RUBIN 13
 
 
 /**
@@ -42,7 +46,8 @@
     _macro(nvmlDeviceGetP2PStatus, nvmlDevice_t, nvmlDevice_t, \
            nvmlGpuP2PCapsIndex_t, nvmlGpuP2PStatus_t*); \
     _macro(nvmlDeviceGetNvLinkRemotePciInfo, nvmlDevice_t, unsigned int, \
-           nvmlPciInfo_t*)
+           nvmlPciInfo_t*); \
+    _macro(nvmlDeviceGetArchitecture, nvmlDevice_t, nvmlDeviceArchitecture_t*)
 
 
 UCT_CUDA_NVML_FOR_EACH(UCT_CUDA_NVML_WRAP_DECL);
