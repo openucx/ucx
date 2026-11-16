@@ -84,10 +84,20 @@ case "$phase" in
     mkdir -p "$RAPIDS_DOCS_DIR" ;;
 esac
 
+mkdir -p "$HOME/.local/bin"
+# UCXX lives inside the UCX repository, whose Git tags describe UCX. Capture
+# its own version before wheel builds redirect the generated version to VERSION.
+UCXX_SOURCE_VERSION=$(cat "$UCXX_DIR/VERSION")
+export UCXX_SOURCE_VERSION
+cat > "$HOME/.local/bin/rapids-generate-version" <<'EOF'
+#!/bin/bash
+printf '%s%s\n' "$UCXX_SOURCE_VERSION" "${RAPIDS_VERSION_SUFFIX:-}"
+EOF
+chmod +x "$HOME/.local/bin/rapids-generate-version"
+
 # The ucxx CI scripts fetch artifacts of previous jobs through
 # rapids-download-from-github; shim it to the locally staged output so the
 # jobs resolve this pipeline's artifacts instead of GitHub's.
-mkdir -p "$HOME/.local/bin"
 printf '#!/bin/bash\necho "%s"\n' "$RAPIDS_BLD_OUTPUT_DIR" \
   > "$HOME/.local/bin/rapids-download-from-github"
 chmod +x "$HOME/.local/bin/rapids-download-from-github"

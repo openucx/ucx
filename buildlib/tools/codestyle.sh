@@ -32,6 +32,11 @@ codespell_skip_args() {
 codestyle_check_spell() {
     python3 -m venv /tmp/codespell_env
     source /tmp/codespell_env/bin/activate
-    pip3 install codespell
-    codespell $(codespell_skip_args) "$@"
+    pip3 install 'codespell[toml]'
+    codespell $(codespell_skip_args) "$@" || return
+    # Keep the imported UCXX project's upstream spelling rules.
+    (
+        cd bindings/ucxx
+        codespell --toml pyproject.toml --skip '*test*,CHANGELOG.md'
+    )
 }
