@@ -30,6 +30,9 @@ jobs:
           sles16sp0:
             CONTAINER: sles16sp0
             build_mode: short
+          rhel82:
+            CONTAINER: rhel82
+            build_mode: sanity
           rhel90:
             CONTAINER: rhel90
             build_mode: short
