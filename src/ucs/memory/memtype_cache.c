@@ -30,12 +30,22 @@ static int ucs_memtype_cache_failed                    = 0;
 ucs_memtype_cache_t *ucs_memtype_cache_global_instance = NULL;
 
 
-#define UCS_MEMTYPE_CACHE_REGION_FMT UCS_PGT_REGION_FMT " %s dev %s flags 0x%x"
+/* Attributes of a memory range, kept by both the memtype cache and map */
+typedef struct {
+    ucs_memory_type_t mem_type;  /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t  sys_dev;   /**< System device index */
+    uint8_t           mem_flags; /**< UCS memory flags */
+} ucs_memtype_attr_t;
+
+#define UCS_MEMTYPE_ATTR_FMT "%s dev %s flags 0x%x"
+#define UCS_MEMTYPE_ATTR_ARG(_attr) \
+            ucs_memory_type_names[(_attr)->mem_type], \
+            ucs_topo_sys_device_get_name((_attr)->sys_dev), (_attr)->mem_flags
+
+#define UCS_MEMTYPE_CACHE_REGION_FMT UCS_PGT_REGION_FMT " " UCS_MEMTYPE_ATTR_FMT
 #define UCS_MEMTYPE_CACHE_REGION_ARG(_region) \
             UCS_PGT_REGION_ARG(&(_region)->super), \
-            ucs_memory_type_names[(_region)->mem_type], \
-            ucs_topo_sys_device_get_name((_region)->sys_dev), \
-            (_region)->mem_flags
+            UCS_MEMTYPE_ATTR_ARG(&(_region)->attr)
 
 typedef enum {
     UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE,
@@ -43,29 +53,34 @@ typedef enum {
 } ucs_memtype_cache_action_t;
 
 struct ucs_memtype_cache_region {
-    ucs_pgt_region_t  super;     /**< Base class - page table region */
-    ucs_list_link_t   list;      /**< List element */
-    ucs_memory_type_t mem_type;  /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t  sys_dev;   /**< System device index */
-    uint8_t           mem_flags; /**< UCS memory flags */
+    ucs_pgt_region_t   super; /**< Base class - page table region */
+    ucs_list_link_t    list;  /**< List element */
+    ucs_memtype_attr_t attr;  /**< Memory attributes */
 };
 
 
 /* Registration of a range in the memtype map, used when UCM events are
  * disabled */
 typedef struct {
-    ucs_interval_map_node_t super;     /**< Registered range, must be first */
-    ucs_memory_type_t       mem_type;  /**< Memory type */
-    ucs_sys_device_t        sys_dev;   /**< System device index */
-    uint8_t                 mem_flags; /**< UCS memory flags */
+    ucs_interval_map_node_t super; /**< Registered range, must be first */
+    ucs_memtype_attr_t      attr;  /**< Memory attributes */
 } ucs_memtype_map_entry_t;
 
-#define UCS_MEMTYPE_MAP_ENTRY_FMT "%p [0x%lx..0x%lx] %s dev %s flags 0x%x"
+#define UCS_MEMTYPE_MAP_ENTRY_FMT "%p [0x%lx..0x%lx] " UCS_MEMTYPE_ATTR_FMT
 #define UCS_MEMTYPE_MAP_ENTRY_ARG(_entry) \
             (_entry), (_entry)->super.start, (_entry)->super.end, \
-            ucs_memory_type_names[(_entry)->mem_type], \
-            ucs_topo_sys_device_get_name((_entry)->sys_dev), \
-            (_entry)->mem_flags
+            UCS_MEMTYPE_ATTR_ARG(&(_entry)->attr)
+
+static UCS_F_ALWAYS_INLINE void
+ucs_memtype_attr_get_info(const ucs_memtype_attr_t *attr, uint64_t start,
+                          uint64_t end, ucs_memory_info_t *mem_info)
+{
+    mem_info->base_address = (void*)start;
+    mem_info->alloc_length = end - start;
+    mem_info->type         = attr->mem_type;
+    mem_info->sys_dev      = attr->sys_dev;
+    mem_info->mem_flags    = attr->mem_flags;
+}
 
 /* Context of a search for an entry registered with exactly the same range */
 typedef struct {
@@ -169,9 +184,7 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
  */
 static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
                                      ucs_pgt_addr_t start, ucs_pgt_addr_t end,
-                                     ucs_memory_type_t mem_type,
-                                     ucs_sys_device_t sys_dev,
-                                     uint8_t mem_flags)
+                                     const ucs_memtype_attr_t *attr)
 {
     ucs_memtype_cache_region_t *region;
     ucs_status_t status;
@@ -192,9 +205,7 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
 
     region->super.start = start;
     region->super.end   = end;
-    region->mem_type    = mem_type;
-    region->sys_dev     = sys_dev;
-    region->mem_flags   = mem_flags;
+    region->attr        = *attr;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert, &memtype_cache->pgtable,
                               &region->super);
@@ -228,6 +239,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       ucs_sys_device_t sys_dev, uint8_t mem_flags,
                       ucs_memtype_cache_action_t action)
 {
+    const ucs_memtype_attr_t attr = {mem_type, sys_dev, mem_flags};
     ucs_pgt_addr_t start, end, search_start, search_end;
     ucs_memtype_cache_region_t *region, *tmp;
     UCS_LIST_HEAD(region_list);
@@ -240,11 +252,10 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
     end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 
-    ucs_trace("%s: [0x%lx..0x%lx] mem_type %s dev %s flags 0x%x",
+    ucs_trace("%s: [0x%lx..0x%lx] " UCS_MEMTYPE_ATTR_FMT,
               (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) ? "update" :
                                                                  "remove",
-              start, end, ucs_memory_type_names[mem_type],
-              ucs_topo_sys_device_get_name(sys_dev), mem_flags);
+              start, end, UCS_MEMTYPE_ATTR_ARG(&attr));
 
     search_start = start;
     search_end   = end - 1;
@@ -257,8 +268,8 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                              &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
-            if ((region->mem_type == mem_type) &&
-                (region->mem_flags == mem_flags)) {
+            if ((region->attr.mem_type == mem_type) &&
+                (region->attr.mem_flags == mem_flags)) {
                 /* merge current region with overlapping or adjacent regions
                  * of same memory type and flags */
                 start = ucs_min(start, region->super.start);
@@ -288,8 +299,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     }
 
     if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
-        ucs_memtype_cache_insert(memtype_cache, start, end, mem_type, sys_dev,
-                                 mem_flags);
+        ucs_memtype_cache_insert(memtype_cache, start, end, &attr);
     }
 
     /* slice old regions by the new region, to preserve the previous memory type
@@ -299,14 +309,12 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
         if (start > region->super.start) {
             /* create previous region */
             ucs_memtype_cache_insert(memtype_cache, region->super.start, start,
-                                     region->mem_type, region->sys_dev,
-                                     region->mem_flags);
+                                     &region->attr);
         }
         if (end < region->super.end) {
             /* create next region */
             ucs_memtype_cache_insert(memtype_cache, end, region->super.end,
-                                     region->mem_type, region->sys_dev,
-                                     region->mem_flags);
+                                     &region->attr);
         }
 
         ucs_free(region);
@@ -410,10 +418,10 @@ static void ucs_memtype_map_check_overlap_cb(ucs_interval_map_node_t *node,
     const ucs_memtype_map_entry_t *entry     =
             ucs_derived_of(node, ucs_memtype_map_entry_t);
 
-    ucs_assertv(entry->mem_type == new_entry->mem_type,
+    ucs_assertv(entry->attr.mem_type == new_entry->attr.mem_type,
                 "overlapping registrations of %s and %s memory",
-                ucs_memory_type_names[entry->mem_type],
-                ucs_memory_type_names[new_entry->mem_type]);
+                ucs_memory_type_names[entry->attr.mem_type],
+                ucs_memory_type_names[new_entry->attr.mem_type]);
 }
 #endif
 
@@ -437,9 +445,9 @@ void ucs_memtype_map_register(const void *address, size_t size,
         return;
     }
 
-    entry->mem_type  = mem_type;
-    entry->sys_dev   = sys_dev;
-    entry->mem_flags = mem_flags;
+    entry->attr.mem_type  = mem_type;
+    entry->attr.sys_dev   = sys_dev;
+    entry->attr.mem_flags = mem_flags;
 
     ucs_spin_lock(&ucs_memtype_map_lock);
 #if UCS_ENABLE_ASSERT
@@ -508,12 +516,9 @@ ucs_memtype_map_lookup(uint64_t start, size_t size,
     } else {
         entry                  = ucs_derived_of(node,
                                                 ucs_memtype_map_entry_t);
-        mem_info->base_address = (void*)node->start;
-        mem_info->alloc_length = node->end - node->start;
-        mem_info->type         = entry->mem_type;
-        mem_info->sys_dev      = entry->sys_dev;
-        mem_info->mem_flags    = entry->mem_flags;
-        status                 = UCS_OK;
+        ucs_memtype_attr_get_info(&entry->attr, node->start, node->end,
+                                  mem_info);
+        status = UCS_OK;
     }
     ucs_spin_unlock(&ucs_memtype_map_lock);
 
@@ -531,8 +536,8 @@ static void ucs_memtype_map_cleanup(void)
          * released when the cleanup runs from ucs_cleanup() */
         ucs_debug("memtype_map: leftover registration %p [0x%lx..0x%lx] %s "
                   "dev %u flags 0x%x", entry, node->start, node->end,
-                  ucs_memory_type_names[entry->mem_type], entry->sys_dev,
-                  entry->mem_flags);
+                  ucs_memory_type_names[entry->attr.mem_type],
+                  entry->attr.sys_dev, entry->attr.mem_flags);
         ucs_free(entry);
     }
 
@@ -565,11 +570,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
 
     region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
     if (ucs_likely((start + size) <= pgt_region->end)) {
-        mem_info->base_address = (void*)region->super.start;
-        mem_info->alloc_length = region->super.end - region->super.start;
-        mem_info->type         = region->mem_type;
-        mem_info->sys_dev      = region->sys_dev;
-        mem_info->mem_flags    = region->mem_flags;
+        ucs_memtype_attr_get_info(&region->attr, region->super.start,
+                                  region->super.end, mem_info);
         ucs_trace_data("0x%lx..0x%lx found in " UCS_MEMTYPE_CACHE_REGION_FMT,
                        start, start + size,
                        UCS_MEMTYPE_CACHE_REGION_ARG(region));
