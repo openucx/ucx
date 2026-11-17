@@ -88,7 +88,7 @@ typedef enum ucp_transports_list_search_result {
 } ucp_transports_list_search_result_t;
 
 
-/* Declare all am handlers */
+/* Declare all AM handlers */
 UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_DECL)
 
 ucp_am_handler_t *ucp_am_handlers[UCP_AM_ID_LAST] = {
