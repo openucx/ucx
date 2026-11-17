@@ -13,7 +13,6 @@
 
 #include <ucm/event/event.h>
 #include <ucm/mmap/mmap.h>
-#include <ucm/util/hook.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
@@ -333,7 +332,7 @@ static ucs_status_t ucm_cudamem_install(int events)
 
     pthread_mutex_lock(&install_mutex);
 
-    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver",
+    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver API",
                                UCM_MMAP_HOOK_BISTRO,
                                ucm_global_opts.cuda_hook_modes,
                                &driver_api_hooks);
@@ -341,7 +340,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out_unlock;
     }
 
-    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver",
+    status = ucm_install_hooks(ucm_cuda_driver_funcs, "cuda driver API",
                                UCM_MMAP_HOOK_RELOC,
                                ucm_global_opts.cuda_hook_modes,
                                &driver_api_hooks);
@@ -349,7 +348,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out_unlock;
     }
 
-    status = ucm_install_hooks(ucm_cuda_runtime_funcs, "cuda runtime",
+    status = ucm_install_hooks(ucm_cuda_runtime_funcs, "cuda runtime API",
                                UCM_MMAP_HOOK_RELOC,
                                ucm_global_opts.cuda_hook_modes,
                                &runtime_api_hooks);

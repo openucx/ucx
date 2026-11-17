@@ -11,7 +11,6 @@
 
 #include <ucm/event/event.h>
 #include <ucm/mmap/mmap.h>
-#include <ucm/util/hook.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
