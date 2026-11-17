@@ -110,7 +110,7 @@ enum uct_perf_attr_field {
  */
 typedef enum {
     /** TX operations can depend on unrelated RX operation completion */
-    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0),
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED          = UCS_BIT(0),
 
     /** Paths share the interface bandwidth reported in
      * @ref uct_perf_attr_t::bandwidth. Limit their aggregate bandwidth to this

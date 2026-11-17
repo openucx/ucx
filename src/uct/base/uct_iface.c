@@ -208,6 +208,7 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
+    /* Initialize output flags for transports which do not report them. */
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
         perf_attr->flags = 0;
     }
