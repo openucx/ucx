@@ -22,7 +22,7 @@ extern "C" {
  * passing it to the check. On systems without MNNVL or IMEX, MNNVL and fabric
  * support of the MD are emulated as well, so that the check runs on any CUDA
  * system. */
-class test_cuda_ipc_iface_nvlink_domain : public uct_test {
+class test_cuda_ipc_iface_reachability : public uct_test {
 protected:
     void init() override
     {
@@ -148,7 +148,7 @@ protected:
 
 /* Peers on the same host are reachable regardless of the NVLink domain, which
  * is checked only against other hosts */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_host)
+UCS_TEST_P(test_cuda_ipc_iface_reachability, same_host)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -166,7 +166,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_host)
 
 /* A remote peer that does not send its NVLink domain and IMEX channel must keep
  * the previous behavior: reachable whenever both sides support MNNVL. */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, older_peer)
+UCS_TEST_P(test_cuda_ipc_iface_reachability, older_peer)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -179,7 +179,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, older_peer)
 }
 
 /* Peers on another host are reachable only within the same NVLink domain */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
+UCS_TEST_P(test_cuda_ipc_iface_reachability, remote_host)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -196,7 +196,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
 
 /* A remote peer running v1.23 sends the NVLink domain but not the IMEX
  * channel: the domain is checked, and the channel is not. */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_peer)
+UCS_TEST_P(test_cuda_ipc_iface_reachability, v1_23_peer)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -224,7 +224,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_peer)
 
 /* Peers on another host in the same NVLink domain are reachable only if both
  * have access to the same IMEX channel */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host_imex)
+UCS_TEST_P(test_cuda_ipc_iface_reachability, remote_host_imex)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -252,4 +252,4 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host_imex)
                             "remote=1")) << info;
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_iface_nvlink_domain, cuda_ipc)
+_UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_iface_reachability, cuda_ipc)

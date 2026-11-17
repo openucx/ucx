@@ -119,9 +119,10 @@ static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
 }
 
 /* Find the lowest IMEX channel accessible by the process. The GPU driver uses
- * the lowest accessible channel for all fabric handle operations. */
+ * the lowest accessible channel for all fabric handle operations, see
+ * https://docs.nvidia.com/multi-node-nvlink-systems/imex-guide/imexchannels.html */
 static ucs_status_t
-uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
+uct_cuda_ipc_md_find_imex_channel_cb(const struct dirent *entry, void *arg)
 {
     static const char channel_prefix[] = "channel";
     uint32_t *imex_channel_p           = arg;
@@ -168,7 +169,7 @@ static uint32_t uct_cuda_ipc_md_get_imex_channel(void)
     }
 
     if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
-                        uct_cuda_ipc_md_check_imex_channel_cb,
+                        uct_cuda_ipc_md_find_imex_channel_cb,
                         &imex_channel) != UCS_OK) {
         return UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     }
