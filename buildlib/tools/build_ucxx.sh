@@ -43,8 +43,7 @@ fi
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
-ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
-export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
+export UCX_PR_PREFIX=/tmp/ucx-pr
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 # upstream test-env matrices select the dependency set via this key
