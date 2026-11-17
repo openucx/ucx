@@ -3677,6 +3677,12 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     uct_ep    = ucp_ep_get_lane(ep, lane);
     rsc_index = ucp_ep_get_rsc_index(ep, lane);
 
+    /* When wireup fails to connect the lanes of a new configuration, they
+     * stay unset until the scheduled endpoint failure runs */
+    if (uct_ep == NULL) {
+        goto out_done;
+    }
+
     ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
                 (lane == ucp_ep_get_cm_lane(ep)),
                 "ep=%p cm_lane=%u lane=%u rsc_index=%u",
