@@ -142,11 +142,9 @@ protected:
         test_ucp_fault_tolerance *self =
             reinterpret_cast<test_ucp_fault_tolerance*>(arg);
 
-        if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
-            self->m_am_rbuf.resize(length);
-            memcpy(self->m_am_rbuf.data(), data, length);
-            self->m_am_received = true;
-        }
+        self->m_am_rbuf.resize(length);
+        memcpy(self->m_am_rbuf.data(), data, length);
+        self->m_am_received = true;
 
         EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) <<
                 "RNDV is not covered yet";

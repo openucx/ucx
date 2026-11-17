@@ -116,6 +116,20 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
+    /* Token purge copies the inline payload and reposts it. The short
+     * fast path posts on am_lane, so this protocol has to use that lane. */
+    if ((init_params->ep_config_key->err_mode ==
+         UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        (init_params->worker->context->config.ext.failover_mode ==
+         UCP_FAILOVER_MODE_TOKEN)) {
+        ucp_lane_index_t am_lane = init_params->ep_config_key->am_lane;
+
+        params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+        if (am_lane != UCP_NULL_LANE) {
+            params.super.exclude_map |= ~(ucp_lane_map_t)UCS_BIT(am_lane);
+        }
+    }
+
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         !ucp_proto_is_short_supported(select_param)) {
