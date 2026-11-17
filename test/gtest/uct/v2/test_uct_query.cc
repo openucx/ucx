@@ -84,17 +84,26 @@ uct_perf_attr_t test_uct_query::init_perf_attr()
 
 UCS_TEST_P(test_uct_query, query_perf)
 {
-    auto perf_attr        = init_perf_attr();
+    auto perf_attr = init_perf_attr();
+    uint64_t flags;
+
     perf_attr.field_mask |= UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                             UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                             UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                            UCT_PERF_ATTR_FIELD_BANDWIDTH;
+                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                            UCT_PERF_ATTR_FIELD_FLAGS;
     EXPECT_EQ(iface_estimate_perf(&perf_attr),
               has_transport("cuda_copy") ? UCS_ERR_UNSUPPORTED : UCS_OK);
 
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
     perf_attr.operation          = UCT_EP_OP_PUT_SHORT;
-    EXPECT_EQ(iface_estimate_perf(&perf_attr), UCS_OK);
+    perf_attr.flags              = 0;
+    ASSERT_UCS_OK(iface_estimate_perf(&perf_attr));
+
+    flags           = perf_attr.flags;
+    perf_attr.flags = UINT64_MAX;
+    ASSERT_UCS_OK(iface_estimate_perf(&perf_attr));
+    EXPECT_EQ(flags, perf_attr.flags);
 
     /* At least one type of bandwidth must be non-zero */
     EXPECT_NE(0, perf_attr.bandwidth.shared + perf_attr.bandwidth.dedicated);
@@ -115,6 +124,7 @@ UCS_TEST_P(test_uct_query, query_perf)
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
+UCT_INSTANTIATE_ZE_TEST_CASE(test_uct_query)
 
 class test_uct_query_ib : public test_uct_query {
 public:

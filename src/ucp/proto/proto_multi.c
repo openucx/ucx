@@ -701,8 +701,8 @@ static void ucp_proto_multi_limit_iface_bandwidth(
         const ucp_proto_common_tl_perf_t *lanes_perf,
         ucp_proto_common_tl_perf_t *perf)
 {
-    ucp_lane_map_t lane_map  = selection->lane_map;
-    double         bandwidth = perf->bandwidth;
+    ucp_lane_map_t lane_map = selection->lane_map;
+    double bandwidth        = perf->bandwidth;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, iface_lane;
     double iface_bandwidth, iface_weight;
