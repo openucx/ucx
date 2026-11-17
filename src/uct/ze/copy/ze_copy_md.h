@@ -33,7 +33,7 @@ typedef struct uct_ze_copy_md_config {
     uct_md_config_t          super;
     int                      device_ordinal;
     ucs_ternary_auto_value_t enable_dmabuf;
-    int                      host_import;
+    ucs_ternary_auto_value_t host_import;
 } uct_ze_copy_md_config_t;
 
 
@@ -62,7 +62,7 @@ typedef struct uct_ze_copy_host_import {
 
 /**
  * @return Host pointer import entry points, or NULL when the loader or the
- *         driver does not provide them.
+ *         driver does not provide them, or the driver disabled the feature.
  */
 const uct_ze_copy_host_import_t *uct_ze_copy_md_get_host_import(void);
 

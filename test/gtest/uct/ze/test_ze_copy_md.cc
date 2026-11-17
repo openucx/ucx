@@ -187,7 +187,7 @@ UCS_TEST_P(test_ze_copy_md, mem_query_base_and_length) {
  * Registering host memory imports it into the driver; deregistering releases
  * the import.
  */
-UCS_TEST_P(test_ze_copy_md, host_import_reg_dereg, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_md, host_import_reg_dereg, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr = buf.data();
@@ -205,7 +205,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_reg_dereg, "ZE_COPY_HOST_IMPORT=y") {
  * Registrations of the same range, and of a range inside it, share one
  * import that stays until the last of them is deregistered, in any order.
  */
-UCS_TEST_P(test_ze_copy_md, host_import_shared, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_md, host_import_shared, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr = buf.data();
@@ -232,7 +232,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_shared, "ZE_COPY_HOST_IMPORT=y") {
  * import.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_shared_by_mds,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr = buf.data();
@@ -256,7 +256,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_shared_by_mds,
  * own MD, share one import. It stays until the last registration is released,
  * including when both are released at the same time.
  */
-UCS_TEST_P(test_ze_copy_md, host_import_shared_mt, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_md, host_import_shared_mt, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr = buf.data();
@@ -300,7 +300,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_shared_mt, "ZE_COPY_HOST_IMPORT=y") {
  * unimported, and deregistering it must not release that import.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_partial_overlap,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(4 * CHUNK);
     char *ptr    = buf.data();
@@ -332,7 +332,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_partial_overlap,
  * An import of ours inside a later, larger import of ours: both are owned
  * and released independently, in either order.
  */
-UCS_TEST_P(test_ze_copy_md, host_import_nested, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_md, host_import_nested, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(3 * CHUNK);
     char *ptr       = buf.data();
@@ -375,7 +375,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_nested, "ZE_COPY_HOST_IMPORT=y") {
  * Imports made by the application are used but never released: a range
  * inside one borrows it, a range around one gets an import of its own.
  */
-UCS_TEST_P(test_ze_copy_md, host_import_foreign, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_md, host_import_foreign, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(3 * CHUNK);
     char *ptr     = buf.data();
@@ -406,7 +406,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_foreign, "ZE_COPY_HOST_IMPORT=y") {
  * deregistering both registrations must not release anything twice.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_released_by_foreign,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr   = buf.data();
@@ -433,7 +433,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_released_by_foreign,
  * Level Zero allocations are not imported.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_skips_ze_memory,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
 
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_HOST)) {
@@ -458,6 +458,31 @@ UCS_TEST_P(test_ze_copy_md, host_import_disabled, "ZE_COPY_HOST_IMPORT=n") {
     uct_mem_h memh = mem_reg(md(), ptr, buf.size());
     EXPECT_TRUE(import_base(hi, ptr) == NULL);
     mem_dereg(md(), memh);
+}
+
+
+/*
+ * HOST_IMPORT=y opens the MD only when the driver can import host memory.
+ */
+UCS_TEST_P(test_ze_copy_md, host_import_required, "ZE_COPY_HOST_IMPORT=try") {
+    uct_md_h md_y;
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(uct_config_modify(m_md_config, "ZE_COPY_HOST_IMPORT", "y"));
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = uct_md_open(GetParam().component, GetParam().md_name.c_str(),
+                             m_md_config, &md_y);
+    }
+
+    if (uct_ze_copy_md_get_host_import() == NULL) {
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+        return;
+    }
+
+    ASSERT_UCS_OK(status);
+    EXPECT_TRUE(ucs_derived_of(md_y, uct_ze_copy_md_t)->host_import);
+    uct_md_close(md_y);
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ze_copy_md, ze_cpy)

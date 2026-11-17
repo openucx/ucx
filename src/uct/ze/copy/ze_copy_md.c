@@ -50,12 +50,13 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
      "host memory for RDMA.",
      ucs_offsetof(uct_ze_copy_md_config_t, enable_dmabuf),
      UCS_CONFIG_TYPE_TERNARY},
-    {"HOST_IMPORT", "y",
+    {"HOST_IMPORT", "try",
      "Import host memory into the Level Zero driver when it is registered, so\n"
      "that copies to and from it reuse one driver allocation instead of\n"
-     "mapping the range again for every copy.",
+     "mapping the range again for every copy. With 'y', opening the memory\n"
+     "domain fails if the driver cannot import host memory.",
      ucs_offsetof(uct_ze_copy_md_config_t, host_import),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_TERNARY},
 
     {NULL}
 };
@@ -138,7 +139,7 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
     uct_ze_copy_host_import_t *funcs        = &registry->funcs;
     uct_ze_copy_translate_handle_func_t translate;
-    void *driver_handle, *import, *release, *get_base;
+    void *driver_handle, *import, *release, *get_base, *base;
     ze_result_t ret;
 
     /* The extension bypasses the loader, so it needs the driver's own handle.
@@ -166,6 +167,13 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
         (uct_ze_copy_import_get_func(driver,
                                      "zexDriverGetHostPointerBaseAddress",
                                      &get_base) != UCS_OK)) {
+        return;
+    }
+
+    /* The driver may provide the entry points with the feature disabled */
+    ret = ((uct_ze_copy_get_base_func_t)get_base)(driver_handle, &base, &base);
+    if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
+        ucs_debug("level zero driver does not support host pointer import");
         return;
     }
 
@@ -234,8 +242,8 @@ static ucs_status_t uct_ze_copy_import_create(void *address, size_t length,
 
     iter = kh_put(ze_copy_import, hash, (uintptr_t)address, &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        ucs_error("failed to add host memory %p to the ze_copy import registry",
-                  address);
+        ucs_log(log_level, "failed to add %p to the ze_copy import registry",
+                address);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -268,8 +276,8 @@ static ucs_status_t uct_ze_copy_import_create(void *address, size_t length,
  * that shares only one end with an existing import, so such a range stays
  * unimported: copies still work, the driver just maps the range per copy.
  */
-static void uct_ze_copy_import_register(void *address, size_t length,
-                                        uint64_t flags, uct_mem_h *memh_p)
+static void uct_ze_copy_import_acquire(void *address, size_t length,
+                                       uint64_t flags, uct_mem_h *memh_p)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
     void *end                               = UCS_PTR_BYTE_OFFSET(address,
@@ -513,7 +521,7 @@ uct_ze_copy_mem_reg(uct_md_h tl_md, void *address, size_t length,
     }
 
     flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    uct_ze_copy_import_register(address, length, flags, memh_p);
+    uct_ze_copy_import_acquire(address, length, flags, memh_p);
     return UCS_OK;
 }
 
@@ -692,7 +700,7 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     ze_context_desc_t context_desc = {};
     ze_result_t ret;
     const uct_ze_subdevice_t *subdevice;
-    int dmabuf_supported;
+    int dmabuf_supported, host_import_supported;
     ucs_status_t status;
 
     ze_driver = uct_ze_base_get_driver();
@@ -730,6 +738,13 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         goto err_free_md;
     }
 
+    host_import_supported = (uct_ze_copy_md_get_host_import() != NULL);
+    if ((config->host_import == UCS_YES) && !host_import_supported) {
+        ucs_error("%s: Level Zero driver cannot import host memory", md_name);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_md;
+    }
+
     ret = zeContextCreate(ze_driver, &context_desc, &md->ze_context);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeContextCreate failed with error %x", ret);
@@ -739,8 +754,8 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
 
     md->dmabuf_supported = (config->enable_dmabuf != UCS_NO) &&
                            dmabuf_supported;
-    md->host_import      = config->host_import &&
-                           (uct_ze_copy_md_get_host_import() != NULL);
+    md->host_import      = (config->host_import != UCS_NO) &&
+                           host_import_supported;
     md->super.ops        = &md_ops;
     md->super.component  = &uct_ze_copy_component;
     ucs_debug("ze_copy md %p: host memory import %s", md,

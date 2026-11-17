@@ -131,17 +131,17 @@ protected:
 };
 
 
-UCS_TEST_P(test_ze_copy_import_rma, inside_import, "ZE_COPY_HOST_IMPORT=y") {
+UCS_TEST_P(test_ze_copy_import_rma, inside_import, "ZE_COPY_HOST_IMPORT=try") {
     test_copy({{0, 4}});
 }
 
 UCS_TEST_P(test_ze_copy_import_rma, across_two_imports,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     test_copy({{0, 2}, {2, 2}});
 }
 
 UCS_TEST_P(test_ze_copy_import_rma, across_import_end,
-           "ZE_COPY_HOST_IMPORT=y") {
+           "ZE_COPY_HOST_IMPORT=try") {
     test_copy({{0, 2}});
 }
 
