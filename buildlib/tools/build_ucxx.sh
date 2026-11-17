@@ -103,10 +103,8 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$UCXX_DIR"
 
 # Point every ucxx build at the PR's UCX instead of released ucx, through
-# the ucxx UCXX_NO_LIBUCX switch. The loader path covers build-time imports
-# and the wheel repair.
+# the ucxx UCXX_NO_LIBUCX switch.
 export UCXX_NO_LIBUCX=true ucx_ROOT="$UCX_PR_PREFIX"
-export LD_LIBRARY_PATH="$UCX_PR_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # No sccache-dist here: the ucxx recipes default the dist auth type to
 # "token", and sccache refuses to start with that type and no token. Set but
