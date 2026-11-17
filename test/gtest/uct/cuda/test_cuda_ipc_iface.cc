@@ -42,10 +42,9 @@ protected:
             md->nvlink_domain = 0xA5A5A5A5A5A5A5A5ULL;
         }
 
-        if (!md->fabric_supported) {
+        if (!uct_cuda_ipc_md_fabric_supported(md)) {
             UCS_TEST_MESSAGE << "fabric is not supported, emulating it";
-            md->fabric_supported = 1;
-            md->imex_channel     = 7;
+            md->imex_channel = 7;
         }
 
         return e;
@@ -95,7 +94,8 @@ protected:
         mnnvl_addr(dev_addr)->super.flags &=
                 ~UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
         if (dev_addr.size() == sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
-            mnnvl_addr(dev_addr)->imex_channel = 0;
+            mnnvl_addr(dev_addr)->imex_channel =
+                    UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
         }
     }
 
@@ -104,11 +104,12 @@ protected:
     static void set_older_peer(std::string &dev_addr)
     {
         dev_addr.resize(sizeof(uct_cuda_ipc_device_addr_t));
+        set_no_fabric(dev_addr);
     }
 
-    /* Same peer, but running UCX v1.23.2, which sends the NVLink domain
+    /* Same peer, but running UCX v1.23, which sends the NVLink domain
      * without the IMEX channel */
-    static void set_v1_23_2_peer(std::string &dev_addr)
+    static void set_v1_23_peer(std::string &dev_addr)
     {
         dev_addr.resize(ucs_offsetof(uct_cuda_ipc_mnnvl_device_addr_t,
                                      imex_channel));
@@ -193,9 +194,9 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
     EXPECT_EQ(0u, info.find("different NVLink domain")) << info;
 }
 
-/* A remote peer running v1.23.2 sends the NVLink domain but not the IMEX
+/* A remote peer running v1.23 sends the NVLink domain but not the IMEX
  * channel: the domain is checked, and the channel is not. */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_2_peer)
+UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_peer)
 {
     entity *e1           = create_mnnvl_entity();
     entity *e2           = create_mnnvl_entity();
@@ -205,7 +206,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, v1_23_2_peer)
 
     set_remote_host(dev_addr);
     set_other_imex_channel(dev_addr);
-    set_v1_23_2_peer(dev_addr);
+    set_v1_23_peer(dev_addr);
     EXPECT_EQ(17u, dev_addr.size());
     EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
 
@@ -244,7 +245,8 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host_imex)
     EXPECT_EQ(0u, info.find("different machine and FABRIC support local=1 "
                             "remote=0")) << info;
 
-    ucs_derived_of(e1->md(), uct_cuda_ipc_md_t)->fabric_supported = 0;
+    ucs_derived_of(e1->md(), uct_cuda_ipc_md_t)->imex_channel =
+            UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info));
     EXPECT_EQ(0u, info.find("different machine and FABRIC support local=0 "
                             "remote=1")) << info;
