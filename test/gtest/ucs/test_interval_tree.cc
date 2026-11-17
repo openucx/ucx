@@ -318,6 +318,12 @@ UCS_TEST_F(test_interval_tree, random_insert_matches_reference) {
     ASSERT_TRUE(check_invariants());
     EXPECT_EQ(interval_vector_t(expected.begin(), expected.end()),
               collect_inorder());
+
+    size_t expected_size = 0;
+    for (const auto &range : expected) {
+        expected_size += range.second - range.first;
+    }
+    EXPECT_EQ(expected_size, m_tree.total_size);
 }
 
 /* Inserting many disjoint ranges must not be quadratic in the tree size */
@@ -325,10 +331,12 @@ UCS_TEST_F(test_interval_tree, many_disjoint_inserts) {
     const uint64_t n = 100000 / ucs::test_time_multiplier();
 
     /* Ascending from the left end and descending from the right end */
-    for (uint64_t i = 0; i < n; i++) {
-        const uint64_t right = (2 * n - i) * 4;
+    UCS_TEST_TIME_LIMIT(10) {
+        for (uint64_t i = 0; i < n; i++) {
+            const uint64_t right = (2 * n - i) * 4;
 
-        insert_intervals({{i * 4, i * 4 + 1}, {right, right + 1}});
+            insert_intervals({{i * 4, i * 4 + 1}, {right, right + 1}});
+        }
     }
     EXPECT_EQ(2 * n, ucs_interval_tree_count(&m_tree));
     ASSERT_TRUE(check_invariants());
