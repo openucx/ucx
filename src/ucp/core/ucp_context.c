@@ -88,7 +88,7 @@ typedef enum ucp_transports_list_search_result {
 } ucp_transports_list_search_result_t;
 
 
-/* Declare all AM handlers */
+/* Declare all am handlers */
 UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_DECL)
 
 ucp_am_handler_t *ucp_am_handlers[UCP_AM_ID_LAST] = {
@@ -1941,7 +1941,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 
         avail_mds--;
 
-        /* List of memory type detection MDs */
+        /* List of detect memory type MDs */
         if (~detect_mem_type_mask & md_attr->detect_mem_types) {
             context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
             ++context->num_mem_type_detect_mds;
