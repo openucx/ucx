@@ -4326,11 +4326,12 @@ protected:
         ucp_lane_index_t lane = ucp_ep_lookup_lane(ep, lane_ep(ep, lane_id));
 
         if ((state == nullptr) || (lane == UCP_NULL_LANE) ||
-            (state->bandwidth[lane] == UCP_EP_PATH_BW_INVALID)) {
+            (state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT] ==
+             UCP_EP_PATH_BW_INVALID)) {
             return std::numeric_limits<double>::quiet_NaN();
         }
 
-        return state->bandwidth[lane];
+        return state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT];
     }
 
     std::map<uct_ep_h, unsigned> m_lane_ids;

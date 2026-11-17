@@ -987,6 +987,7 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
     ucp_ep_path_bw_t *state;
+    ucp_ep_path_bw_op_t op;
     ucp_lane_index_t lane;
     khiter_t it;
     int ret;
@@ -1012,7 +1013,9 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
     state->cfg_index       = ep->cfg_index;
     state->lane_generation = ep->ext->lane_generation;
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        state->bandwidth[lane] = UCP_EP_PATH_BW_INVALID;
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+        }
     }
 
     it = kh_put(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep, &ret);
@@ -1024,6 +1027,39 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
 
     kh_value(&worker->ep_path_bw, it) = state;
     return state;
+}
+
+/* Keep a sample below the path estimate, other paths are not degraded */
+static void
+ucp_worker_ep_path_bw_set(ucp_ep_path_bw_t *state, ucp_lane_index_t lane,
+                          ucp_ep_path_bw_op_t op, double bandwidth,
+                          double path_bandwidth)
+{
+    if (bandwidth >= path_bandwidth) {
+        state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+    } else {
+        /* Below 1 B/s, the path is considered stalled */
+        state->bandwidth[lane][op] = (bandwidth < 1.0) ? 0 : bandwidth;
+    }
+}
+
+/* Mark the endpoint degraded while a lane is below the path estimate */
+static void
+ucp_worker_ep_path_bw_update_flag(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
+{
+    ucp_ep_path_bw_op_t op;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            if (state->bandwidth[lane][op] != UCP_EP_PATH_BW_INVALID) {
+                ucp_ep_update_flags(ep, UCP_EP_FLAG_PATH_DEGRADED, 0);
+                return;
+            }
+        }
+    }
+
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
 }
 
 /* Sample the lanes of the endpoint on the interface, and mark the endpoint
@@ -1070,26 +1106,15 @@ ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
                     bandwidth);
         ucs_debug("ep %p lane[%u] path bandwidth %.0f B/s", ep, lane,
                   bandwidth);
-        if (bandwidth >= path_bandwidth) {
-            state->bandwidth[lane] = UCP_EP_PATH_BW_INVALID;
-        } else {
-            /* Below 1 B/s, the path is considered stalled */
-            state->bandwidth[lane] = (bandwidth < 1.0) ? 0 : bandwidth;
-        }
+        ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PUT,
+                                  bandwidth, path_bandwidth);
     }
 
     if (state == NULL) {
         return;
     }
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (state->bandwidth[lane] != UCP_EP_PATH_BW_INVALID) {
-            ucp_ep_update_flags(ep, UCP_EP_FLAG_PATH_DEGRADED, 0);
-            return;
-        }
-    }
-
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+    ucp_worker_ep_path_bw_update_flag(ep, state);
 }
 
 static unsigned ucp_worker_iface_path_bw_progress(void *arg)
