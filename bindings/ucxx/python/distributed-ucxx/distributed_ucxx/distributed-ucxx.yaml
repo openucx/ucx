@@ -1,0 +1,17 @@
+distributed-ucxx:
+  version: 1
+
+  cuda-copy: null            # enable cuda-copy
+  tcp: null                  # enable tcp
+  nvlink: null               # enable cuda_ipc
+  infiniband: null           # enable Infiniband
+  rdmacm: null               # enable RDMACM
+  create-cuda-context: null  # create CUDA context before UCX initialization
+  multi-buffer: null         # enable multi-buffer send/recv interface
+  environment: {}            # Any other environment settings to
+                             # be transferred to UCX. Name
+                             # munging: key-name => UCX_KEY_NAME
+
+  # RMM Configuration
+  rmm:
+    pool-size: null  # Initial RMM pool size (e.g., "1GB", "500MB")

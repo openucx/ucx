@@ -1,0 +1,72 @@
+properties:
+  distributed-ucxx:
+    type: object
+    properties:
+
+      version:
+        type: integer
+
+      cuda-copy:
+        type: [boolean, 'null']
+        description: |
+          Set environment variables to enable CUDA support over UCX. This may be used even if
+          InfiniBand and NVLink are not supported or disabled, then transferring data over TCP.
+      tcp:
+        type: [boolean, 'null']
+        description: |
+          Set environment variables to enable TCP over UCX, even if InfiniBand and NVLink
+          are not supported or disabled.
+      nvlink:
+        type: [boolean, 'null']
+        description: |
+          Set environment variables to enable UCX over NVLink, implies ``distributed-ucxx.tcp=True``.
+      infiniband:
+        type: [boolean, 'null']
+        description: |
+          Set environment variables to enable UCX over InfiniBand, implies ``distributed-ucxx.tcp=True``.
+      rdmacm:
+        type: [boolean, 'null']
+        description: |
+          Set environment variables to enable UCX RDMA connection manager support,
+          requires ``distributed-ucxx.infiniband=True``.
+      create-cuda-context:
+        type: [boolean, 'null']
+        description: |
+          Creates a CUDA context before UCX is initialized. This is necessary to enable UCX to
+          properly identify connectivity of GPUs with specialized networking hardware, such as
+          InfiniBand. This permits UCX to choose transports automatically, without specifying
+          additional variables for each transport, while ensuring optimal connectivity. When
+          ``True``, a CUDA context will be created on the first device listed in
+          ``CUDA_VISIBLE_DEVICES``.
+      multi-buffer:
+        type: [boolean, 'null']
+        description: |
+          Enable multi-buffer send/recv interface for improved performance with multiple small messages.
+          When enabled, multiple frames can be sent/received in a single operation.
+      environment:
+        type: object
+        description: |
+          Mapping for setting arbitrary UCX environment variables.
+          Names here are translated via the following rules to
+          map to the relevant UCX environment variable:
+            - hyphens are replaced with underscores
+            - words are uppercased
+            - UCX_ is prepended
+          So, for example, setting ``some-option=value`` is
+          equivalent to setting ``UCX_SOME_OPTION=value`` in
+          the calling environment.
+
+          For a full list of supported UCX environment
+          variables, run ``ucx_info -f``.
+
+      rmm:
+        type: object
+        description: |
+          Configuration options for the RAPIDS Memory Manager when using GPU memory.
+        properties:
+          pool-size:
+            type: [string, integer, 'null']
+            description: |
+              The size of the memory pool in bytes or as a string with units (e.g., "1GB", "500MB").
+              When specified, RMM will be initialized with a memory pool of this size for improved
+              GPU memory allocation performance.

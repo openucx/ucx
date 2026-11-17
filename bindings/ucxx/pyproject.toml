@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
+[tool.ruff]
+line-length = 88
+
+[tool.cython-lint]
+max-line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    # whitespace before :
+    "E203",
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+order-by-type = true
+default-section = "third-party"
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "dask",
+    "rapids",
+    "first-party",
+    "local-folder",
+]
+known-first-party = [
+    "ucxx",
+    "distributed_ucxx",
+]
+
+[tool.ruff.lint.isort.sections]
+dask = [
+    "dask",
+    "distributed",
+]
+rapids = [
+    "rmm",
+    "cudf",
+]
+
+[tool.codespell]
+ignore-words-list = "cancelation,inflight,thirdparty,implementors"

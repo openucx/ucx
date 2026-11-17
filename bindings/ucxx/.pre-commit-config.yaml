@@ -1,0 +1,161 @@
+# SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.3
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/MarcoGorelli/cython-lint
+    rev: v0.21.1
+    hooks:
+      - id: cython-lint
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v20.1.8
+    hooks:
+      - id: clang-format
+        files: \.(h|cpp)$
+        types_or: [file]
+        args: ['-fallback-style=none', '-style=file', '-i']
+  - repo: https://github.com/cpplint/cpplint
+    rev: 2.0.0
+    hooks:
+      - id: cpplint
+        name: cpplint
+        # description: Check C++ code style using cpplint.py.
+        # entry: bash ./tools/codestyle/cpplint_pre_commit.hook
+        # language: system
+        files: \.(h|cpp)$
+        # exclude: path/to/myfile.h
+  - repo: https://github.com/rapidsai/pre-commit-hooks
+    rev: v1.7.0
+    hooks:
+      - id: verify-dependencies
+        args: [--fix, --rapids-version-file=RAPIDS_VERSION]
+      - id: verify-copyright
+        args: [--fix, --spdx, --spdx-license-identifier=BSD-3-Clause]
+        files: |
+          (?x)
+            [.](cmake|cpp|cu|cuh|h|hpp|sh|pxd|py|pyx|rs|java)$|
+            CMakeLists[.]txt$|
+            CMakeLists_standalone[.]txt$|
+            meta[.]yaml$|
+            pyproject[.]toml$|
+            setup[.]cfg$|
+            dependencies[.]yaml$|
+            ^[.]pre-commit-config[.]yaml$|
+            recipe[.]yaml$
+      - id: verify-alpha-spec
+        args:
+          - --fix
+          - --rapids-version-file=RAPIDS_VERSION
+      - id: verify-hardcoded-version
+        args: ["--version-scheme=semver"]
+        exclude: |
+          (?x)
+            devcontainer[.]json$|
+            dependencies[.]yaml$|
+            ^[.]github/workflows/|
+            [.]md$|
+            pom[.]xml$|
+            ^[.]pre-commit-config[.]yaml$|
+            [.]rst$|
+            ^conda/environments/|
+            [.](png)$
+      - id: verify-hardcoded-version
+        name: verify-hardcoded-version-rapids
+        args: [--fix, --version-file=RAPIDS_VERSION]
+        exclude: |
+          (?x)
+            devcontainer[.]json$|
+            dependencies[.]yaml$|
+            ^[.]github/workflows/|
+            [.]md$|
+            pom[.]xml$|
+            ^[.]pre-commit-config[.]yaml$|
+            [.]rst$|
+            ^conda/environments/|
+            [.](png)$|
+            ^RAPIDS_BRANCH$
+      - id: verify-pyproject-license
+        # ignore the top-level pyproject.toml, which doesn't
+        # have or need a [project] table
+        exclude: |
+          (?x)
+            ^pyproject[.]toml$
+  - repo: https://github.com/rapidsai/dependency-file-generator
+    rev: v1.22.0
+    hooks:
+      - id: rapids-dependency-file-generator
+        args: ["--clean", "--warn-all", "--strict"]
+  - repo: local
+    hooks:
+      - id: cmake-format
+        name: cmake-format
+        entry: ./cmake/scripts/run-cmake-format.sh cmake-format
+        language: python
+        types: [cmake]
+        # Note that pre-commit autoupdate does not update the versions
+        # of dependencies, so we'll have to update this manually.
+        additional_dependencies:
+          - cmakelang==0.6.13
+        verbose: true
+        require_serial: true
+      - id: cmake-lint
+        name: cmake-lint
+        entry: ./cmake/scripts/run-cmake-format.sh cmake-lint
+        language: python
+        types: [cmake]
+        # Note that pre-commit autoupdate does not update the versions
+        # of dependencies, so we'll have to update this manually.
+        additional_dependencies:
+          - cmakelang==0.6.13
+        verbose: true
+        require_serial: true
+      - id: doxygen-check
+        name: doxygen-check
+        entry: ./ci/checks/doxygen.sh
+        files: ^cpp/include/
+        types_or: [file]
+        language: system
+        pass_filenames: false
+        verbose: true
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+        args: ["--toml", "pyproject.toml"]
+        exclude: |
+          (?x)^(
+            .*test.*|
+            ^CHANGELOG.md$
+          )
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        additional_dependencies: [pyyaml]
+        exclude: |
+          (?x)^(
+            conda/environments/.*|
+            [.]clang-format$
+          )
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.24.1
+    hooks:
+      - id: zizmor
+
+default_language_version:
+  python: python3
