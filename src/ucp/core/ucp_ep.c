@@ -558,6 +558,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
         --worker->num_all_eps;
     }
 
+    ucp_worker_ep_path_bw_cleanup(ep);
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
