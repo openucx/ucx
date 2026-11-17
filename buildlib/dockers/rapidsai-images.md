@@ -2,11 +2,8 @@
 
 The UCXX jobs in the openucx/ucx Azure pipelines run inside thin wrapper images
 built on top of upstream RAPIDS CI images. This directory holds the compose file
-and build script that (re)build and push them.
-
-The two Dockerfiles they reference, `rapidsai-ci-conda.Dockerfile` and
-`rapidsai-ci-wheel.Dockerfile`, arrive with the UCXX CI integration; this tooling
-builds nothing until they land.
+and build script that (re)build and push them from `rapidsai-ci-conda.Dockerfile`
+and `rapidsai-ci-wheel.Dockerfile`.
 
 | Wrapper image (`ucx/`)                     | RAPIDS base                                            | Used for                   |
 |--------------------------------------------|--------------------------------------------------------|----------------------------|
@@ -59,11 +56,15 @@ docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU13>-rockylinux8-py3.12
 docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU12>-rockylinux8-py3.12
 ```
 
-The exact CUDA (`<CU12>`/`<CU13>`) and Python versions live in ONE place:
-the `BASE_IMAGE` args of `docker-compose-rapidsai.yml` (the build script derives
-its preflight from them). If RAPIDS moved a CUDA or Python version, update the
-compose **and** the matching `rapids_cuda_version` / `rapids_py_version` in
-`pr/main.yml` + `azure-pipelines-release.yml`.
+The build takes the exact CUDA (`<CU12>`/`<CU13>`) and Python versions from the
+`BASE_IMAGE` args of `docker-compose-rapidsai.yml` (the build script derives its
+preflight from them). If RAPIDS moved a CUDA or Python version, these must be
+updated together:
+
+- the `BASE_IMAGE` args in `docker-compose-rapidsai.yml`
+- the `BASE_IMAGE` defaults in the two Dockerfiles
+- `rapids_cuda_version` / `rapids_py_version` in `pr/main.yml` +
+  `azure-pipelines-release.yml`
 
 ### 2. Build + push all three images, multi-arch
 

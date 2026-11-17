@@ -61,16 +61,22 @@ while read -r t; do
   t="${t//\$\{IMAGE_REV\}/$IMAGE_REV}"
   images+=("$REGISTRY/${t#*/}")
 done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
+# An empty list would skip the destination preflight and the final verify.
+[ ${#images[@]} -gt 0 ] \
+  || { echo "ERROR: no image: fields in $basedir/docker-compose-rapidsai.yml" >&2; exit 1; }
 
 # 1. preflight - every BASE_IMAGE in the compose must exist. The compose is
 # the single source for the base tags; this parses them instead of keeping a
 # second copy that drifts when RAPIDS moves a cuda/py version.
+bases=$(sed -n 's/^[[:space:]]*BASE_IMAGE:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
+[ -n "$bases" ] \
+  || { echo "ERROR: no BASE_IMAGE: args in $basedir/docker-compose-rapidsai.yml" >&2; exit 1; }
 while read -r t; do
   t="${t//\$\{RAPIDS_VER\}/$RAPIDS_VER}"
   echo ">> preflight: $t"
   docker manifest inspect "$t" >/dev/null \
     || { echo "ERROR: base image not found: $t (did RAPIDS move the cuda/py tag?)" >&2; exit 1; }
-done < <(sed -n 's/^[[:space:]]*BASE_IMAGE:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
+done <<< "$bases"
 
 # 2. native 2-node buildx builder (idempotent): local node = host arch, remote
 # node = opposite arch over ssh. --platform pins each node to ONE arch so buildx
@@ -122,8 +128,10 @@ RAPIDS_VER="$RAPIDS_VER" docker buildx bake \
 echo "=== pushed manifests ==="
 for img in "${images[@]}"; do
   printf '%-42s ' "${img#*/ucx/}"
+  # "|| true": a manifest without architecture entries has to reach the
+  # check below instead of ending the script through pipefail.
   arches=$(docker manifest inspect "$img" \
-           | grep -o '"architecture": "[a-z0-9]*"' | grep -o '[a-z0-9]*"$' | tr -d '"' | sort -u)
+           | grep -o '"architecture": "[a-z0-9]*"' | grep -o '[a-z0-9]*"$' | tr -d '"' | sort -u) || true
   echo "$arches" | tr '\n' ' '
   for want in amd64 arm64; do
     grep -qx "$want" <<< "$arches" \
