@@ -38,9 +38,10 @@
     "/dev/nvidia-caps-imex-channels"
 
 typedef struct {
-    const void *mapped_addr;
-    CUdevice   cu_dev;
-    int        free_unused_mapping;
+    const void                  *mapped_addr;
+    CUdevice                    cu_dev;
+    uct_cuda_ipc_cache_region_t *cache_region;
+    int                         free_unused_mapping;
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
@@ -486,6 +487,7 @@ uct_cuda_ipc_create_rkey_handle(uint64_t flags)
 
     rkey_handle->mapped_addr         = NULL;
     rkey_handle->cu_dev              = CU_DEVICE_INVALID;
+    rkey_handle->cache_region        = NULL;
     rkey_handle->free_unused_mapping = !!(
             flags & UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING);
     return rkey_handle;
@@ -620,6 +622,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
         status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
+                                            &rkey_handle->cache_region,
                                             UCS_LOG_LEVEL_DEBUG);
         if (status == UCS_OK) {
             rkey_handle->mapped_addr = mapped_addr;
@@ -717,6 +720,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
                                                       const void *handle)
 {
     const uct_cuda_ipc_rkey_handle_t *rkey_handle = handle;
+    uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_mapping_t mapping;
 
     if ((uct_rkey == 0) || (rkey_handle == NULL)) {
@@ -728,9 +732,22 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
         return;
     }
 
-    uct_cuda_ipc_mapping_init(&mapping,
-                              (uct_cuda_ipc_extended_rkey_t*)uct_rkey,
-                              rkey_handle->mapped_addr);
+    extended_rkey = (uct_cuda_ipc_extended_rkey_t*)uct_rkey;
+
+#if HAVE_CUDA_FABRIC
+    /* Views are not in the single-allocation page table, and a view at the
+     * key's base may belong to another metadata buffer */
+    if ((rkey_handle->mapped_addr == NULL) &&
+        (extended_rkey->super.ph.handle_type ==
+         UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI)) {
+        uct_cuda_ipc_unmap_unused_view(extended_rkey, rkey_handle->cu_dev);
+        return;
+    }
+#endif
+
+    uct_cuda_ipc_mapping_init(&mapping, extended_rkey,
+                              rkey_handle->mapped_addr,
+                              rkey_handle->cache_region);
     uct_cuda_ipc_unmap_memhandle(&mapping, rkey_handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache &&
                                          !rkey_handle->free_unused_mapping);
@@ -881,6 +898,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     uct_cuda_ipc_md_device_mem_element_t *cuda_ipc_md_mem_element =
             (uct_cuda_ipc_md_device_mem_element_t*)mem_elem;
     uct_cuda_ipc_mem_elem_release_handle_t *release_handle;
+    uct_cuda_ipc_cache_region_t *cache_region;
     ucs_status_t status;
     CUdevice cuda_device;
     void *mapped_addr;
@@ -896,7 +914,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     }
 
     status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
-                                        UCS_LOG_LEVEL_ERROR);
+                                        &cache_region, UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_free(release_handle);
         return status;
@@ -906,7 +924,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
             UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
 
     uct_cuda_ipc_mapping_init(&release_handle->mapping, &key->super,
-                              mapped_addr);
+                              mapped_addr, cache_region);
     release_handle->cu_dev = cuda_device;
     *release_handle_p      = release_handle;
 
@@ -993,7 +1011,8 @@ uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey, void *handle,
     return uct_cuda_ipc_map_remote_addr(extended_rkey, remote_addr,
                                         rkey_handle->cu_dev,
                                         &rkey_handle->mapped_addr,
-                                        local_addr_p);
+                                        local_addr_p,
+                                        &rkey_handle->cache_region);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {

@@ -164,6 +164,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     int is_ctx_pushed;
     const void *mapped_addr;
     void *local_addr;
+    uct_cuda_ipc_cache_region_t *cache_region;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -182,7 +183,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     }
 
     status = uct_cuda_ipc_map_remote_addr(&key->super, remote_addr, cuda_device,
-                                          &mapped_addr, &local_addr);
+                                          &mapped_addr, &local_addr,
+                                          &cache_region);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
@@ -217,7 +219,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     cuda_ipc_event->cuda_device = cuda_device;
     cuda_ipc_event->sgl_mapping = NULL;
     uct_cuda_ipc_mapping_init(&cuda_ipc_event->mapping, &key->super,
-                              mapped_addr);
+                              mapped_addr, cache_region);
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     status = UCS_INPROGRESS;
@@ -289,6 +291,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     CUmemcpyAttributes attr;
     void *local_addr;
     const void *mapped_addr;
+    uct_cuda_ipc_cache_region_t *cache_region;
     CUdeviceptr *local_addrs, *buffer_addrs;
     CUdeviceptr *dsts, *srcs;
     size_t *copy_lengths;
@@ -362,13 +365,13 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
         status = uct_cuda_ipc_map_remote_addr(&key->super, remote_addrs[i],
                                               cuda_device, &mapped_addr,
-                                              &local_addr);
+                                              &local_addr, &cache_region);
         if (ucs_unlikely(status != UCS_OK)) {
             goto out_unmap;
         }
 
         uct_cuda_ipc_mapping_init(&mapping->entries[mapping->count],
-                                  &key->super, mapped_addr);
+                                  &key->super, mapped_addr, cache_region);
         local_addrs[mapping->count]  = (CUdeviceptr)local_addr;
         buffer_addrs[mapping->count] = (CUdeviceptr)buffers[i];
         copy_lengths[mapping->count] = lengths[i];
