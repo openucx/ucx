@@ -13,7 +13,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
-#include <ucs/datastruct/khash.h>
+#include <ucm/util/khash_safe.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
