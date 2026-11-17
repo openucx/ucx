@@ -38,6 +38,8 @@ resources:
       type: github
       name: rapidsai/ucxx
       endpoint: Mellanox-lab
+      # rapids_cuda_version of the UCXX slices in pr/main.yml follows the CUDA
+      # versions this ucxx commit builds with (matrix in its dependencies.yaml).
       ref: 7d0234f3131794bd37cf509ab3bde2026ae7eb78
 
 extends:
