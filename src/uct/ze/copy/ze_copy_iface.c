@@ -239,12 +239,11 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
 
 /* Create the queue and list of an engine of a device; a driver failure is
  * logged at log_level, as the caller may be able to continue without them */
-static ucs_status_t
-uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
-                               ze_device_handle_t device,
-                               uct_ze_engine_t engine,
-                               ucs_log_level_t log_level,
-                               unsigned *queue_index_p)
+static ucs_status_t uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
+                                                   ze_device_handle_t device,
+                                                   uct_ze_engine_t engine,
+                                                   ucs_log_level_t log_level,
+                                                   unsigned *queue_index_p)
 {
     uct_ze_copy_md_t *ze_md         = ucs_derived_of(iface->super.md,
                                                      uct_ze_copy_md_t);
@@ -271,7 +270,8 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc,
                                &queue->cmdq);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_log(log_level, "ze_copy_iface: zeCommandQueueCreate failed for "
+        ucs_log(log_level,
+                "ze_copy_iface: zeCommandQueueCreate failed for "
                 "the %s engine of device %p with 0x%x",
                 uct_ze_base_engine_name(engine), device, ret);
         goto err_pop;
@@ -280,7 +280,8 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc,
                               &queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_log(log_level, "ze_copy_iface: zeCommandListCreate failed for "
+        ucs_log(log_level,
+                "ze_copy_iface: zeCommandListCreate failed for "
                 "the %s engine of device %p with 0x%x",
                 uct_ze_base_engine_name(engine), device, ret);
         goto err_destroy_cmdq;

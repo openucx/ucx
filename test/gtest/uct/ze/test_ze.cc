@@ -5,7 +5,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "uct/test_p2p_rma.h"
@@ -300,8 +300,8 @@ protected:
 
     /* Move a pattern host -> src -> dst -> host, with the device-to-device
      * step as a put from src or as a get into dst, and check it arrived */
-    void copy_through_devices(void *src, void *dst, size_t length,
-                              bool is_put, uint8_t seed)
+    void copy_through_devices(void *src, void *dst, size_t length, bool is_put,
+                              uint8_t seed)
     {
         std::vector<uint8_t> host_buf(length), check_buf(length, 0);
 
@@ -383,10 +383,9 @@ protected:
         ASSERT_EQ(ZE_RESULT_SUCCESS, ret);
         UCS_TEST_MESSAGE << "device " << queue.device << ": "
                          << uct_ze_base_engine_name(queue.engine)
-                         << " engine queue on group " << cmdq_ordinal
-                         << " of " << num_groups
-                         << (has_copy_only ? ", device has a copy engine" :
-                                             "");
+                         << " engine queue on group " << cmdq_ordinal << " of "
+                         << num_groups
+                         << (has_copy_only ? ", device has a copy engine" : "");
 
         /* The list must be submitted to the group of its queue */
         EXPECT_EQ(cmdq_ordinal, cmdl_ordinal);
@@ -636,8 +635,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, ze_caps_and_mem_types,
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST));
 }
 
-UCS_TEST_P(test_ze_copy_rma, queue_on_copy_engine)
-{
+UCS_TEST_P(test_ze_copy_rma, queue_on_copy_engine) {
     ze_device_handle_t device = other_device();
     std::vector<uint8_t> host_buf(64);
     const uct_ze_copy_queue_t *queue;
@@ -674,8 +672,7 @@ UCS_TEST_P(test_ze_copy_rma, queue_on_copy_engine)
 
 UCS_TEST_SKIP_COND_P(test_ze_copy_rma, same_device_copy_on_compute_engine,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
-                                 UCT_IFACE_FLAG_PUT_ZCOPY))
-{
+                                 UCT_IFACE_FLAG_PUT_ZCOPY)) {
     const size_t length       = UCS_MBYTE;
     ze_device_handle_t device = ze_md()->ze_device;
     std::vector<uint8_t> host_buf(length);
@@ -710,8 +707,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, same_device_copy_on_compute_engine,
 
 UCS_TEST_SKIP_COND_P(test_ze_copy_rma, shared_memory_copy_on_copy_engine,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
-                                 UCT_IFACE_FLAG_PUT_ZCOPY))
-{
+                                 UCT_IFACE_FLAG_PUT_ZCOPY)) {
     const size_t length       = 64 * UCS_KBYTE;
     ze_device_handle_t device = ze_md()->ze_device;
 

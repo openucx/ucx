@@ -479,8 +479,8 @@ uct_ze_base_get_queue_ordinal(ze_device_handle_t device, uct_ze_engine_t engine,
                               ucs_log_level_t log_level, uint32_t *ordinal_p,
                               uint32_t *num_queues_p)
 {
-    ze_command_queue_group_property_flags_t required, avoided;
     uint32_t num_queue_groups = 0;
+    ze_command_queue_group_property_flags_t required, avoided;
     ze_command_queue_group_properties_t *queue_props;
     ucs_status_t status;
     int ordinal;
@@ -503,8 +503,9 @@ uct_ze_base_get_queue_ordinal(ze_device_handle_t device, uct_ze_engine_t engine,
     queue_props = ucs_calloc(num_queue_groups, sizeof(*queue_props),
                              "ze_queue_group_props");
     if (queue_props == NULL) {
-        ucs_log(log_level, "device %p: failed to allocate %u queue group "
-                "properties", device, num_queue_groups);
+        ucs_log(log_level,
+                "device %p: failed to allocate %u queue group properties",
+                device, num_queue_groups);
         return UCS_ERR_NO_MEMORY;
     }
 

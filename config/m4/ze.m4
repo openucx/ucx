@@ -47,7 +47,8 @@ AS_IF([test "x$ze_checked" != "xyes"],
          AS_IF([test "x$ze_happy" = "xyes"],
                [AC_CHECK_LIB([ze_loader], [zeInit],
                              [ZE_LIBS="$ZE_LIBS -lze_loader"], [ze_happy="no"])
-                AC_CHECK_DECLS([zeCommandQueueGetOrdinal, zeCommandListGetOrdinal],
+                AC_CHECK_DECLS([zeCommandQueueGetOrdinal,
+                                zeCommandListGetOrdinal],
                                [], [], [[#include <level_zero/ze_api.h>]])])
 
          CPPFLAGS="$save_CPPFLAGS"
