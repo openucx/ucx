@@ -3356,17 +3356,10 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
                                    const char *ep_type_name)
 {
     ucp_ep_ext_t *ep_ext, *tmp;
-    ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy %s endpoints", worker, ep_type_name);
     ucs_list_for_each_safe(ep_ext, tmp, ep_list, ep_list) {
-        ep = ep_ext->ep;
-        /* Cleanup pending operations on the UCP EP before destroying it, since
-         * ucp_ep_destroy_internal() expects the pending queues of the UCT EPs
-         * will be empty before they are destroyed */
-        ucp_ep_purge_lanes(ep, ucp_ep_err_pending_purge,
-                           UCS_STATUS_PTR(UCS_ERR_CANCELED));
-        ucp_ep_disconnected(ep, 1);
+        ucp_ep_close_force(ep_ext->ep);
     }
 }
 
@@ -4160,8 +4153,9 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     if (worker->flags & UCP_WORKER_FLAG_DISCARD_DISABLED) {
+        /* The callback is called before returning */
         ucp_worker_discard_uct_ep_destroy_progress(req);
-        return UCS_OK;
+        return UCS_INPROGRESS;
     }
 
     ucp_worker_discard_uct_ep_progress(req);
