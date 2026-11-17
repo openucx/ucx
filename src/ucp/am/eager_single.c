@@ -248,6 +248,13 @@ static void ucp_am_eager_single_bcopy_probe_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
+    /* Token purge copies this descriptor and reposts it on another lane. */
+    if ((init_params->ep_config_key->err_mode ==
+         UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN)) {
+        params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+    }
+
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
