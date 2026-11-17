@@ -180,6 +180,80 @@ UCS_TEST_P(test_ucp_wakeup, signal)
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wakeup)
 
+
+/* Workers sharing a context share its device contexts, so their CQs ring
+ * different UAR pages, which a system page larger than the UAR page may hold
+ * at an offset. A message to every worker must wake it up. */
+class test_ucp_wakeup_shared_context : public test_ucp_wakeup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP,
+                               0, "", MULTI_THREAD_CONTEXT);
+    }
+
+protected:
+    void send_recv(int worker_index, uint64_t send_data, bool wakeup)
+    {
+        const ucp_datatype_t datatype = ucp_dt_make_contig(1);
+        const uint64_t tag            = 0xdeadbeef;
+        ucp_worker_h recv_worker      = receiver().worker(worker_index);
+        uint64_t recv_data            = 0;
+        struct pollfd pollfd;
+        void *rreq, *sreq;
+        ucs_status_t status;
+
+        rreq = ucp_tag_recv_nb(recv_worker, &recv_data, sizeof(recv_data),
+                               datatype, tag, (ucp_tag_t)-1, recv_completion);
+        ASSERT_UCS_PTR_OK(rreq);
+
+        if (wakeup) {
+            do {
+                while (ucp_worker_progress(recv_worker) != 0) {
+                }
+                status = ucp_worker_arm(recv_worker);
+            } while (status == UCS_ERR_BUSY);
+            ASSERT_UCS_OK(status);
+        }
+
+        sreq = ucp_tag_send_nb(sender().ep(worker_index), &send_data,
+                               sizeof(send_data), datatype, tag,
+                               send_completion);
+        ASSERT_UCS_PTR_OK(sreq);
+
+        if (wakeup) {
+            pollfd.events = POLLIN;
+            ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &pollfd.fd));
+            EXPECT_EQ(1, poll(&pollfd, 1, 10000))
+                    << "worker " << worker_index << " was not woken up";
+        }
+
+        if (sreq != NULL) {
+            ASSERT_UCS_OK(request_progress(sreq, {&sender(), &receiver()},
+                                           10.0, worker_index));
+            ucp_request_release(sreq);
+        }
+
+        ASSERT_UCS_OK(request_progress(rreq, {&sender(), &receiver()}, 10.0,
+                                       worker_index));
+        ucp_request_release(rreq);
+        EXPECT_EQ(send_data, recv_data);
+    }
+};
+
+UCS_TEST_P(test_ucp_wakeup_shared_context, efd_every_worker)
+{
+    sender().connect(&receiver(), get_ep_params());
+
+    for (int i = 0; i < receiver().get_num_workers(); ++i) {
+        /* Complete the wireup before waiting for the event */
+        send_recv(i, i, false);
+        send_recv(i, i + 1, true);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wakeup_shared_context)
+
 class test_ucp_wakeup_external_epollfd : public test_ucp_wakeup {
 public:
     virtual ucp_worker_params_t get_worker_params() {
