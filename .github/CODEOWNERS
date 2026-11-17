@@ -8,6 +8,39 @@
 # Default owners
 * @openucx/ucx-maintainers
 
+# CUDA
+/bindings/go/src/cuda/                              @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/buildlib/pr/cuda/                                  @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/config/cuda.am                                     @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/config/m4/cuda.m4                                  @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/config/m4/gdrcopy.m4                               @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/debian/ucx-cuda.install                            @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/debian/ucx-gdrcopy.install                         @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/src/tools/perf/cuda/                               @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/src/ucm/cuda/                                      @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/src/uct/cuda/                                      @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/apps/*cuda*                                   @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/gtest/common/cuda.h                           @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/gtest/ucm/cuda_hooks.cc                       @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/gtest/ucp/cuda/                               @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/gtest/uct/cuda/                               @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+/test/mpi/*cuda*                                    @rakhmets @tomerg-nvidia @openucx/ucx-maintainers
+
+# Device API
+/src/ucp/api/device/                                @rakhmets @openucx/ucx-maintainers
+/src/ucp/core/ucp_device.c                          @rakhmets @openucx/ucx-maintainers
+/src/ucs/sys/device_code.h                          @rakhmets @openucx/ucx-maintainers
+/src/uct/api/device/                                @rakhmets @openucx/ucx-maintainers
+/test/gtest/ucp/test_ucp_device.cc                  @rakhmets @openucx/ucx-maintainers
+/test/gtest/uct/test_device.cc                      @rakhmets @openucx/ucx-maintainers
+/test/mpi/test_ucp_rkey_destroy.c                   @rakhmets @openucx/ucx-maintainers
+
+# InfiniBand (IB)
+/config/m4/verbs.m4                                 @michal-shalev @roiedanino @openucx/ucx-maintainers
+/contrib/ibmock/                                    @michal-shalev @roiedanino @openucx/ucx-maintainers
+/src/uct/ib/                                        @michal-shalev @roiedanino @openucx/ucx-maintainers
+/test/gtest/uct/ib/                                 @michal-shalev @roiedanino @openucx/ucx-maintainers
+
 # ROCm
 /config/m4/rocm.m4            @edgargabriel @mshanthagit @openucx/ucx-maintainers
 /src/ucm/rocm/                @edgargabriel @mshanthagit @openucx/ucx-maintainers
