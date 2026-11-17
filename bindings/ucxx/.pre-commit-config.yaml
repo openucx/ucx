@@ -62,7 +62,6 @@ repos:
           (?x)
             devcontainer[.]json$|
             dependencies[.]yaml$|
-            ^[.]github/workflows/|
             [.]md$|
             pom[.]xml$|
             ^[.]pre-commit-config[.]yaml$|
@@ -76,7 +75,6 @@ repos:
           (?x)
             devcontainer[.]json$|
             dependencies[.]yaml$|
-            ^[.]github/workflows/|
             [.]md$|
             pom[.]xml$|
             ^[.]pre-commit-config[.]yaml$|
@@ -152,10 +150,6 @@ repos:
             conda/environments/.*|
             [.]clang-format$
           )
-  - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.24.1
-    hooks:
-      - id: zizmor
 
 default_language_version:
   python: python3

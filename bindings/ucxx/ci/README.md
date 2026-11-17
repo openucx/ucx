@@ -1,8 +1,8 @@
 # UCXX CI scripts
 
-The scripts in this directory are run by UCXX's GitHub Actions workflows (see
-`.github/workflows/`), using the RAPIDS CI images (`rapidsai/ci-conda`,
-`rapidsai/ci-wheel`, `rapidsai/citestwheel`) and the `rapids-*` helpers they provide.
+The scripts in this directory are run by the UCX Azure pipeline (see
+`buildlib/pr/ucxx_build.yml`), using the RAPIDS CI images (`rapidsai/ci-conda`,
+`rapidsai/ci-wheel`) and the `rapids-*` helpers they provide.
 
 ## Building and testing against a non-conda/non-wheel UCX (`UCXX_NO_LIBUCX`)
 
