@@ -23,7 +23,7 @@ ucp_amo_memtype_unpack_reply_buffer(ucp_request_t *req)
 {
     ucp_dt_contig_unpack(req->send.ep->worker, req->send.amo.reply_buffer,
                          &req->send.amo.result, req->send.state.dt_iter.length,
-                         ucp_amo_request_reply_mem_type(req),
+                         ucp_amo_request_reply_mem_type(req), NULL,
                          req->send.state.dt_iter.length);
 }
 
@@ -73,7 +73,10 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                     UCS_MEMORY_TYPE_HOST;
             ucp_dt_contig_pack(ep->worker, &req->send.amo.value,
                                req->send.state.dt_iter.type.contig.buffer,
-                               op_size, mem_type, op_size);
+                               op_size, mem_type,
+                               is_memtype ? &req->send.state.dt_iter.mem_info :
+                                            NULL,
+                               op_size);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
@@ -86,7 +89,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         if (op_id == UCP_OP_ID_AMO_CSWAP) {
             ucp_dt_contig_pack(ep->worker, &req->send.amo.result,
                                req->send.amo.reply_buffer, op_size,
-                               ucp_amo_request_reply_mem_type(req), op_size);
+                               ucp_amo_request_reply_mem_type(req), NULL,
+                               op_size);
         }
 
         status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));

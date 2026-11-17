@@ -39,10 +39,11 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
-                           UCS_MEMORY_TYPE_HOST, size);
+                           UCS_MEMORY_TYPE_HOST, NULL, size);
         if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
-            ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
-                               ucp_amo_request_reply_mem_type(req), size);
+            ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer,
+                               size, ucp_amo_request_reply_mem_type(req), NULL,
+                               size);
             length += size;
         }
     } else {
@@ -223,7 +224,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_rsc_index_t amo_rsc_idx      = UCS_STATIC_BITMAP_FFS(worker->atomic_tls);
+    ucp_rsc_index_t amo_rsc_idx = ucp_tl_bitmap_ffs(&worker->atomic_tls, 0);
     ucp_request_t *req;
     ucp_ep_h ep;
 
@@ -238,10 +239,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
         ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
                   worker);
-        /* TODO: this situation will be possible then CM wireup is implemented
-         *       and CM lane is bound to suboptimal device, then need to execute
-         *       AMO on fastest resource from worker->atomic_tls using loopback
-         *       EP and continue SW AMO protocol */
+        /* TODO: This situation may occur when:
+         *       - The CM lane is bound to a suboptimal device
+         *       - An EP with error handling mode failover is used alongside
+         *         other EPs
+         *       In this case, the AMO should be executed on the fastest
+         *       resource from worker->atomic_tls using the loopback EP, and
+         *       the SW AMO protocol should continue.
+         */
     }
 
     if (atomicreqh->req.req_id == UCS_PTR_MAP_KEY_INVALID) {
@@ -305,7 +310,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
                              frag_length, ucp_amo_request_reply_mem_type(req),
-                             frag_length);
+                             NULL, frag_length);
     } else {
         memcpy(req->send.buffer, hdr + 1, frag_length);
     }
@@ -429,7 +434,8 @@ static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
-                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
@@ -477,7 +483,7 @@ ucp_proto_t ucp_get_amo_post_proto = {
     .probe    = ucp_proto_amo_sw_post_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -506,6 +512,6 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .probe    = ucp_proto_amo_sw_fetch_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_id_abort,
     .reset    = ucp_proto_request_bcopy_id_reset
 };

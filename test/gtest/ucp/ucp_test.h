@@ -8,6 +8,7 @@
 
 #define __STDC_LIMIT_MACROS
 #include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <common/mem_buffer.h>
 
@@ -27,6 +28,10 @@
 
 namespace ucp {
 extern const uint32_t MAGIC;
+}
+
+namespace ucs {
+class mock;
 }
 
 
@@ -62,6 +67,11 @@ public:
         MULTI_THREAD_CONTEXT, /* workers are single-threaded, context is mt-shared */
         MULTI_THREAD_WORKER   /* workers are multi-threaded, context is mt-single */
     };
+
+    virtual std::string init_skip_filter() const
+    {
+        return {};
+    }
 
     class entity {
         typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
@@ -157,6 +167,11 @@ public:
         bool has_lane_with_caps(uint64_t caps,
                                 uint64_t v2_caps = 0) const;
 
+        /* Whether a rma_bw lane which can register the memory type has
+         * the given UCT_IFACE_FLAG_*_ZCOPY capability */
+        bool is_rndv_zcopy_supported(uint64_t iface_cap,
+                                     ucs_memory_type_t mem_type) const;
+
         bool is_rndv_put_ppln_supported() const;
 
         bool is_rndv_supported() const;
@@ -182,6 +197,11 @@ public:
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
+        /* Find filtered init error since first_error matching the test's
+         * init_skip_filter() */
+        std::vector<std::string>::iterator
+        find_filtered_init_error(size_t first_error) const;
 
         static ucs_log_func_rc_t
         hide_config_warns_logger(const char *file, unsigned line,
@@ -282,6 +302,9 @@ protected:
     void configure_peer_failure_settings();
     bool is_proto_enabled() const;
 
+    static void mock_ep_flush(ucp_ep_h ep, ucs::mock &mock,
+                              uct_ep_flush_func_t flush_func);
+
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 
     // Add test variant without values, with given context params
@@ -352,9 +375,9 @@ protected:
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
-        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+        ucs_time_t loop_end_limit = ucs::get_deadline(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
-            short_progress_loop();
+            progress();
         }
     }
 
@@ -363,7 +386,7 @@ protected:
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
         test_base::wait_for_value(
-                var, value, [this]() { short_progress_loop(); }, timeout);
+                var, value, [this]() { progress(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;

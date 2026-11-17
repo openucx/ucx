@@ -53,18 +53,6 @@ typedef struct uct_cuda_copy_md_config {
     int                         retain_primary_ctx;
 } uct_cuda_copy_md_config_t;
 
-/**
- * copy alloc handle.
- */
-typedef struct uct_cuda_copy_alloc_handle {
-    CUdeviceptr                 ptr;
-    size_t                      length;
-    uint8_t                     is_vmm;
-#if HAVE_CUDA_FABRIC
-    CUmemGenericAllocationHandle generic_handle;
-#endif
-} uct_cuda_copy_alloc_handle_t;
-
 
 typedef struct {
     int    fd;
@@ -103,5 +91,13 @@ int uct_cuda_copy_md_is_dmabuf_supported();
 uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
                                                       size_t length,
                                                       ucs_sys_device_t sys_dev);
+
+
+/**
+ * Set the context flag to synchronize DMA operations.
+ *
+ * @param [in] log_level  Log level for CUDA driver API failures
+ */
+ucs_status_t uct_cuda_copy_set_ctx_sync_memops(ucs_log_level_t log_level);
 
 #endif

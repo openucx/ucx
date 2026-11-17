@@ -25,7 +25,8 @@
 
 void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
                        size_t length, size_t *iov_offset, size_t *iovcnt_offset,
-                       ucs_memory_type_t mem_type, size_t total_len)
+                       ucs_memory_type_t mem_type,
+                       const ucp_memory_info_t *mem_info, size_t total_len)
 {
     size_t length_it = 0;
     size_t item_len, item_reminder, item_len_to_copy;
@@ -40,7 +41,7 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
         ucp_dt_contig_pack(worker, UCS_PTR_BYTE_OFFSET(dest, length_it),
                            UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
                                                *iov_offset),
-                           item_len_to_copy, mem_type, total_len);
+                           item_len_to_copy, mem_type, mem_info, total_len);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);
@@ -56,7 +57,8 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
 size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
                           size_t iovcnt, const void *src, size_t length,
                           size_t *iov_offset, size_t *iovcnt_offset,
-                          ucs_memory_type_t mem_type, size_t total_len)
+                          ucs_memory_type_t mem_type,
+                          const ucp_memory_info_t *mem_info, size_t total_len)
 {
     size_t length_it = 0;
     size_t item_len, item_len_to_copy;
@@ -71,7 +73,7 @@ size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
                              UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
                                                  *iov_offset),
                              UCS_PTR_BYTE_OFFSET(src, length_it),
-                             item_len_to_copy, mem_type, total_len);
+                             item_len_to_copy, mem_type, mem_info, total_len);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -118,6 +118,8 @@ typedef struct uct_ib_md_ext_config {
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
     int                      direct_nic; /**< Direct NIC with GPU functionality */
     unsigned long            gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
+    int                      gda_fabric_detect; /**< Give all GPUs the same
+                                                     fabric planes in GDA */
     int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
     /**< Retain and use an inactive CUDA primary context to query device capabilities */
     int                      gda_retain_inactive_ctx;
@@ -219,7 +221,7 @@ typedef struct uct_ib_md_config {
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Relaxed-ordering mode */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
     int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
-    ucs_time_t               ah_cache_ttl; /**< Address handle cache TTL */
+    ucs_time_t               ah_cache_ttl; /**< AH cache TTL; 0 disables it */
 } uct_ib_md_config_t;
 
 /**
@@ -427,7 +429,8 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
-    return md->flush_rkey >> 8;
+    return uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
+           (md->flush_rkey >> 8) : 0;
 }
 
 /**
@@ -547,5 +550,9 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
 void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
                                    const char *file,
                                    ucs_memory_type_t mem_type);
+
+
+unsigned uct_ib_md_memh_alloc_flags(const uct_ib_md_t *md,
+                                    const uct_md_mem_reg_params_t *params);
 
 #endif

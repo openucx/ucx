@@ -13,6 +13,14 @@
 extern uct_component_t uct_gdr_copy_component;
 
 
+/* CUDA 13.5 fixes DMA-BUF CPU mapping of stream-ordered allocations. */
+#define UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION 13050
+
+
+/** Check the loaded runtime, selected backend and CUDA driver prerequisites. */
+int uct_gdr_copy_cuda_async_detect(gdr_t gdr_ctx);
+
+
 /**
  * @brief gdr_copy MD descriptor
  */

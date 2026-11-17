@@ -3,6 +3,7 @@
 
 trigger: none
 pr:
+  drafts: false
   branches:
     include:
     - master
@@ -30,6 +31,14 @@ pr:
     - buildlib/azure-pipelines-perf.yml
     - buildlib/tools/perf_results.py
     - buildlib/tools/perf-common.yml
+
+resources:
+  repositories:
+    - repository: ucxx
+      type: github
+      name: rapidsai/ucxx
+      endpoint: Mellanox-lab
+      ref: 89f564e522d042d62c52c40bdae226dba04b793f
 
 extends:
   template: pr/main.yml

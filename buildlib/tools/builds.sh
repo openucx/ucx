@@ -1,6 +1,6 @@
 #!/bin/bash -eExl
 #
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # See file LICENSE for terms.
 #
@@ -328,6 +328,15 @@ build_cuda() {
 	make_clean distclean
 }
 
+run_perftest_device_id_smoke() {
+	local allocator=$1
+	shift
+
+	echo "==== Running ucx_perftest with ${allocator}:0 ===="
+	env "$@" ${ucx_inst}/bin/ucx_perftest -t tag_lat -m ${allocator}:0 \
+		-s 8 -n 1 -w 0 -l
+}
+
 #
 # Build ROCm
 #
@@ -336,6 +345,13 @@ build_rocm() {
 		echo "==== Build with enable rocm  ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rocm
 		$MAKEP
+		$MAKEP install
+
+		if [ -e /dev/kfd ]; then
+			run_perftest_device_id_smoke rocm UCX_TLS=self,rocm_copy
+		else
+			echo "==== No ROCm device, skipping device-id smoke ===="
+		fi
 	else
 		echo "==== Not building with rocm ===="
 	fi
@@ -392,6 +408,7 @@ build_ze() {
 	if echo "${real_ze_info}" | grep -q "ze_copy"; then
 		echo "==== Running ZE smoke on real Intel GPU ===="
 		check_ze_devices "${real_ze_info}" "real-GPU"
+		run_perftest_device_id_smoke ze-device UCX_TLS=self,ze_copy
 	else
 		if [ "${require_real_ze}" = "yes" ]; then
 			echo "${real_ze_info}"
@@ -409,6 +426,8 @@ build_ze() {
 		null_ze_info=$(ZE_ENABLE_NULL_DRIVER=1 ZE_ENABLE_LOADER_DEBUG_TRACE=1 \
 			${ucx_inst}/bin/ucx_info -d)
 		check_ze_devices "${null_ze_info}" "null-driver"
+		run_perftest_device_id_smoke ze-device \
+			ZE_ENABLE_ALT_DRIVERS=/usr/local/lib/libze_null.so.1 UCX_TLS=self,ze_copy
 	fi
 
 	make_clean distclean

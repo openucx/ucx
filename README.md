@@ -146,8 +146,9 @@ $ make -C test/gtest test
   details.
 
 * If network routing is incorrectly recognized, leading to peers reported as
-  "unreachable", change the default reachability check mode by setting:
-  UCX_IB_ROCE_REACHABILITY_MODE=all.
+  "unreachable", change the default reachability check mode by setting
+  UCX_IB_ROCE_REACHABILITY_MODE=kernel, to use the routes selected by the
+  kernel, or UCX_IB_ROCE_REACHABILITY_MODE=all, to skip the check.
 
 <hr>
 
@@ -190,9 +191,8 @@ $ make -C test/gtest test
 
 ## Licenses
 
-UCX is licensed as:
-
-* [BSD3](LICENSE)
+UCX is licensed under [BSD-3-Clause](LICENSE). See the
+[third-party notices](THIRD_PARTY_NOTICES) for bundled components.
 
 <hr>
 

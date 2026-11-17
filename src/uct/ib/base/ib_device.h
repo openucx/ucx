@@ -105,8 +105,9 @@ enum {
                                     UCT_IB_DEVICE_FLAG_DC_V2,
     UCT_IB_DEVICE_FAILED          = UCS_BIT(9), /* Got fatal error */
     UCT_IB_DEVICE_FLAG_MULTIPLANE = UCS_BIT(10), /* Supports multiplane */
+    UCT_IB_DEVICE_FLAG_DPU        = UCS_BIT(11), /* DPU device */
     /* XDR RDMA read requires four paths */
-    UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS = UCS_BIT(11)
+    UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS = UCS_BIT(12)
 };
 
 
@@ -126,7 +127,7 @@ enum {
 
     /* Used for ETH link layer. */
     UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(4),
-    /* Used for ETH link layer, following bits are used to pack RoCE version. */
+    /* Used for ETH link layer, this bit and the next one pack RoCE version. */
     UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(5),
 
     /* Used for IB link layer. */
@@ -134,8 +135,18 @@ enum {
     /* Used for IB link layer. */
     UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
     /* Used for IB link layer. */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6)
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6),
+    /* Administrative fabric id, used for both ETH or IB link layer,
+       see UCX_IB_FABRIC_ID. Last free bit of the flags byte. A peer which
+       predates this flag folds it into the RoCE version and logs
+       '<unknown RoCE version>'. */
+    UCT_IB_ADDRESS_FLAG_FABRIC_ID      = UCS_BIT(7)
 };
+
+
+/* Number of flag bits packing the RoCE version, starting from
+   @ref UCT_IB_ADDRESS_FLAG_ETH_LAST */
+#define UCT_IB_ADDRESS_ROCE_VERSION_BITS 2
 
 
 /**
@@ -143,7 +154,8 @@ enum {
  */
 typedef struct uct_ib_address {
     /* Using flags from UCT_IB_ADDRESS_FLAG_xx
-     * For ETH link layer, the 4 msb's are used to indicate the RoCE version -
+     * For ETH link layer, UCT_IB_ADDRESS_ROCE_VERSION_BITS bits starting from
+     * UCT_IB_ADDRESS_FLAG_ETH_LAST are used to indicate the RoCE version -
      * (by shifting the UCT_IB_DEVICE_ROCE_xx values when packing and unpacking
      * the ib address) */
     uint8_t            flags;
@@ -155,6 +167,11 @@ typedef struct uct_ib_address {
      * - uint64_t subnet64
      * For RoCE:
      * - uint8_t gid[16]
+     * Common tail, following the link layer specific fields:
+     * - uint8_t path_mtu
+     * - uint8_t gid_index
+     * - uint16_t pkey
+     * - uint16_t fabric_id
      */
 } UCS_S_PACKED uct_ib_address_t;
 
@@ -170,7 +187,23 @@ typedef struct uct_ib_device_spec {
 } uct_ib_device_spec_t;
 
 
-KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
+/**
+ * Refcounted, TTL'd address handle cache entry.
+ */
+typedef struct uct_ib_ah_entry {
+    struct ibv_ah *ah;
+    int            refcount;      /* Includes the cache's own reference
+                                    * while the entry is in ah_hash */
+    ucs_time_t     creation_time;
+    /* Peer identity the AH was created for, so that endpoints holding a
+     * reference do not have to keep their own copy of it */
+    uint16_t       dlid;
+    uint8_t        is_global;
+    union ibv_gid  dgid;          /* Valid only if is_global */
+} uct_ib_ah_entry_t;
+
+
+KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, uct_ib_ah_entry_t*);
 
 
 /**
@@ -246,7 +279,7 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
-    ucs_time_t                  ah_cache_ttl; /* 0 or inf */
+    ucs_time_t                  ah_cache_ttl;    /* 0 disables the cache */
     /* Async event subscribers */
     ucs_spinlock_t              async_event_lock;
     khash_t(uct_ib_async_event) async_events_hash;
@@ -385,17 +418,20 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
-/* Creates an AH outside the device cache; caller must destroy it */
+/**
+ * Get a reference to a cached AH matching ah_attr, creating one if needed.
+ * Release with uct_ib_device_ah_put().
+ */
 ucs_status_t
-uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
-                        struct ibv_pd *pd, const char *usage,
-                        struct ibv_ah **ah_p);
+uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                     struct ibv_pd *pd, const char *usage,
+                     uct_ib_ah_entry_t **entry_p);
 
-/* Bypasses ah_cache_ttl; cache-owned, caller must not destroy the AH */
-ucs_status_t
-uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
-                               const char *usage, struct ibv_ah **ah_p);
+/* Release a reference obtained from ah_get() or ah_hold(). */
+void uct_ib_device_ah_put(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
+
+/* Duplicate a reference already held by the caller. */
+void uct_ib_device_ah_hold(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
 
 ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t port_num,
@@ -423,6 +459,11 @@ static inline int uct_ib_device_has_pci_atomics(uct_ib_device_t *dev)
               (sizeof(uint32_t) | sizeof(uint64_t)));
 }
 
+static inline int uct_ib_device_has_srq(const uct_ib_device_t *dev)
+{
+    return IBV_DEV_ATTR(dev, max_srq) != 0;
+}
+
 const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
 
 const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
@@ -447,6 +488,11 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
                                    uint32_t resource_id);
 
+/* Mark a registered event as fired and schedule the callbacks of its waiters.
+ * An event which is not registered is ignored. */
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event);
+
 /* Invoke the callback defined by 'wait_ctx' from callback queue when the event
  * fires. If it has already been fired, the callback is scheduled immediately to
  * the callback queue.
@@ -467,10 +513,6 @@ void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
                                           uint32_t resource_id);
-
-ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
-                                         struct ibv_ah_attr *ah_attr,
-                                         struct ibv_ah **ah_p);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
 

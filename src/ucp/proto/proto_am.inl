@@ -200,7 +200,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                    packed_len, packed_len);
             if (handle_user_hdr) {
                 status = ucp_am_handle_user_header_send_status_or_release(
-                        req, packed_len);
+                        req, ucp_proto_bcopy_send_func_status(packed_len));
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
                 }
@@ -728,6 +728,7 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
 
     hdr_state.offset = 0ul;
 
+    /* coverity[uninit_use_in_call] */
     ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
                 UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header.ptr,
                 &hdr_state, req->send.msg_proto.am.header.length);

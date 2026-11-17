@@ -120,6 +120,8 @@ public:
 
     virtual bool has_transport(const std::string& tl_name) const;
 
+    ucs::handle<uct_md_h> open_md() const;
+
     enum atomic_mode {
         OP32,
         OP64,
@@ -160,6 +162,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_caps_v2(uint64_t required_flags);
         bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
         bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
@@ -208,11 +211,17 @@ protected:
 
         ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
                             const uct_listener_params_t &params);
+
+        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
+
         void disconnect(uct_ep_h ep);
 
         void flush() const;
 
         ucs_async_context_t &async() const;
+
+        /* Whether same-host traffic of the TCP iface is dropped by its VRF */
+        bool tcp_vrf_drops_loopback() const;
 
         size_t                   max_conn_priv;
 
@@ -226,9 +235,6 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-
-
-        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
@@ -396,8 +402,11 @@ protected:
     virtual bool has_gpu() const;
 
     bool is_caps_supported(uint64_t required_flags);
-    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0,
+                    uint64_t required_v2_flags = 0);
+    bool check_caps_v2(uint64_t required_flags);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
+    void check_skip_flush_remote();
     bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;

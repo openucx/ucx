@@ -100,5 +100,5 @@ void ud_base_test::wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_id)
     wait_for_cond([iface, ep_id]() {
         void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
         return !ucs_ptr_array_lookup(&iface->eps, ep_id, ud_ep);
-    }, []() { usleep(1000); }, 60.0);
+    }, [this]() { short_progress_loop(); }, 60.0);
 }

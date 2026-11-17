@@ -66,6 +66,8 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
   messages while still letting the test run.
 - Each test must clean up every resource it allocates before completing
   — leaks count as failures.
+- Wrap every CUDA device switch in a `scoped_cuda_device` scope; a test
+  that leaves a non-default device current fails in `TearDownProxy()`.
 
 ## Pointers
 

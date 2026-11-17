@@ -116,12 +116,15 @@ UCS_TEST_SKIP_COND_P(test_many2one_am, am_bcopy,
 
     ucs::ptr_vector<mapped_buffer> buffers;
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
+        /* Take ownership before connect(), which can skip the test */
         entity *sender = create_entity(0);
+        m_entities.push_back(sender);
+
         mapped_buffer *buffer = new mapped_buffer(
                             sender->iface_attr().cap.am.max_bcopy, 0, *sender);
-        sender->connect(0, *m_receiver, i);
-        m_entities.push_back(sender);
         buffers.push_back(buffer);
+
+        sender->connect(0, *m_receiver, i);
     }
 
     m_am_count = 0;

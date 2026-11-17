@@ -15,35 +15,12 @@ jobs:
       # x86_64 matrix
       ${{ if contains(parameters.name, 'x86_64') }}:
         matrix:
-          rhel76:
-            CONTAINER: rhel76
-            build_mode: short
-          ubuntu2004:
-            CONTAINER: ubuntu2004
-            build_mode: short
-            extra_modules: ""
-          ubuntu1804:
-            CONTAINER: ubuntu1804
-            build_mode: sanity
-            extra_modules: ""
           ubuntu2204:
             CONTAINER: ubuntu2204
             build_mode: short
           ubuntu2404:
             CONTAINER: ubuntu2404
             build_mode: long
-          ubuntu2210:
-            CONTAINER: ubuntu2210
-            build_mode: sanity
-          debian113:
-            CONTAINER: debian113
-            build_mode: short
-          debian109:
-            CONTAINER: debian109
-            build_mode: sanity
-          debian125:
-            CONTAINER: debian125
-            build_mode: short
           debian130:
             CONTAINER: debian130
             build_mode: short
@@ -55,14 +32,14 @@ jobs:
             build_mode: short
           rhel82:
             CONTAINER: rhel82
-            build_mode: short
-          rhel82_gcc_15_2_0:
-            CONTAINER: rhel82
             build_mode: sanity
-            GCC_MODULE: dev/gcc-15.2.0
           rhel90:
             CONTAINER: rhel90
             build_mode: short
+          rhel90_gcc_15_2_0:
+            CONTAINER: rhel90
+            build_mode: sanity
+            GCC_MODULE: dev/gcc-15.2.0
           rhel100:
             CONTAINER: rhel100
             build_mode: long
@@ -72,26 +49,14 @@ jobs:
           rocky96:
             CONTAINER: rocky96
             build_mode: sanity
-          fedora41:
-            CONTAINER: fedora41
-            build_mode: sanity
           centos7:
             CONTAINER: centos7_ib
             build_mode: sanity
           centos10stream:
             CONTAINER: centos10stream
             build_mode: sanity
-          ubuntu2004_rocm:
-            CONTAINER: ubuntu2004_rocm_5_4_0
-            build_mode: short
           ubuntu2204_rocm:
             CONTAINER: ubuntu2204_rocm_6_0_0
-            build_mode: short
-          kylin10sp3:
-            CONTAINER: kylin10sp3
-            build_mode: short
-          euleros2sp12:
-            CONTAINER: euleros2sp12
             build_mode: short
           ctyunos2507:
             CONTAINER: ctyunos2507
@@ -101,6 +66,18 @@ jobs:
             build_mode: short
           tencentos44:
             CONTAINER: tencentos44
+            build_mode: short
+          fedora44:
+            CONTAINER: fedora44
+            build_mode: sanity
+          ubuntu2610:
+            CONTAINER: ubuntu2610
+            build_mode: sanity
+          azurelinux40:
+            CONTAINER: azurelinux40
+            build_mode: sanity
+          openeuler2403sp3:
+            CONTAINER: openeuler2403sp3
             build_mode: short
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
@@ -141,6 +118,18 @@ jobs:
             build_mode: short
           tencentos44_aarch64:
             CONTAINER: tencentos44_aarch64
+            build_mode: short
+          fedora44_aarch64:
+            CONTAINER: fedora44_aarch64
+            build_mode: short
+          ubuntu2610_aarch64:
+            CONTAINER: ubuntu2610_aarch64
+            build_mode: short
+          azurelinux40_aarch64:
+            CONTAINER: azurelinux40_aarch64
+            build_mode: short
+          openeuler2403sp3_aarch64:
+            CONTAINER: openeuler2403sp3_aarch64
             build_mode: short
     timeoutInMinutes: 340
 

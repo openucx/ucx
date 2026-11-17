@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -64,6 +64,13 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
                 (_src_num_words));
 
 
+/* Iterate over set bits while _cond holds */
+#define _UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words, _cond) \
+    for (_bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
+         (_cond) && (_bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD); \
+         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
+
+
 /**
  * Helper macro to iterate over all set (1) bits of a given bitmap.
  *
@@ -72,9 +79,7 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
  * @param _num_words Number of words in the bitmap.
  */
 #define UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words) \
-    for (_bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
-         _bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD; \
-         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
+    _UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words, 1)
 
 
 /**
@@ -105,13 +110,14 @@ size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
                            size_t start_index, size_t bit_count);
 
 
-/* Helper function to set all bitmap bits to a given value, avoiding a call to
- * memset() if the value is known to be 0, to workaround a compiler warning.
+/* Helper function to set all bitmap bits to a given value. An empty bitmap is
+ * skipped, since 'bits' may be NULL in that case, and memset() does not accept
+ * a NULL pointer even with a zero length.
  */
 static UCS_F_ALWAYS_INLINE void
 ucs_bitmap_bits_memset(ucs_bitmap_word_t *bits, int value, size_t num_words)
 {
-    if (__builtin_constant_p(num_words) && (num_words == 0)) {
+    if (num_words == 0) {
         return;
     }
 

@@ -13,9 +13,22 @@
 #include <infiniband/efadv.h>
 
 
+#define UCT_IB_AWS_EFA_PCI_VENDOR_ID 0x1d0f
+
+
 typedef struct uct_ib_efadv_md {
     uct_ib_md_t super;
 } uct_ib_efadv_md_t;
+
+
+/* Devices with an unavailable PCI vendor id are not filtered out, and have to
+ * be probed by efadv_query_device() */
+static inline int
+uct_ib_efadv_pci_vendor_match(const ucs_sys_pci_id_t *pci_id)
+{
+    return (pci_id->vendor == UCS_SYS_PCI_ID_VALUE_UNDEFINED) ||
+           (pci_id->vendor == UCT_IB_AWS_EFA_PCI_VENDOR_ID);
+}
 
 
 static inline int

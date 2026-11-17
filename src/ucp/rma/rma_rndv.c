@@ -19,14 +19,10 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/rndv/proto_rndv.inl>
-#include <ucs/arch/cpu.h>
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
-#define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
-#define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
 
 static int
@@ -34,20 +30,12 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
                                ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
-    const ucp_context_h context               = init_params->worker->context;
-
-    /* TODO: We prefer to use direct zcopy when possible, remove this check when
-     * prioritization of protocols is implemented. */
-    if (!context->config.ext.rma_ppln_enable &&
-        (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA)) {
-        return 0;
-    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (init_params->ep_config_key->dst_version <
-         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
+         UCP_MIN_DST_VERSION_PROTO_RMA_RNDV) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
@@ -171,10 +159,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        /* Prefer direct PUT zcopy when it is available; keep PUT/RNDV as a
-         * fallback for cases where the peer can only pull the data. */
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rts +
-                               UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_rts,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 5,
         .super.min_length    = 0,
@@ -260,14 +245,10 @@ ucp_proto_get_rndv_zero_length_variant(const ucp_proto_init_elem_t *proto)
 static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
                                                   ucp_proto_init_elem_t *proto)
 {
-    /* Prefer direct GET zcopy when it is available; keep GET/RNDV as a
-     * fallback for cases where the peer can only send the data. */
-    double overhead = context->config.ext.proto_overhead_rndv_rtr +
-                      UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY;
+    double overhead = context->config.ext.proto_overhead_rndv_rtr;
 
+    /* Avoid RNDV for a zero-length GET when no zcopy protocol replaces it */
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
-        /* Keep zero-only RNDV receive variants available, but make direct GET
-         * protocols preferable for zero-length RMA GET. */
         overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;
     }
 
@@ -334,12 +315,9 @@ ucp_proto_get_rndv_add_variant(
 static void
 ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_worker_h worker                     = init_params->worker;
     const ucp_proto_select_init_protocols_t *proto_init;
     ucp_proto_select_param_t rndv_sel_param;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_elem_t *select_elem;
-    ucp_proto_select_t *proto_select;
     ucp_proto_init_elem_t *proto;
     ucp_memory_info_t mem_info;
     ucp_lane_index_t lane;
@@ -359,22 +337,12 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
 
-    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
-                                        init_params->rkey_cfg_index,
-                                        &rkey_cfg_index);
-    if (proto_select == NULL) {
+    proto_init = ucp_proto_select_lookup_init(init_params, &rndv_sel_param,
+                                              &rkey_cfg_index);
+    if (proto_init == NULL) {
         return;
     }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
-                                               init_params->ep_cfg_index,
-                                               rkey_cfg_index,
-                                               &rndv_sel_param);
-    if (select_elem == NULL) {
-        return;
-    }
-
-    proto_init = &select_elem->proto_init;
     ucs_array_for_each(proto, &proto_init->protocols) {
         if (ucp_proto_id_field(proto->proto_id, flags) &
             UCP_PROTO_FLAG_INVALID) {
@@ -528,6 +496,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     rndv_req->send.rndv.remote_address     = address;
     rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
+    ucp_proto_rndv_req_fc_init(rndv_req);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,
                           &rndv_req->send.state.dt_iter,
@@ -617,11 +586,8 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    ucp_memory_detect(worker->context, (void*)(uintptr_t)rts->address,
-                      rts->super.size, &mem_info);
-    ucs_assertv(mem_info.type == rts->mem_type, "detected mem_type=%s rts=%s",
-                ucs_memory_type_names[mem_info.type],
-                ucs_memory_type_names[rts->mem_type]);
+    ucp_proto_rndv_memory_detect(worker->context, rts->address, rts->super.size,
+                                 rts->mem_type, rts->sys_dev, &mem_info);
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);
@@ -635,25 +601,27 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
 }
 
 ucp_proto_t ucp_put_rndv_proto = {
-    .name     = "put/rndv",
-    .desc     = UCP_PROTO_RNDV_DESC,
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe    = ucp_proto_put_rndv_probe,
-    .query    = ucp_proto_rma_rndv_query,
-    .progress = {ucp_proto_put_rndv_progress},
-    .abort    = ucp_proto_rndv_rts_abort,
-    .reset    = ucp_proto_rndv_rts_reset
+    .name        = "put/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_put_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_put_rndv_progress},
+    .abort       = ucp_proto_rndv_rts_abort,
+    .reset       = ucp_proto_rndv_rts_reset
 };
 
 ucp_proto_t ucp_get_rndv_proto = {
-    .name     = "get/rndv",
-    .desc     = UCP_PROTO_RNDV_DESC,
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe    = ucp_proto_get_rndv_probe,
-    .query    = ucp_proto_rma_rndv_query,
-    .progress = {ucp_proto_get_rndv_progress},
-    .abort    = ucp_proto_get_rndv_abort,
-    .reset    = ucp_proto_get_rndv_reset
+    .name        = "get/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_get_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_get_rndv_progress},
+    .abort       = ucp_proto_get_rndv_abort,
+    .reset       = ucp_proto_get_rndv_reset
 };

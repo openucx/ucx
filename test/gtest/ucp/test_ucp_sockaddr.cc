@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -397,7 +397,7 @@ public:
                send_recv_type_t send_type, ucp_send_nbx_callback_t cb,
                void *user_data, size_t ep_index = 0)
     {
-        ucp_request_param_t params;
+        ucp_request_param_t params = {};
 
         params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                               UCP_OP_ATTR_FIELD_USER_DATA;
@@ -447,7 +447,7 @@ public:
     void* recv(entity& to, void *contig_buffer, size_t length,
                ucp_stream_recv_nbx_callback_t cb, void *user_data)
     {
-        ucp_request_param_t params;
+        ucp_request_param_t params = {};
 
         params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK |
                                 UCP_OP_ATTR_FIELD_USER_DATA |
@@ -823,8 +823,8 @@ public:
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
 
-            if (err_str.find("on CM lane will not be handled since no error"
-                             " callback is installed") != std::string::npos) {
+            if (err_str.find("will not be handled since no error callback is"
+                             " installed") != std::string::npos) {
                 UCS_TEST_MESSAGE << "< " << err_str << " >";
                 ++m_err_count;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -1051,6 +1051,10 @@ UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 }
 
+UCS_TEST_P(test_ucp_sockaddr, listen_fabric_id, "IB_FABRIC_ID?=10") {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
 UCS_TEST_P(test_ucp_sockaddr, ep_query) {
     listen_and_communicate(false, 0);
     ep_query();
@@ -1167,7 +1171,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     /* get the actual port which was selected by listener */
     test_addr.set_port(m_test_addr.get_port());
     /* restore address */
-    m_test_addr = test_addr;
+    m_test_addr = std::move(test_addr);
     connect_and_send_recv(false, SEND_DIRECTION_C2S);
 }
 
@@ -3315,10 +3319,9 @@ public:
         return false;
     }
 
-    void client_connect_disconnect()
+    void client_connect_disconnect(bool communicate)
     {
         /* Check state before connection establishment */
-        EXPECT_FALSE(is_any_interface_activated(receiver()));
         int receiver_ep_count = receiver().get_num_eps();
 
         /* Connect sender and receiver */
@@ -3330,16 +3333,21 @@ public:
         /* Check state after connection establishment */
         EXPECT_EQ(0, sender().get_err_num());
         EXPECT_TRUE(is_any_interface_activated(sender()));
-        EXPECT_TRUE(is_any_interface_activated(receiver()));
+
+        /* Check state after communication */
+        if (communicate) {
+            for (int i = 0; i < 10; ++i) {
+                send_recv(sender(), receiver(), SEND_RECV_TAG, false,
+                          cb_type());
+                progress();
+            }
+            EXPECT_TRUE(is_any_interface_activated(receiver()));
+        }
 
         one_sided_disconnect(sender());
         one_sided_disconnect(receiver(), 0, receiver_ep_count);
 
-        EXPECT_FALSE(is_any_interface_activated(receiver()));
         receiver().reset_err_num();
-
-        /* TODO: check why receiver interfaces are not deactivated on one-sided
-         * client disconnect */
     }
 };
 
@@ -3347,8 +3355,18 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
                      !is_proto_enabled())
 {
     listen(cb_type());
-    client_connect_disconnect();
-    client_connect_disconnect();
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
+
+    client_connect_disconnect(false);
+    client_connect_disconnect(false);
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
+
+    client_connect_disconnect(true);
+
+    /* Interfaces are released together with the last endpoint using them, even
+     * if they were used to receive messages. Relies on tcp built-in keepalive:
+     * a keepalive lane would keep its interface activated. */
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_iface_activate, tcp, "tcp")

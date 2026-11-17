@@ -342,11 +342,14 @@ typedef union uct_rc_mlx5_dm_copy_data {
 KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
            kh_int64_hash_equal)
 
+struct uct_rc_mlx5_ext_ops;
+
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
     struct {
         ucs_mpool_t                    atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t        mmio_mode;
+        uct_ib_mlx5_bf_copy_mode_t     bf_copy_mode;
         uint16_t                       bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
     struct {
@@ -415,6 +418,8 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        ddp_enabled_dv;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
+    const struct uct_rc_mlx5_ext_ops   *ext_ops;
+    void                              *ext_ctx;
 } uct_rc_mlx5_iface_common_t;
 
 /**
@@ -696,8 +701,8 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                                    void *data, size_t length, size_t valid_length,
-                                    char *buffer, size_t max);
+                                    void *data, size_t length, char *buffer,
+                                    size_t max);
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)

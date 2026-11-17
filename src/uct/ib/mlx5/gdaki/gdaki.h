@@ -8,6 +8,7 @@
 
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
+#include <uct/cuda/base/cuda_mem.h>
 #include <ucs/datastruct/mpool.h>
 
 #include <cuda.h>
@@ -24,26 +25,36 @@ typedef struct {
 } uct_rc_gdaki_channel_t;
 
 typedef struct {
+    uct_worker_tl_data_t   super;
+    uct_ib_mlx5_devx_uar_t *uar;
+    CUdeviceptr            device_ptr;
+} uct_rc_gdaki_devx_uar_t;
+
+typedef struct {
     uintptr_t              gpu_ptr;
     uct_rc_gdaki_channel_t channels[0];
 } uct_rc_gdaki_channel_block_t;
 
 typedef struct {
     void                    *gpu_mem;
-    CUdeviceptr             gpu_raw;
+    uct_cuda_mem_t          gpu_raw;
     struct mlx5dv_devx_umem *umem;
 } uct_rc_gdaki_channel_block_mem_t;
 
 typedef struct uct_rc_gdaki_iface {
     uct_rc_mlx5_iface_common_t super;
-    CUdevice                   cuda_dev;
     struct ibv_mr              *atomic_mr;
     uint64_t                   *atomic_buff;
-    CUcontext                  cuda_ctx;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
+    uct_rc_gdaki_devx_uar_t    *uar_wrap;
+    struct {
+        CUdevice  dev;
+        CUcontext ctx;
+        size_t    alloc_granularity;
+    } cuda;
 } uct_rc_gdaki_iface_t;
 
 

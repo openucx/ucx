@@ -224,8 +224,9 @@ typedef struct ucm_global_config {
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
     int                  module_unload_prevent_mode;  /* Module unload prevention mode */
     int                  bistro_force_far_jump;       /* Force far jump with bistro patching */
-    double               bistro_grace_duration;       /* Grace duration for bistro patching 
+    double               bistro_grace_duration;       /* Grace duration for bistro patching
                                                        * in seconds */
+    uint64_t             rocm_hook_modes;             /* Bitmap of allowed rocm hooks modes */
 } ucm_global_config_t;
 
 

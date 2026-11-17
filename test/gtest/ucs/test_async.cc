@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -573,6 +573,15 @@ UCS_TEST_P(test_async, ctx_timer) {
     expect_count_GE(lt, TIMER_EXP_COUNT);
 }
 
+UCS_TEST_P(test_async, is_from_async_no_handlers)
+{
+    ucs_async_context_t async;
+
+    ASSERT_UCS_OK(ucs_async_context_init(&async, GetParam()));
+    EXPECT_FALSE(ucs_async_is_from_async(&async));
+    ucs_async_context_cleanup(&async);
+}
+
 UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
@@ -646,8 +655,8 @@ UCS_TEST_SKIP_COND_P(test_async, modify_missed_event,
                      GetParam() == UCS_ASYNC_MODE_POLL)
 {
     local_event le(GetParam());
-    const int event_id = le.event_id();
-    ucs_status_t status;
+    const int event_id  = le.event_id();
+    ucs_status_t status = UCS_ERR_LAST;
     int count;
 
     ASSERT_UCS_OK(ucs_async_modify_handler(event_id, UCS_EVENT_SET_EVREAD |

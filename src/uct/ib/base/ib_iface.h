@@ -105,7 +105,8 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
     UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
-    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
+    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5),
+    UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID     = UCS_BIT(6)
 };
 
 
@@ -116,6 +117,7 @@ typedef enum {
     UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
     UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
     UCT_IB_REACHABILITY_MODE_ALL          = 2,
+    UCT_IB_REACHABILITY_MODE_KERNEL       = 3,
     UCT_IB_REACHABILITY_MODE_LAST
 } uct_ib_iface_reachability_mode_t;
 
@@ -147,6 +149,9 @@ typedef struct uct_ib_address_pack_params {
     /* PKEY value,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PKEY is set. */
     uint16_t                          pkey;
+    /* Administrative fabric id, 0 if the peer does not report one,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID is set. */
+    uint16_t                          fabric_id;
 } uct_ib_address_pack_params_t;
 
 
@@ -198,6 +203,9 @@ struct uct_ib_iface_config {
 
     /* Use FLID based routing */
     int                              flid_enabled;
+
+    /* Administrative fabric identifier, 0 for the default fabric */
+    unsigned                         fabric_id;
 
     /* IB SL to use (default: AUTO) */
     unsigned long                    sl;
@@ -269,6 +277,7 @@ typedef struct uct_ib_iface_init_attr {
     size_t      xport_hdr_len;           /* How many bytes this transport adds on top
                                           * of IB header (LRH+BTH+iCRC+vCRC) */
     unsigned    fc_req_size;             /* Flow control request size */
+    unsigned    fc_max_wnd_size;         /* Maximum flow control window */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
@@ -372,6 +381,8 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
+        /* Administrative fabric id, 0 for the default fabric */
+        uint16_t                         fabric_id;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;
@@ -498,6 +509,19 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
 
 
 /**
+ * Get the size of a packed IB address from the address itself. The layout is
+ * described by the address flags, so unlike @ref uct_ib_address_size() the
+ * result is valid for an address packed by a peer whose configuration, or UCX
+ * version, differs from the local one.
+ *
+ * @param [in]  ib_addr  Packed IB address.
+ *
+ * @return IB address size, in bytes, or 0 if the address is invalid.
+ */
+size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr);
+
+
+/**
  * @return IB address packing flags of the given iface.
  */
 unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
@@ -507,11 +531,6 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
  * @return IB address size of the given iface.
  */
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
-
-
-int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
-                              const uct_ib_address_t *ib_addr,
-                              unsigned path_index, struct ibv_ah *peer_ah);
 
 
 /**
@@ -633,12 +652,22 @@ typedef struct uct_ib_recv_wr {
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
-ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    struct ibv_ah_attr *ah_attr,
-                                    const char *usage, struct ibv_ah **ah_p);
+/* Get a cached AH reference; release with uct_ib_iface_ah_put(). */
+ucs_status_t uct_ib_iface_ah_get(uct_ib_iface_t *iface,
+                                 struct ibv_ah_attr *ah_attr,
+                                 const char *usage,
+                                 uct_ib_ah_entry_t **entry_p);
 
-/* Counterpart of uct_ib_iface_create_ah(); destroys the AH if uncached */
-void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah);
+void uct_ib_iface_ah_put(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry);
+
+/* Duplicate a reference already held by the caller. */
+void uct_ib_iface_ah_hold(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry);
+
+/* Whether the cached AH was created for the peer described by ib_addr. */
+int uct_ib_iface_ah_is_peer(uct_ib_iface_t *iface,
+                            const uct_ib_ah_entry_t *entry,
+                            const uct_ib_address_t *ib_addr,
+                            unsigned path_index);
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,

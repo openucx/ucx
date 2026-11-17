@@ -124,9 +124,17 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY = UCS_BIT(2), /**< When tried to arm the interface
+                                                               for activation events, the interface
+                                                               is already busy, so need to keep
+                                                               checking events for it in the
+                                                               main progress loop. */
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING   = UCS_BIT(4)  /**< Path bandwidth of the
+                                                               endpoints is to be
+                                                               sampled */
 };
 
 
@@ -154,6 +162,7 @@ enum {
     UCP_WORKER_STAT_RNDV_RTR,
     UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED,
 
     UCP_WORKER_STAT_LAST
 };
@@ -218,15 +227,50 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+/* Bandwidth of a lane whose path is not degraded */
+#define UCP_EP_PATH_BW_INVALID (-1.0)
+
+
+/* Path samples of one configuration and set of lanes of an endpoint,
+ * allocated for endpoints on interfaces which report path events. */
+typedef struct {
+    ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
+    uint32_t               lane_generation; /* Lanes of the samples */
+    double                 bandwidth[];     /* Lane bandwidth below the path
+                                               estimate, or
+                                               UCP_EP_PATH_BW_INVALID if the
+                                               path is not degraded */
+} ucp_ep_path_bw_t;
+
+
+KHASH_TYPE(ucp_worker_ep_path_bw, ucp_ep_h, ucp_ep_path_bw_t*);
+
+
+/**
+ * Rendezvous fragment pools of a memory type and device. RTR requests use
+ * only the shared pool, while PUT/GET requests use the reserved pool first.
+ * This keeps fragments for PUT/GET: an RTR fragment is released only when
+ * the peer's data arrives, and the peer needs a fragment of its own to send
+ * it, so RTR fragments on both peers could otherwise wait for each other.
+ */
+typedef enum {
+    UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+    UCP_WORKER_RNDV_FRAG_POOL_RESERVED
+} ucp_worker_rndv_frag_pool_t;
+
+
 typedef struct ucp_worker_mpool_key {
     ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t  sys_dev;   /* identifier for the device,
                                     UINT_MAX for default device */
+    uint8_t           pool;      /* UCP_WORKER_RNDV_FRAG_POOL_* */
 } ucp_worker_mpool_key_t;
 
 
 /* Hash map to find mpool by mpool key */
-KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
+/* Pools are allocated separately, since fragments point to their pool and the
+ * hash table moves its values when it grows */
+KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
 
@@ -262,6 +306,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
 struct ucp_worker_iface {
     uct_iface_h                   iface;         /* UCT interface */
     uct_iface_attr_t              attr;          /* UCT interface attributes */
+    uct_iface_attr_v2_t           attr_v2;       /* UCT interface v2 attributes */
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
@@ -293,7 +338,20 @@ UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
 /* rkey configuration storage */
-UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
+
+
+/**
+ * Rendezvous mtype flow-control operation types.
+ * Used as indices into the per-worker pending queue array.
+ * PUT and GET share the high-priority queue; RTR uses the low-priority queue.
+ */
+enum {
+    UCP_WORKER_RNDV_FC_OP_PUT  = 0,                          /* GET/PUT (hi prio) */
+    UCP_WORKER_RNDV_FC_OP_GET  = UCP_WORKER_RNDV_FC_OP_PUT,  /* Same as PUT */
+    UCP_WORKER_RNDV_FC_OP_RTR  = 1,                          /* RTR (lo prio) */
+    UCP_WORKER_RNDV_FC_OP_LAST = 2
+};
 
 
 /**
@@ -325,6 +383,7 @@ typedef struct ucp_worker {
     int                              eventfd;             /* Event fd to support signal() calls */
     unsigned                         uct_events;          /* UCT arm events */
     ucs_list_link_t                  arm_ifaces;          /* List of interfaces to arm */
+    int                              arm_block_count;     /* If >0, ucp_worker_arm() should return UCS_ERR_BUSY */
 
     void                             *user_data;          /* User-defined data */
     ucs_strided_alloc_t              ep_alloc;            /* Endpoint allocator */
@@ -368,6 +427,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
     kh_ucp_worker_remote_flush_t     remote_flush_hash;
+    kh_ucp_worker_ep_path_bw_t       ep_path_bw;          /* EP path bandwidth samples */
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
@@ -395,6 +455,12 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Pending queues indexed by UCP_WORKER_RNDV_FC_OP_*,
+         * ordered by descending priority (GET/PUT = 0, RTR = 1) */
+        ucs_queue_head_t             pending_q[UCP_WORKER_RNDV_FC_OP_LAST];
+    } rndv_mtype_fc;
 
     struct {
         /* Usage tracker handle */
@@ -435,13 +501,16 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);
 
+void ucp_worker_ep_path_bw_cleanup(ucp_ep_h ep);
+
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
-void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags,
+                               const char *reason);
 
 int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
 

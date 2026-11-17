@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
@@ -249,6 +249,12 @@
  */
 #define ucs_carray_for_each(_elem, _array, _length) \
     for ((_elem) = (_array); (_elem) < ((_array) + (_length)); ++(_elem))
+
+/*
+ * Iterate over all elements of a C-array and track the current index
+ */
+#define ucs_carray_for_each_index(_elem, _idx, _array, _length) \
+    for ((_idx) = 0, (_elem) = (_array); (_idx) < (_length); ++(_idx), ++(_elem))
 
 /*
  * Swap two variables values
