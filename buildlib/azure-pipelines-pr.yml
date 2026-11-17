@@ -32,13 +32,5 @@ pr:
     - buildlib/tools/perf_results.py
     - buildlib/tools/perf-common.yml
 
-resources:
-  repositories:
-    - repository: ucxx
-      type: github
-      name: rapidsai/ucxx
-      endpoint: Mellanox-lab
-      ref: 7d0234f3131794bd37cf509ab3bde2026ae7eb78
-
 extends:
   template: pr/main.yml

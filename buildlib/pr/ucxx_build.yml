@@ -17,7 +17,7 @@ stages:
     dependsOn: ${{ parameters.dependsOn }}
     variables:
       UCX_DIR: $(Agent.BuildDirectory)/ucx
-      UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+      UCXX_DIR: $(Agent.BuildDirectory)/ucx/bindings/ucxx
       RAPIDS_BLD_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)
     jobs:
       - ${{ each slice in parameters.conda_cpp_slices }}:
@@ -38,9 +38,6 @@ stages:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_cpp
@@ -70,9 +67,6 @@ stages:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
@@ -112,9 +106,6 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_libucxx
               displayName: Build libucxx wheel
@@ -144,9 +135,6 @@ stages:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
@@ -189,9 +177,6 @@ stages:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
@@ -242,9 +227,6 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch libucxx wheel artifact
@@ -290,9 +272,6 @@ stages:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh devcontainer
               displayName: Validate UCXX devcontainer configs

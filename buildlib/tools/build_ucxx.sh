@@ -111,6 +111,14 @@ if [ -n "${WHEEL_INPUT_DIR:-}" ]; then
   chmod +x "$HOME/.local/bin/rapids-download-from-github"
 fi
 
+# The UCX repository has no ucxx tags for rapids-generate-version to derive
+# the package version from; take it from the ucxx VERSION file instead.
+cat > "$HOME/.local/bin/rapids-generate-version" <<EOF
+#!/bin/bash
+echo -n "$(head -n 1 "$UCXX_DIR/VERSION")\${RAPIDS_VERSION_SUFFIX:-}"
+EOF
+chmod +x "$HOME/.local/bin/rapids-generate-version"
+
 export PATH="$HOME/.local/bin:$PATH"
 
 cd "$UCXX_DIR"
