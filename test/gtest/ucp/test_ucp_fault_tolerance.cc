@@ -35,6 +35,13 @@ public:
         static constexpr unsigned rma_ops[]           = {
             TEST_OP_PUT, TEST_OP_GET
         };
+        static constexpr unsigned am_ops[]            = {
+            TEST_OP_AM, TEST_OP_AM | TEST_OP_ALL_LANES_FAILED,
+            TEST_OP_AM | TEST_OP_FLUSH
+        };
+        static constexpr unsigned am_msg_size_variants[] = {
+            TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM
+        };
 
         for (unsigned rma_op : rma_ops) {
             for (unsigned msg_size_variant : msg_size_variants) {
@@ -47,13 +54,14 @@ public:
                                    rma_op | TEST_OP_FLUSH,
                                    op_name(rma_op | TEST_OP_FLUSH));
         }
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
-                               op_name(TEST_OP_AM));
-        add_variant_with_value(variants, UCP_FEATURE_AM,
-                               TEST_OP_AM | TEST_OP_ALL_LANES_FAILED,
-                               op_name(TEST_OP_AM | TEST_OP_ALL_LANES_FAILED));
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
-                               op_name(TEST_OP_AM | TEST_OP_FLUSH));
+
+        for (unsigned am_op : am_ops) {
+            for (unsigned msg_size_variant : am_msg_size_variants) {
+                add_variant_with_value(variants, UCP_FEATURE_AM,
+                                       am_op | msg_size_variant,
+                                       op_name(am_op | msg_size_variant));
+            }
+        }
 
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
                                TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
@@ -87,7 +95,9 @@ protected:
         TEST_OP_ALL_LANES_FAILED = UCS_BIT(4),
         TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
         TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
-        TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
+        TEST_MSG_SIZE_LARGE      = UCS_BIT(7),
+        TEST_MSG_SIZE_MASK       = TEST_MSG_SIZE_SMALL | TEST_MSG_SIZE_MEDIUM |
+                                   TEST_MSG_SIZE_LARGE
     };
 
     /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
@@ -648,7 +658,7 @@ protected:
         test_recovery(op_mask);
     }
 protected:
-    size_t rma_msg_size() const {
+    size_t msg_size_by_variant(size_t default_size) const {
         const unsigned op_mask = get_variant_value();
 
         if (op_mask & TEST_MSG_SIZE_SMALL) {
@@ -659,12 +669,21 @@ protected:
             return ucs::limit_buffer_size(MEDIUM_MSG_SIZE);
         }
 
-        return ucs::limit_buffer_size(LARGE_MSG_SIZE /
-                                      ucs::test_time_multiplier());
+        if (op_mask & TEST_MSG_SIZE_LARGE) {
+            return ucs::limit_buffer_size(LARGE_MSG_SIZE /
+                                          ucs::test_time_multiplier());
+        }
+
+        return ucs::limit_buffer_size(default_size);
     }
 
-    static size_t am_msg_size() {
-        return ucs::limit_buffer_size(UCS_KBYTE);
+    size_t rma_msg_size() const {
+        return msg_size_by_variant(LARGE_MSG_SIZE /
+                                   ucs::test_time_multiplier());
+    }
+
+    size_t am_msg_size() const {
+        return msg_size_by_variant(UCS_KBYTE);
     }
 
     static std::string op_name(unsigned op_mask)
@@ -796,9 +815,11 @@ protected:
     static constexpr uint64_t m_seed = 0x12345678;
 
     void skip_unless_rc_probe_gate() {
-        if (get_variant_value() != TEST_OP_AM) {
+        /* Size bits do not change which operation the variant runs. */
+        if ((get_variant_value() & ~TEST_MSG_SIZE_MASK) != TEST_OP_AM) {
             UCS_TEST_SKIP_R("pure AM variant only");
         }
+
         if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5", "rc_verbs", "ib"})) {
             UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
         }
