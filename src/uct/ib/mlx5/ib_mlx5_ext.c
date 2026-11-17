@@ -9,13 +9,13 @@
 #endif
 
 #include "ib_mlx5_ext.h"
-#include "ib_mlx5.h"
 
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/stubs.h>
+#include <string.h>
 
 typedef struct uct_ib_mlx5_ext_plugin {
     ucs_list_link_t       list;
