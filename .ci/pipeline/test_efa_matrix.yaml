@@ -51,9 +51,7 @@ steps:
   - name: Run gtests
     parallel: false
     timeout: 140
-    run: |
-      source .ci/scripts/cap_output.sh
-      ./contrib/test_efa.sh gtest_efa
+    run: bash .ci/scripts/cap_output.sh ./contrib/test_efa.sh gtest_efa
 
   - name: Setup rdma-core
     parallel: false
