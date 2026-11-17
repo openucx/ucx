@@ -1941,7 +1941,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 
         avail_mds--;
 
-        /* List of detect memory type MDs */
+        /* List of memory type detection MDs */
         if (~detect_mem_type_mask & md_attr->detect_mem_types) {
             context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
             ++context->num_mem_type_detect_mds;
