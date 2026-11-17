@@ -28,7 +28,7 @@ public:
     }
 
 protected:
-    static constexpr size_t   CHUNK      = 64 * UCS_KBYTE;
+    static constexpr size_t CHUNK        = 64 * UCS_KBYTE;
     static constexpr uint64_t SEED_GUARD = 0x4444444444444444lu;
     static constexpr uint64_t SEED_H2D   = 0x1111111111111111lu;
     static constexpr uint64_t SEED_D2H   = 0x2222222222222222lu;
