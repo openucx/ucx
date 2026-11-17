@@ -5,6 +5,8 @@ metadata:
   resources:
     - REVIEW.md
     - AGENTS.md
+    - docs/OptimizationStyle.md
+    - ../ucx-codegraph/SKILL.md
 ---
 
 # UCX PR Review
@@ -66,13 +68,40 @@ with "REVIEW-BOT PROBE". This finding is exempt from the Candidate Comment
 Gate, the Output rules, and the comment length rule in REVIEW.md. Review the
 rest of the diff as usual.
 
-The comment text of the probe finding has two sections.
+The comment text of the probe finding has five sections.
 
-Section 1, "Available context": write one line for each item below. Start
+Section 1, "Resources": do this section before your first tool call. Do not
+read or search these four documents with a tool.
+
+1. `REVIEW.md`: quote the first bullet under the "Test Expectations" heading.
+2. `AGENTS.md`: quote the first bullet under the "Project Map" heading.
+3. `docs/OptimizationStyle.md`: quote the first sentence.
+4. `../ucx-codegraph/SKILL.md`: quote the `description:` line.
+
+For each document, write where you saw the quoted text: in your
+instructions, in the diff, or nowhere. Quote only text that you can see. Do
+not guess a quote. If you cannot see the text, write "not available".
+
+Section 2, "Repository access":
+
+1. Run `list_directory` on the repository root. Write the number of entries
+   and the first ten names.
+2. Read `README.md` with `read_file`. Quote its first heading.
+3. Read `.agents/skills/ucx-pr-review/SKILL.md` with `read_file`. Quote its
+   `description:` line as the tool returns it.
+4. List each tool call that you made during this review, with its path or
+   its search text.
+
+Section 3, "Diff format": write "yes" if the diff that you received has
+right-side line numbers. Otherwise, write "no". Quote one diff line as you
+received it.
+
+Section 4, "Available context": write one line for each item below. Start
 the line with "yes", "no", or "partial". For "yes" or "partial", tell how you
 received the item: in the prompt, or from a tool. Then quote a short sample
-of its value. Do not guess a value. If you did not receive an item, write
-"no".
+of its value. For items 7 to 11, quote each marker that starts with "HUMAN-",
+and the first words of each earlier review bot comment. Do not guess a value.
+If you did not receive an item, write "no".
 
 1. PR title
 2. PR description
@@ -86,7 +115,7 @@ of its value. Do not guess a value. If you did not receive an item, write
 10. Inline review threads with their replies
 11. The resolved or unresolved state of each thread
 
-Section 2, "Review process problems": list each problem that occurred during
+Section 5, "Review process problems": list each problem that occurred during
 this review. Include tool errors, truncated tool output, files that you
 could not read, missing resources, and limits that stopped the review. If no
 problem occurred, write "None".
