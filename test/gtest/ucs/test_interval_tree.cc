@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <map>
 
 extern "C" {
 #include <ucs/datastruct/interval_tree.h>
@@ -283,6 +285,56 @@ UCS_TEST_F(test_interval_tree, degenerate_ascending_then_invariant) {
     size_t h = tree_height();
     size_t max_h = 2 * (size_t)std::ceil(std::log2((double)(n + 1)));
     EXPECT_LE(h, max_h) << "height " << h << " > 2*ceil(log2(" << n << "+1)) = " << max_h;
+}
+
+/* Random inserts must merge exactly like a reference set of ranges */
+UCS_TEST_F(test_interval_tree, random_insert_matches_reference) {
+    constexpr uint64_t space = 100000;
+    std::map<uint64_t, uint64_t> expected;
+
+    for (int i = 0; i < 5000; i++) {
+        uint64_t start = ucs::rand() % space;
+        uint64_t end   = start + (ucs::rand() % 300);
+
+        insert_intervals({{start, end}});
+
+        /* Merge into the reference ranges which overlap or touch [start,end] */
+        auto it = expected.upper_bound(start);
+        if ((it != expected.begin()) && (std::prev(it)->second + 1 >= start)) {
+            --it;
+        }
+        while ((it != expected.end()) && (it->first <= end + 1)) {
+            start = std::min(start, it->first);
+            end   = std::max(end, it->second);
+            it    = expected.erase(it);
+        }
+        expected[start] = end;
+
+        if ((i % 500) == 0) {
+            ASSERT_TRUE(check_invariants());
+        }
+    }
+
+    ASSERT_TRUE(check_invariants());
+    EXPECT_EQ(interval_vector_t(expected.begin(), expected.end()),
+              collect_inorder());
+}
+
+/* Inserting many disjoint ranges must not be quadratic in the tree size */
+UCS_TEST_F(test_interval_tree, many_disjoint_inserts) {
+    const uint64_t n = 100000 / ucs::test_time_multiplier();
+
+    /* Ascending from the left end and descending from the right end */
+    for (uint64_t i = 0; i < n; i++) {
+        const uint64_t right = (2 * n - i) * 4;
+
+        insert_intervals({{i * 4, i * 4 + 1}, {right, right + 1}});
+    }
+    EXPECT_EQ(2 * n, ucs_interval_tree_count(&m_tree));
+    ASSERT_TRUE(check_invariants());
+
+    insert_intervals({{0, (2 * n) * 4 + 1}});
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
 }
 
 UCS_TEST_F(test_interval_tree, is_empty) {

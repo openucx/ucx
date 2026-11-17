@@ -66,32 +66,27 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
 /**
  * Find any single node that overlaps or is adjacent to @a range.
  * Returns NULL if none found. Does not modify the tree.
+ *
+ * Nodes are disjoint and non-adjacent, since inserts merge them. So if
+ * @a range ends before a node with a gap, only its left subtree can overlap
+ * @a range, and if @a range starts after the node with a gap, only its right
+ * subtree can.
  */
 static ucs_interval_node_t *
 ucs_interval_tree_find_overlap(ucs_rbtree_node_t *rb_node,
                                ucs_interval_tree_range_t range)
 {
-    ucs_interval_node_t *node, *found;
+    ucs_interval_node_t *node;
 
-    if (rb_node == NULL) {
-        return NULL;
-    }
-
-    node = ucs_interval_tree_node(rb_node);
-
-    if ((range.start <= (node->end + 1)) && (node->start <= (range.end + 1))) {
-        return node;
-    }
-
-    found = ucs_interval_tree_find_overlap(rb_node->left, range);
-    if (found != NULL) {
-        return found;
-    }
-
-    /* Right subtree: all nodes have start >= node->start, so if
-     * node->start > range.end + 1, no right descendant can overlap. */
-    if (node->start <= (range.end + 1)) {
-        return ucs_interval_tree_find_overlap(rb_node->right, range);
+    while (rb_node != NULL) {
+        node = ucs_interval_tree_node(rb_node);
+        if ((range.end + 1) < node->start) {
+            rb_node = rb_node->left;
+        } else if ((node->end + 1) < range.start) {
+            rb_node = rb_node->right;
+        } else {
+            return node;
+        }
     }
 
     return NULL;
