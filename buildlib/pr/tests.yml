@@ -98,5 +98,7 @@ jobs:
           ASAN_CHECK: ${{ parameters.asan_check }}
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUNNING_IN_AZURE: yes
+          # Skip the per-open /proc/cpuinfo scan in the mlx5 provider
+          MLX5_STALL_CQ_POLL: 0
           ${{ if eq(parameters.prebuild, 'yes') }}:
             PREBUILT_TARBALL: $(Pipeline.Workspace)/prebuilt/ucx-build.tar
