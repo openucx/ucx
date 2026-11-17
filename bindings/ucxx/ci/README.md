@@ -72,9 +72,8 @@ UCX installed with prefix `/usr` does not work for conda builds, even with `ucx_
   UCX is not registered with `ldconfig`, `ucx_ROOT` (or `UCX_ROOT`) must be set: the
   build then adds `<prefix>/lib` and `<prefix>/lib64` to its own `LD_LIBRARY_PATH`.
   Package import tests are skipped regardless (see [Conda limitations](#conda-limitations)).
-- **`ucx_info` must be on `PATH`** in conda test jobs (`test_cpp.sh`, `test_python.sh`,
-  `test_python_distributed.sh`), which call it unconditionally to print the UCX
-  configuration. Wheel test jobs fall back to querying the version from Python.
+- **`ucx_info` must be on `PATH`** in conda test jobs (`test_cpp.sh`, `test_python.sh`),
+  which call it unconditionally to print the UCX configuration. Wheel test jobs fall back to querying the version from Python.
 - **For conda builds, UCX should be built against glibc 2.28 or older** (the conda
   sysroot version). See [Conda limitations](#conda-limitations).
 
@@ -110,13 +109,12 @@ following:
 6. **glibc compatibility is not checked.** Packages declare `__glibc >=2.28`, matching
    the conda sysroot. A system UCX built against a newer glibc may fail to link, or yield
    packages whose real glibc requirement is higher than declared (untested).
-7. **Package import tests are skipped.** The `ucxx` and `distributed-ucxx` recipes run
-   `import ucxx`/`import distributed_ucxx` tests in isolated `rattler-build` environments,
+7. **Package import tests are skipped.** The `ucxx` recipe runs
+   `import ucxx` tests in isolated `rattler-build` environments,
    which cannot load UCX unless it is registered with `ldconfig` (unlike builds, tests
    do not receive `ucx_ROOT`/`UCX_ROOT`). These tests are skipped
-   with `UCXX_NO_LIBUCX=true`; imports are exercised by `test_python.sh` and
-   `test_python_distributed.sh` instead. Other package tests (e.g., file presence) still
-   run.
+   with `UCXX_NO_LIBUCX=true`; imports are exercised by `test_python.sh` instead.
+   Other package tests (e.g., file presence) still run.
 
 ### Wheel limitations
 
@@ -126,9 +124,8 @@ Wheels are built with the CI image's system compiler (gcc-toolset), not a sysroo
 1. **The wheels are not portable.** They carry manylinux tags but require a system UCX at
    runtime; `auditwheel repair` already excludes `libucp.so.0`, so UCX is not bundled.
 2. **No UCX version constraint**, as for conda (including the excluded UCX 1.22.0).
-3. With UCX at prefix `/usr`, only the `libucxx` wheel build was verified; the `ucxx` and
-   `distributed-ucxx` wheel builds and wheel tests were verified with UCX at `/usr/local`
-   and `/opt/ucx` only.
+3. With UCX at prefix `/usr`, only the `libucxx` wheel build was verified; the `ucxx`
+   wheel build and wheel tests were verified with UCX at `/usr/local` and `/opt/ucx` only.
 
 ### Test environment notes
 

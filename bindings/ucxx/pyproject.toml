@@ -30,7 +30,6 @@ section-order = [
 ]
 known-first-party = [
     "ucxx",
-    "distributed_ucxx",
 ]
 
 [tool.ruff.lint.isort.sections]

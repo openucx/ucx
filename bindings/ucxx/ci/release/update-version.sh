@@ -124,7 +124,6 @@ DEPENDENCIES=(
   rmm
 )
 UCXX_DEPENDENCIES=(
-  distributed-ucxx
   libucxx
   libucxx-examples
   libucxx-tests

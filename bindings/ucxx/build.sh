@@ -18,8 +18,8 @@ ARGS=$*
 # script, and that this script resides in the repo dir!
 REPODIR=$(cd "$(dirname "$0")"; pwd)
 
-VALIDARGS="clean libucxx libucxx_python libucxx_benchmarks libucxx_benchmarks_cuda libucxx_examples libucxx_tests ucxx ucxx_tests distributed_ucxx -v -g -n -c --show_depr_warn -h"
-HELP="$0 [clean] [libucxx] [libucxx_python] [libucxx_benchmarks] [libucxx_benchmarks_cuda] [libucxx_examples] [libucxx_tests] [ucxx] [ucxx_tests] [distributed_ucxx] [-vcgnh] [--cmake-args=\\\"<args>\\\"]
+VALIDARGS="clean libucxx libucxx_python libucxx_benchmarks libucxx_benchmarks_cuda libucxx_examples libucxx_tests ucxx ucxx_tests -v -g -n -c --show_depr_warn -h"
+HELP="$0 [clean] [libucxx] [libucxx_python] [libucxx_benchmarks] [libucxx_benchmarks_cuda] [libucxx_examples] [libucxx_tests] [ucxx] [ucxx_tests] [-vcgnh] [--cmake-args=\\\"<args>\\\"]
    clean                         - remove all existing build artifacts and configuration (start
                                    over)
    libucxx                       - build the libucxx C++ module
@@ -30,7 +30,6 @@ HELP="$0 [clean] [libucxx] [libucxx_python] [libucxx_benchmarks] [libucxx_benchm
    libucxx_tests                 - build the libucxx C++ tests
    ucxx                          - build the ucxx Python package (enables libucxx_python)
    ucxx_tests                    - build the ucxx Cython tests
-   distributed_ucxx              - build the distributed_ucxx (Dask Distributed module) Python package
    -v                            - verbose build mode
    -g                            - build for debug
    -n                            - no install step
@@ -39,7 +38,7 @@ HELP="$0 [clean] [libucxx] [libucxx_python] [libucxx_benchmarks] [libucxx_benchm
    --cmake-args=\\\"<args>\\\"   - pass arbitrary list of CMake configuration options (escape all quotes in argument)
    -h | --h[elp]                 - print this text
 
-   default action (no args) is to build and install 'libucxx', then 'ucxx' targets, and finally 'distributed_ucxx'
+   default action (no args) is to build and install 'libucxx', then 'ucxx' targets
 "
 LIB_BUILD_DIR=${LIB_BUILD_DIR:=${REPODIR}/cpp/build}
 PYTHON_BUILD_DIR=${PYTHON_BUILD_DIR:=${REPODIR}/cpp/python/build}
@@ -290,11 +289,4 @@ if buildAll || hasArg ucxx; then
             .
     # restore to default space
     IFS=" "
-fi
-
-# Build and install the distributed_ucxx Python package
-if buildAll || hasArg distributed_ucxx; then
-
-    cd "${REPODIR}/python/distributed-ucxx/"
-    python -m pip install --no-build-isolation --no-deps --config-settings rapidsai.disable-cuda=true --config-settings "rapidsai.matrix-entry=cuda=${CUDA_VERSION};cuda_suffixed=false;use_cuda_wheels=false" .
 fi

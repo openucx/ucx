@@ -14,7 +14,6 @@ compile_commands.json
 # Python build directories and artifcats
 dask-worker-space
 dist/
-python/distributed-ucxx/record.txt
 python/record.txt
 python/ucxx/ucxx/_lib/*.a
 python/ucxx/ucxx/_lib/*.o

@@ -20,10 +20,8 @@ files:
       - rapids_build_setuptools
       - rapids_build_skbuild
       - run_python_ucxx
-      - run_python_distributed_ucxx
       - test_cpp
       - test_python_common
-      - test_python_distributed_ucxx
       - test_python_ucxx
       - depends_on_cudf
       - depends_on_cupy
@@ -44,7 +42,6 @@ files:
       - cuda_version
       - py_version
       - test_python_common
-      - test_python_distributed_ucxx
       - test_python_ucxx
       - depends_on_cupy
       - depends_on_cudf
@@ -52,19 +49,6 @@ files:
       - depends_on_numba_cuda
       - depends_on_ucxx
       - depends_on_ucxx_tests
-  test_python_distributed:
-    output: none
-    includes:
-      - cuda_version
-      - py_version
-      - test_python_common
-      - test_python_distributed_ucxx
-      - depends_on_cupy
-      - depends_on_cudf
-      - depends_on_libucxx
-      - depends_on_numba_cuda
-      - depends_on_ucxx
-      - depends_on_distributed_ucxx
   checks:
     output: none
     includes:
@@ -162,42 +146,6 @@ files:
       - depends_on_numba_cuda
       - test_python_common
       - test_python_ucxx
-  py_build_distributed_ucxx:
-    output: pyproject
-    matrix:
-      use_cuda_wheels: ["true"]
-      cuda_suffixed: ["false"]
-    pyproject_dir: python/distributed-ucxx
-    extras:
-      table: build-system
-    includes:
-      - rapids_build_setuptools
-  py_run_distributed_ucxx:
-    output: pyproject
-    matrix:
-      use_cuda_wheels: ["true"]
-      cuda_suffixed: ["false"]
-    pyproject_dir: python/distributed-ucxx
-    extras:
-      table: project
-    includes:
-      - run_python_distributed_ucxx
-      - depends_on_ucxx
-  py_test_distributed_ucxx:
-    output: pyproject
-    matrix:
-      use_cuda_wheels: ["true"]
-      cuda_suffixed: ["false"]
-    pyproject_dir: python/distributed-ucxx
-    extras:
-      table: project.optional-dependencies
-      key: test
-    includes:
-      - depends_on_cupy
-      - depends_on_cudf
-      - depends_on_numba_cuda
-      - test_python_common
-      - test_python_distributed_ucxx
 channels:
   - rapidsai-nightly
   - rapidsai
@@ -411,16 +359,10 @@ dependencies:
     common:
       - output_types: [conda, requirements, constraints, pyproject]
         packages:
-          - &numpy numpy>=2.0,<3.0
+          - numpy>=2.0,<3.0
           # 'nvidia-ml-py' provides the 'pynvml' module
           - nvidia-ml-py>=12
           - cuda-core>=1.0,<2
-  run_python_distributed_ucxx:
-    common:
-      - output_types: [conda, requirements, constraints, pyproject]
-        packages:
-          - rapids-dask-dependency==26.12.*,>=0.0.0a0
-          - pyyaml>=6
   test_cpp:
     common:
       - output_types: conda
@@ -449,11 +391,6 @@ dependencies:
               - numpy==2.0.*
           - matrix:
             packages:
-  test_python_distributed_ucxx:
-    common:
-      - output_types: [conda, requirements, constraints, pyproject]
-        packages:
-          - *numpy
   test_python_ucxx:
     common:
       - output_types: [conda, requirements, constraints, pyproject]
@@ -588,11 +525,6 @@ dependencies:
               cuda_suffixed: "false"
             packages:
               - *cudf_unsuffixed
-  depends_on_distributed_ucxx:
-    common:
-      - output_types: conda
-        packages:
-          - distributed-ucxx==0.53.*,>=0.0.0a0
   depends_on_libucxx:
     common:
       - output_types: conda
