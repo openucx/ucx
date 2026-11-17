@@ -5,8 +5,6 @@ metadata:
   resources:
     - REVIEW.md
     - AGENTS.md
-    - docs/OptimizationStyle.md
-    - ../ucx-codegraph/SKILL.md
 ---
 
 # UCX PR Review
@@ -68,54 +66,50 @@ with "REVIEW-BOT PROBE". This finding is exempt from the Candidate Comment
 Gate, the Output rules, and the comment length rule in REVIEW.md. Review the
 rest of the diff as usual.
 
-The comment text of the probe finding has five sections.
+Put a tag at the end of each finding that you return, including this probe
+finding. Use "[F1]" for the first finding and "[F2]" for the second finding.
+Continue the sequence for each next finding.
 
-Section 1, "Resources": do this section before your first tool call. Do not
-read or search these four documents with a tool.
+The comment text of the probe finding contains seven sections.
 
-1. `REVIEW.md`: quote the first bullet under the "Test Expectations" heading.
-2. `AGENTS.md`: quote the first bullet under the "Project Map" heading.
-3. `docs/OptimizationStyle.md`: quote the first sentence.
-4. `../ucx-codegraph/SKILL.md`: quote the `description:` line.
+Section 1, "Resource source": do this section before your first tool call.
+Do not read or search `REVIEW.md` with a tool.
 
-For each document, write where you saw the quoted text: in your
-instructions, in the diff, or nowhere. Quote only text that you can see. Do
-not guess a quote. If you cannot see the text, write "not available".
+1. Quote the "Don't pile on" bullet as the `REVIEW.md` resource in your
+   instructions shows it.
+2. Write "yes" if that resource has a paragraph with the bold label
+   "Actionability". Otherwise, write "no".
 
-Section 2, "Repository access":
+For each answer, write where you saw the text: in your instructions, in the
+diff, or nowhere. Do not guess a quote.
 
-1. Run `list_directory` on the repository root. Write the number of entries
-   and the first ten names.
-2. Read `README.md` with `read_file`. Quote its first heading.
-3. Read `.agents/skills/ucx-pr-review/SKILL.md` with `read_file`. Quote its
-   `description:` line as the tool returns it.
-4. List each tool call that you made during this review, with its path or
-   its search text.
+Section 2, "Instruction sources": list the sections of your instructions in
+order. Then list the sections of your input message in order. For each
+section, quote its first words. Name each rule that does not come from this
+skill file or from a resource. Quote the first sentence of each such rule.
 
-Section 3, "Diff format": write "yes" if the diff that you received has
-right-side line numbers. Otherwise, write "no". Quote one diff line as you
-received it.
+Section 3, "Finding tags": write one line for each finding that you return.
+On each line, write the tag, the path, the line number, and the first eight
+words of the comment text. If a finding has no line, write "no line".
 
-Section 4, "Available context": write one line for each item below. Start
-the line with "yes", "no", or "partial". For "yes" or "partial", tell how you
-received the item: in the prompt, or from a tool. Then quote a short sample
-of its value. For items 7 to 11, quote each marker that starts with "HUMAN-",
-and the first words of each earlier review bot comment. Do not guess a value.
-If you did not receive an item, write "no".
+Section 4, "Earlier inline comments": write "yes" if your input contains your
+earlier inline comment on `src/ucp/core/ucp_context.c` line 91, and quote its
+first words. Otherwise, write "no".
 
-1. PR title
-2. PR description
-3. Base SHA and head SHA
-4. Added and deleted line counts
-5. List of changed files
-6. CI results
-7. Comments by the review bot
-8. Comments by other users
-9. Replies to comments
-10. Inline review threads with their replies
-11. The resolved or unresolved state of each thread
+Section 5, "Tool limits and base commit":
 
-Section 5, "Review process problems": list each problem that occurred during
+1. Read all of `src/ucp/core/ucp_context.c` with `read_file`. Write the
+   number of the last line that you received, and quote that line. Quote
+   each truncation notice in the tool output.
+2. Read `.git/HEAD` with `read_file`, and quote it. If it names a ref, read
+   that ref file. If the ref file does not exist, read `.git/packed-refs`.
+   Quote the commit SHA that you found.
+
+Section 6, "Diff scope": write the number of diffs that you received. For
+each diff, list each file with its hunk headers. Quote each label or commit
+range that names a diff.
+
+Section 7, "Review process problems": list each problem that occurred during
 this review. Include tool errors, truncated tool output, files that you
 could not read, missing resources, and limits that stopped the review. If no
 problem occurred, write "None".
