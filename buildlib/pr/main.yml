@@ -418,8 +418,6 @@ stages:
       docs_slices:
         - { name: x86_64_cuda13_py312, cpp_slice: x86_64_cuda13_py312, python_slice: x86_64_cuda13_py312,
             demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
-      devcontainer_slices:
-        - { name: x86_64_cuda13_py312, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
       # Conda tests run the packages of conda_slice; the ucxx package is abi3,
       # so the GPU slice tests the py312 build on py313.
       conda_tests_slices:

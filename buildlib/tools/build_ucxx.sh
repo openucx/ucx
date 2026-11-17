@@ -4,7 +4,7 @@
 #
 # See file LICENSE for terms.
 #
-# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs|devcontainer>
+# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs>
 # Env: UCXX_DIR (all phases except ucx_pr). Build phases also need
 #   RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
@@ -38,26 +38,6 @@ if [ "$phase" = "ucx_pr" ]; then
 fi
 
 : "${UCXX_DIR:?UCXX_DIR required}"
-
-case "$phase" in
-  devcontainer)
-    # Parse each .devcontainer config; verify its Dockerfile + BASE exist
-    # (no registry pull - the devcontainer CLI catches missing images at use).
-    UCXX_DIR="$UCXX_DIR" python3 - <<'PY'
-import glob, json, os, sys
-root = os.environ["UCXX_DIR"]
-cfgs = glob.glob(os.path.join(root, ".devcontainer", "*", "devcontainer.json"))
-if not cfgs:
-    sys.exit("ERROR: no devcontainer.json under .devcontainer/")
-for cfg in cfgs:
-    b = json.load(open(cfg))["build"]
-    df = b["dockerfile"].replace("${localWorkspaceFolder}", root)
-    assert os.path.isfile(df), f"{cfg}: missing Dockerfile {df}"
-    assert b["args"]["BASE"], f"{cfg}: empty BASE"
-    print(f"OK {cfg}")
-PY
-    exit 0 ;;
-esac
 
 : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"

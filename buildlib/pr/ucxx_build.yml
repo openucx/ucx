@@ -8,7 +8,6 @@ parameters:
   wheel_tests_ucxx_slices: []
   conda_tests_slices: []
   docs_slices: []
-  devcontainer_slices: []
 
 stages:
   # UCXX results are informational: every job is continueOnError, so failures
@@ -252,26 +251,3 @@ stages:
         parameters:
           cpu_container: ${{ parameters.conda_container }}
           slices: ${{ parameters.conda_tests_slices }}
-
-      - ${{ each slice in parameters.devcontainer_slices }}:
-        - job: ucxx_devcontainer_${{ slice.name }}
-          continueOnError: true
-          workspace:
-            clean: all
-          pool:
-            name: MLNX
-            demands: ${{ slice.demands }}
-          displayName: 'UCXX devcontainer (${{ slice.name }})'
-          container: ${{ parameters.conda_container }}
-          timeoutInMinutes: 15
-          dependsOn: []
-          variables:
-            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
-            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
-          steps:
-            - checkout: self
-              path: ucx
-              fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh devcontainer
-              displayName: Validate UCXX devcontainer configs
