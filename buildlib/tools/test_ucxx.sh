@@ -29,8 +29,7 @@ esac
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${UCXX_DIR:?UCXX_DIR required}"
 
-ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
-export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
+export UCX_PR_PREFIX=/tmp/ucx-pr
 
 # The PR's UCX was built once by the UCXX_ucx stage and staged at
 # UCX_PR_PREFIX by the fetch step; every build and test consumes it.
