@@ -237,17 +237,12 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
-static const char *uct_ze_copy_engine_names[] = {
-    [UCT_ZE_COPY_ENGINE_COPY]    = "copy",
-    [UCT_ZE_COPY_ENGINE_COMPUTE] = "compute"
-};
-
 /* Create the queue and list of an engine of a device; a driver failure is
  * logged at log_level, as the caller may be able to continue without them */
 static ucs_status_t
 uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                ze_device_handle_t device,
-                               uct_ze_copy_engine_t engine,
+                               uct_ze_engine_t engine,
                                ucs_log_level_t log_level,
                                unsigned *queue_index_p)
 {
@@ -260,13 +255,8 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ucs_status_t status;
     ze_result_t ret;
 
-    if (engine == UCT_ZE_COPY_ENGINE_COPY) {
-        status = uct_ze_base_get_copy_ordinal(device, log_level, &ordinal,
-                                              NULL);
-    } else {
-        status = uct_ze_base_get_compute_ordinal(device, log_level, &ordinal);
-    }
-
+    status = uct_ze_base_get_queue_ordinal(device, engine, log_level, &ordinal,
+                                           NULL);
     if (status != UCS_OK) {
         return status;
     }
@@ -283,7 +273,7 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_log(log_level, "ze_copy_iface: zeCommandQueueCreate failed for "
                 "the %s engine of device %p with 0x%x",
-                uct_ze_copy_engine_names[engine], device, ret);
+                uct_ze_base_engine_name(engine), device, ret);
         goto err_pop;
     }
 
@@ -292,7 +282,7 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_log(log_level, "ze_copy_iface: zeCommandListCreate failed for "
                 "the %s engine of device %p with 0x%x",
-                uct_ze_copy_engine_names[engine], device, ret);
+                uct_ze_base_engine_name(engine), device, ret);
         goto err_destroy_cmdq;
     }
 
@@ -336,7 +326,7 @@ uct_ze_copy_iface_get_mem_device(uct_ze_copy_iface_t *iface,
 unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
                                      const void *src, const void *dst)
 {
-    uct_ze_copy_engine_t engine = UCT_ZE_COPY_ENGINE_COPY;
+    uct_ze_engine_t engine = UCT_ZE_ENGINE_COPY;
     uct_ze_copy_queue_t *queue;
     ze_device_handle_t device, dst_device;
     int src_is_device, dst_is_device;
@@ -360,7 +350,7 @@ unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
         dst_device = uct_ze_copy_iface_get_mem_device(iface, dst,
                                                       &dst_is_device);
         if (dst_is_device && (dst_device == device)) {
-            engine = UCT_ZE_COPY_ENGINE_COMPUTE;
+            engine = UCT_ZE_ENGINE_COMPUTE;
         }
     }
 
@@ -389,7 +379,7 @@ unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
     queue->cmdl   = NULL;
     ucs_warn("ze_copy_iface: could not create a %s engine queue on device %p, "
              "using the copy engine queue of the MD device",
-             uct_ze_copy_engine_names[engine], device);
+             uct_ze_base_engine_name(engine), device);
     return 0;
 }
 
@@ -417,7 +407,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     ucs_array_init_dynamic(&self->queues);
 
     status = uct_ze_copy_iface_queue_create(self, ze_md->ze_device,
-                                            UCT_ZE_COPY_ENGINE_COPY,
+                                            UCT_ZE_ENGINE_COPY,
                                             UCS_LOG_LEVEL_ERROR, &queue_index);
     if (status != UCS_OK) {
         ucs_array_cleanup_dynamic(&self->queues);

@@ -7,6 +7,7 @@
 #define UCT_ZE_COPY_IFACE_H
 
 #include <uct/base/uct_iface.h>
+#include <uct/ze/base/ze_base.h>
 #include <ucs/datastruct/array.h>
 #include <level_zero/ze_api.h>
 
@@ -17,21 +18,11 @@
 typedef uint64_t uct_ze_copy_iface_addr_t;
 
 
-/* Engine which runs the copies of a queue: the driver recommends a copy
- * engine for copies to host or to another device, where they do not compete
- * with the application's kernels, and keeps copies within one device on the
- * compute engine, which can be faster for cache-resident same-device copies */
-typedef enum {
-    UCT_ZE_COPY_ENGINE_COPY,
-    UCT_ZE_COPY_ENGINE_COMPUTE
-} uct_ze_copy_engine_t;
-
-
 /* Command queue and list which run copies on one engine of one device; both
  * handles are NULL for an engine whose queue could not be created */
 typedef struct {
     ze_device_handle_t        device;
-    uct_ze_copy_engine_t      engine;
+    uct_ze_engine_t           engine;
     ze_command_queue_handle_t cmdq;
     ze_command_list_handle_t  cmdl;
 } uct_ze_copy_queue_t;

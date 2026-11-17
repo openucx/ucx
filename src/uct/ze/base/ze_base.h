@@ -65,21 +65,27 @@ ze_device_handle_t uct_ze_base_get_device_handle_from_subdevice(
 
 ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device);
 
-/* Find the queue group to run memory copies on a device: a dedicated copy
- * engine group if the device has one, or else any group which can copy.
- * A failure is logged at log_level, as the caller may be able to continue
- * without the group. num_queues_p may be NULL. */
-ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
-                                          ucs_log_level_t log_level,
-                                          uint32_t *ordinal_p,
-                                          uint32_t *num_queues_p);
+/* Engine which runs memory copies: the driver recommends a copy engine for
+ * copies to host or to another device, where they do not compete with the
+ * application's kernels, and keeps copies within one device on the compute
+ * engine, which can be faster for cache-resident same-device copies */
+typedef enum {
+    UCT_ZE_ENGINE_COPY,
+    UCT_ZE_ENGINE_COMPUTE
+} uct_ze_engine_t;
 
-/* Find the queue group to run memory copies on the compute engine of a
- * device: a group with both the compute and the copy flag. A failure is
- * logged at log_level. */
-ucs_status_t uct_ze_base_get_compute_ordinal(ze_device_handle_t device,
-                                             ucs_log_level_t log_level,
-                                             uint32_t *ordinal_p);
+/* Name of an engine, for logs */
+const char *uct_ze_base_engine_name(uct_ze_engine_t engine);
+
+/* Find the queue group to run memory copies on an engine of a device: for the
+ * copy engine a dedicated copy engine group if the device has one, or else
+ * any group which can copy; for the compute engine a group with both the
+ * compute and the copy flag. A failure is logged at log_level, as the caller
+ * may be able to continue without the group. num_queues_p may be NULL. */
+ucs_status_t
+uct_ze_base_get_queue_ordinal(ze_device_handle_t device, uct_ze_engine_t engine,
+                              ucs_log_level_t log_level, uint32_t *ordinal_p,
+                              uint32_t *num_queues_p);
 
 /* Get root device handle by ordinal, returns NULL if out of range */
 ze_device_handle_t uct_ze_base_get_device(int ordinal);

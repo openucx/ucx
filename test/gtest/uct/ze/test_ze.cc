@@ -327,7 +327,7 @@ protected:
         return ucs_array_elem(&ze_iface()->queues, queue_index).device;
     }
 
-    uct_ze_copy_engine_t queue_engine(unsigned queue_index)
+    uct_ze_engine_t queue_engine(unsigned queue_index)
     {
         return ucs_array_elem(&ze_iface()->queues, queue_index).engine;
     }
@@ -382,8 +382,7 @@ protected:
 
         ASSERT_EQ(ZE_RESULT_SUCCESS, ret);
         UCS_TEST_MESSAGE << "device " << queue.device << ": "
-                         << ((queue.engine == UCT_ZE_COPY_ENGINE_COMPUTE) ?
-                                     "compute" : "copy")
+                         << uct_ze_base_engine_name(queue.engine)
                          << " engine queue on group " << cmdq_ordinal
                          << " of " << num_groups
                          << (has_copy_only ? ", device has a copy engine" :
@@ -393,7 +392,7 @@ protected:
         EXPECT_EQ(cmdq_ordinal, cmdl_ordinal);
         ASSERT_LT(cmdq_ordinal, num_groups);
 
-        if (queue.engine == UCT_ZE_COPY_ENGINE_COMPUTE) {
+        if (queue.engine == UCT_ZE_ENGINE_COMPUTE) {
             /* The group runs memory copies, so it has to copy as well */
             EXPECT_EQ(copy_compute, groups[cmdq_ordinal].flags & copy_compute);
             return;
@@ -466,7 +465,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
     ASSERT_LT(queue_index, ucs_array_length(&ze_iface()->queues));
     EXPECT_NE(0u, queue_index);
     EXPECT_EQ(device, queue_device(queue_index));
-    EXPECT_EQ(UCT_ZE_COPY_ENGINE_COPY, queue_engine(queue_index));
+    EXPECT_EQ(UCT_ZE_ENGINE_COPY, queue_engine(queue_index));
     EXPECT_EQ(queue_index, get_queue(host_buf.data(), other_buf.ptr()));
 
     /* Between two devices, the source device runs the copy */
@@ -479,7 +478,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
     EXPECT_NE(0u, compute_index);
     EXPECT_NE(queue_index, compute_index);
     EXPECT_EQ(device, queue_device(compute_index));
-    EXPECT_EQ(UCT_ZE_COPY_ENGINE_COMPUTE, queue_engine(compute_index));
+    EXPECT_EQ(UCT_ZE_ENGINE_COMPUTE, queue_engine(compute_index));
 
     /* Data moves through the copy queue and through the compute queue of
      * the other device */
@@ -521,7 +520,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, md_queue_when_create_fails,
     queue = ucs_array_append(&ze_iface()->queues,
                              UCS_TEST_ABORT("cannot append a queue"));
     queue->device = device;
-    queue->engine = UCT_ZE_COPY_ENGINE_COPY;
+    queue->engine = UCT_ZE_ENGINE_COPY;
     queue->cmdq   = NULL;
     queue->cmdl   = NULL;
 
@@ -691,7 +690,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, same_device_copy_on_compute_engine,
     /* Copies to and from host memory stay on the copy engine queue */
     EXPECT_EQ(0u, get_queue(src_buf.ptr(), host_buf.data()));
     EXPECT_EQ(0u, get_queue(host_buf.data(), src_buf.ptr()));
-    EXPECT_EQ(UCT_ZE_COPY_ENGINE_COPY, queue_engine(0));
+    EXPECT_EQ(UCT_ZE_ENGINE_COPY, queue_engine(0));
 
     /* A copy within the device selects the compute engine queue of the
      * device, created on first use, in both directions */
@@ -699,7 +698,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, same_device_copy_on_compute_engine,
     ASSERT_LT(queue_index, ucs_array_length(&ze_iface()->queues));
     EXPECT_NE(0u, queue_index);
     EXPECT_EQ(device, queue_device(queue_index));
-    EXPECT_EQ(UCT_ZE_COPY_ENGINE_COMPUTE, queue_engine(queue_index));
+    EXPECT_EQ(UCT_ZE_ENGINE_COMPUTE, queue_engine(queue_index));
     EXPECT_EQ(queue_index, get_queue(dst_buf.ptr(), src_buf.ptr()));
 
     /* Move data between the two device buffers with a put and with a get */

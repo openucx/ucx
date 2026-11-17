@@ -557,9 +557,9 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     self->next_cmd_list = 0;
 
     /* Find copy engine queue group ordinal and available queue count */
-    status = uct_ze_base_get_copy_ordinal(self->ze_device,
-                                          UCS_LOG_LEVEL_ERROR, &copy_ordinal,
-                                          &num_queues);
+    status = uct_ze_base_get_queue_ordinal(self->ze_device, UCT_ZE_ENGINE_COPY,
+                                           UCS_LOG_LEVEL_ERROR, &copy_ordinal,
+                                           &num_queues);
     if (status != UCS_OK) {
         return status;
     }
