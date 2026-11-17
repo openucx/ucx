@@ -110,7 +110,7 @@ enum {
                                                         while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_PATH_DEGRADED          = UCS_BIT(11),/* Lane path is degraded */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -564,6 +564,9 @@ typedef struct ucp_ep_recovery_arg {
      * outstanding operations are resolved,
      * outstanding re-posts also go here */
     ucs_queue_head_t        tf_pending_q;
+    /* LANES_ADDR reply waiting for error completions. Owned by wireup.
+     * NULL when no reply is waiting. */
+    void                    *tf_reply;
 } ucp_ep_recovery_arg_t;
 
 
@@ -1144,10 +1147,6 @@ int ucp_ep_tf_peer_req_is_newer(uint16_t seen, uint16_t request_id);
 /** Nonzero when @a lanes is not empty and @a request_id is accepted. */
 int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
                               uint32_t request_id);
-
-
-/** Drop invalidated lanes whose error completion will not arrive. */
-ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
 /**

@@ -55,7 +55,7 @@ public:
             }
         }
 
-        run_workers(send, recvbuf, swap_vec, true);
+        run_workers(send, recvbuf, std::move(swap_vec), true);
 
         wait_for_remote();
         add_reply_safe(*(T*)recvbuf.ptr());

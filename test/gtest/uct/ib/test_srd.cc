@@ -7,6 +7,8 @@
 #include <uct/uct_test.h>
 #include <uct/ib/efa/srd/srd_ep.h>
 
+#include <set>
+
 // FIXME: Add SRD transport to UCT_TEST_IB_TLS when possible
 class test_srd : public uct_test {
 public:
@@ -182,7 +184,7 @@ protected:
         int c = 1;
         completion comp[2];
 
-        auto noop = [](void *arg, void *data, size_t length, unsigned flags) {
+        auto noop = [](void *arg, void *data, size_t length, unsigned) {
             return UCS_OK;
         };
 
@@ -202,7 +204,19 @@ protected:
         ASSERT_EQ(expect_status, comp[1].status);
     }
 
+    static ucs_status_t
+    ep_err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        test_srd *self = reinterpret_cast<test_srd*>(arg);
+
+        self->m_ep_err_count++;
+        self->m_failed_eps.insert(ep);
+        return UCS_OK;
+    }
+
     completion                m_comp;
+    int                       m_ep_err_count = 0;
+    std::set<uct_ep_h>        m_failed_eps;
     static constexpr uint64_t m_seed = 0x54321;
 
     static constexpr int m_req_count = 3;
@@ -329,15 +343,16 @@ UCS_TEST_P(test_srd, am_short_iov_failure)
     scoped_log_handler slh(wrap_errors_logger);
     char payload[64];
     ucs_status_t status;
-    uct_iov_t iov;
+    uct_iov_t iov[2] = {};
 
-    status = uct_ep_am_short_iov(m_e1->ep(0), 32, &iov, 1);
+    status = uct_ep_am_short_iov(m_e1->ep(0), 32, iov, 1);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
-    status     = uct_ep_am_short_iov(m_e1->ep(0), 14, &iov, 2);
-    iov.length = sizeof(payload);
-    iov.buffer = payload;
-    iov.count  = 1;
-    status     = uct_ep_am_short_iov(m_e1->ep(0), 14, &iov, 1);
+    status = uct_ep_am_short_iov(m_e1->ep(0), 14, iov, 2);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+    iov[0].length = sizeof(payload);
+    iov[0].buffer = payload;
+    iov[0].count  = 1;
+    status        = uct_ep_am_short_iov(m_e1->ep(0), 14, iov, 1);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
@@ -362,7 +377,7 @@ UCS_TEST_P(test_srd, am_zcopy_failure)
 {
     scoped_log_handler slh(wrap_errors_logger);
     ucs_status_t status;
-    uct_iov_t iov[3];
+    uct_iov_t iov[3] = {};
 
     for (auto i = 0; i < 3; ++i) {
         iov[i].length = 64;
@@ -394,7 +409,7 @@ UCS_TEST_P(test_srd, get_bcopy_failure)
 UCS_TEST_P(test_srd, get_zcopy_failure)
 {
     scoped_log_handler slh(wrap_errors_logger);
-    uct_iov_t iov[3];
+    uct_iov_t iov[3] = {};
     ucs_status_t status;
 
     for (auto i = 0; i < 3; ++i) {
@@ -623,6 +638,29 @@ UCS_TEST_P(test_srd, destroy_ep_before_ctl_resp)
     m_e1->destroy_ep(1);
 
     progress_ctl();
+}
+
+UCS_TEST_P(test_srd, ctl_req_failure_unreachable_peer_multi_ep)
+{
+    static constexpr int num_eps = 3;
+    scoped_log_handler slh(wrap_errors_logger);
+    entity *sender   = uct_test::create_entity(0, ep_err_handler);
+    entity *receiver = uct_test::create_entity(0, NULL);
+    m_entities.push_back(sender);
+    m_entities.push_back(receiver);
+    /* Each EP sends its own AH request, so each one must see the failure */
+    for (int i = 0; i < num_eps; ++i) {
+        sender->connect_to_iface(i, *receiver);
+    }
+    m_entities.remove(receiver);
+    wait_for_value(&m_ep_err_count, num_eps, true);
+    EXPECT_EQ(num_eps, m_ep_err_count);
+    EXPECT_EQ(size_t(num_eps), m_failed_eps.size());
+    for (int i = 0; i < num_eps; ++i) {
+        EXPECT_EQ(1u, m_failed_eps.count(sender->ep(i))) << "ep " << i;
+        EXPECT_FALSE(((uct_srd_ep_t*)sender->ep(i))->flags &
+                     UCT_SRD_EP_FLAG_AH_ADDED) << "ep " << i;
+    }
 }
 
 UCS_TEST_P(test_srd, fence_no_resource_am_short)

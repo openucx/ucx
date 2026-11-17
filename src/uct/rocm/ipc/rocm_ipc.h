@@ -259,4 +259,11 @@ uct_rocm_ipc_ep_get_ptr(uct_device_ep_h device_ep,
     return UCS_OK;
 }
 
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
+__device__ ucs_status_t uct_rocm_ipc_ep_flush(uct_device_ep_h device_ep,
+                                              uint64_t flags)
+{
+    return UCS_OK;
+}
+
 #endif /* UCT_ROCM_IPC_H */

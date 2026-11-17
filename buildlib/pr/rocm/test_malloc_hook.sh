@@ -68,5 +68,6 @@ test_malloc_hook() {
 
 prepare
 build
+check_ucm_no_ucs_symbols
 check_rocm_driver
 test_malloc_hook

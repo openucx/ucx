@@ -116,6 +116,7 @@ typedef enum {
     UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
     UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
     UCT_IB_REACHABILITY_MODE_ALL          = 2,
+    UCT_IB_REACHABILITY_MODE_KERNEL       = 3,
     UCT_IB_REACHABILITY_MODE_LAST
 } uct_ib_iface_reachability_mode_t;
 
@@ -269,6 +270,7 @@ typedef struct uct_ib_iface_init_attr {
     size_t      xport_hdr_len;           /* How many bytes this transport adds on top
                                           * of IB header (LRH+BTH+iCRC+vCRC) */
     unsigned    fc_req_size;             /* Flow control request size */
+    unsigned    fc_max_wnd_size;         /* Maximum flow control window */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */

@@ -14,6 +14,7 @@
 
 #include <limits.h>
 
+
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt)
 {
     if (tcp_syn_cnt != UCS_ULUNITS_AUTO) {
@@ -23,6 +24,70 @@ ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt)
     }
 
     return UCS_OK;
+}
+
+ucs_status_t ucs_tcp_base_check_maxseg(size_t maxseg)
+{
+    char buf[64];
+
+    if ((maxseg != UCS_MEMUNITS_AUTO) &&
+        ((maxseg < UCT_TCP_MAXSEG_MIN) || (maxseg > UCT_TCP_MAXSEG_MAX))) {
+        ucs_error("invalid TCP maximal segment size %s, expected auto or a "
+                  "value between %d and %d",
+                  ucs_memunits_to_str(maxseg, buf, sizeof(buf)),
+                  UCT_TCP_MAXSEG_MIN, UCT_TCP_MAXSEG_MAX);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_tcp_base_set_maxseg(int fd, size_t maxseg)
+{
+    int maxseg_int;
+
+    if (maxseg == UCS_MEMUNITS_AUTO) {
+        return UCS_OK;
+    }
+
+    maxseg_int = maxseg;
+    return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_MAXSEG,
+                             (const void*)&maxseg_int, sizeof(maxseg_int));
+}
+
+ucs_status_t ucs_tcp_base_server_init(const struct sockaddr *saddr,
+                                      socklen_t socklen, int backlog,
+                                      int silent_bind, int reuse_addr,
+                                      const char *bind_if_name, size_t maxseg,
+                                      int *listen_fd_p)
+{
+    ucs_status_t status;
+    int fd;
+
+    status = ucs_socket_server_bind(saddr, socklen, silent_bind, reuse_addr,
+                                    bind_if_name, &fd);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* The segment size is negotiated during the handshake, so accepted
+     * sockets get it only from the listening socket */
+    status = ucs_tcp_base_set_maxseg(fd, maxseg);
+    if (status != UCS_OK) {
+        goto err_close_fd;
+    }
+
+    status = ucs_socket_server_listen(fd, backlog);
+    if (status != UCS_OK) {
+        goto err_close_fd;
+    }
+
+    *listen_fd_p = fd;
+    return UCS_OK;
+
+err_close_fd:
+    ucs_close_fd(&fd);
+    return status;
 }
 
 ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout)

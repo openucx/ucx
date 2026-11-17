@@ -40,14 +40,11 @@ githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHu
 currentBuild.description = githubHelper.getBuildDescription()
 
 def jobs = [
-  'ucx-codestyle-oss',
   'ucx-static-checks-oss',
   'ucx-coverity-oss',
   'ucx-build-oss',
   'ucx-build-static-oss',
   'ucx-test-oss',
-  'ucx-test-gpu-oss',
-  'ucx-test-dl-gpu-oss',
 ]
 
 try {

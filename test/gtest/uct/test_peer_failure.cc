@@ -1593,3 +1593,368 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, get,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_rma_zcopy, cma)
+
+class test_uct_peer_failure_sgl_zcopy : public test_uct_peer_failure
+{
+public:
+    static const size_t SGL_COUNT  = 4;
+    static const size_t SGL_LENGTH = 256;
+    static const size_t NO_INDEX   = SIZE_MAX;
+
+    /* Fail one element of the SGL by accessing memory outside of the remote
+     * buffer, the whole operation must complete with the endpoint error
+     * status. The element at empty_index is of zero length */
+    void test_sgl_zcopy_peer_failure(bool is_put_op, size_t failed_index,
+                                     size_t empty_index = NO_INDEX)
+    {
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, 0,
+                                *m_receivers.front());
+
+        set_remote_sgl(remotebuf, failed_index, remote_addrs, rkeys);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(is_put_op, localbuf, remote_addrs, rkeys,
+                                     &comp, empty_index));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail the first element of an SGL put, which is of zero length, so its
+     * WQE has no data segment. The remote address of a zero-length element is
+     * not accessed, so the failure is caused by killing the receiver */
+    void test_sgl_zcopy_empty_element_failure()
+    {
+        uint64_t remote_addrs[SGL_COUNT] = {};
+        uct_rkey_t rkeys[SGL_COUNT]      = {};
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            kill_receiver();
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &comp, 0));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail a zero-length put_short posted right before an SGL put. The SGL put
+     * must not be completed by the failure of the put_short WQE, since its own
+     * WQEs are not reported yet, but by the flush of the QP */
+    void test_sgl_zcopy_after_failed_put_short()
+    {
+        /* The receiver is killed, so the remote memory is not accessed */
+        uint64_t remote_addrs[SGL_COUNT] = {};
+        uct_rkey_t rkeys[SGL_COUNT]      = {};
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            kill_receiver();
+            ASSERT_UCS_OK(uct_ep_put_short(ep0(), NULL, 0, 0, 0));
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &comp));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(UCS_ERR_CANCELED, comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail the first element of an SGL put followed by a put_zcopy. The SGL put
+     * completes with the endpoint error status, while the put_zcopy is not
+     * completed by this failure, but by the flush of the QP */
+    void test_put_zcopy_after_failed_sgl_zcopy()
+    {
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion sgl_comp, zcopy_comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, 0,
+                                *m_receivers.front());
+
+        set_remote_sgl(remotebuf, 0, remote_addrs, rkeys);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &sgl_comp));
+            init_completion(&zcopy_comp);
+            ASSERT_EQ(UCS_INPROGRESS,
+                      uct_ep_put_zcopy(ep0(), localbuf.iov(), 1,
+                                       remotebuf.addr(), remotebuf.rkey(),
+                                       &zcopy_comp.uct));
+            wait_for_flag(&sgl_comp.done);
+            wait_for_flag(&zcopy_comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, sgl_comp.done);
+        ASSERT_EQ(1u, zcopy_comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], sgl_comp.uct.status)
+                << ucs_status_string(sgl_comp.uct.status);
+        EXPECT_EQ(UCS_ERR_CANCELED, zcopy_comp.uct.status)
+                << ucs_status_string(zcopy_comp.uct.status);
+    }
+
+    /* Without a failure the operation completes with UCS_OK by the CQE of the
+     * last WQE of the chain, so the data of all its elements is in place. The
+     * element at empty_index is of zero length, so its data is not moved */
+    void test_sgl_zcopy_completion(bool is_put_op,
+                                   size_t empty_index = NO_INDEX)
+    {
+        const uint64_t local_seed  = 1;
+        const uint64_t remote_seed = 2;
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion comp;
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, local_seed, *m_sender, 0,
+                               mem_type());
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, remote_seed,
+                                *m_receivers.front(), 0, mem_type());
+
+        set_remote_sgl(remotebuf, NO_INDEX, remote_addrs, rkeys);
+        ASSERT_EQ(UCS_INPROGRESS,
+                  post_sgl_zcopy(is_put_op, localbuf, remote_addrs, rkeys,
+                                 &comp, empty_index));
+        wait_for_flag(&comp.done);
+
+        ASSERT_EQ(1u, comp.done);
+        EXPECT_UCS_OK(comp.uct.status);
+        if (is_put_op) {
+            /* Put completion does not imply remote completion */
+            flush();
+        }
+
+        /* The buffers are filled with different patterns, so they are equal at
+         * the offset of an element only if its data was moved */
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            const size_t offset = i * SGL_LENGTH;
+
+            EXPECT_EQ(i != empty_index,
+                      mem_buffer::compare(
+                              UCS_PTR_BYTE_OFFSET(localbuf.ptr(), offset),
+                              UCS_PTR_BYTE_OFFSET(remotebuf.ptr(), offset),
+                              SGL_LENGTH, mem_type(), mem_type()))
+                    << "element " << i;
+        }
+
+        EXPECT_EQ(0ul, m_failed_eps.count(ep0()));
+    }
+
+private:
+    struct op_completion {
+        uct_completion_t uct;
+        unsigned         done;
+    };
+
+    static void completion_cb(uct_completion_t *self)
+    {
+        ucs_container_of(self, op_completion, uct)->done = 1;
+    }
+
+    static void init_completion(op_completion *comp)
+    {
+        comp->uct.func   = completion_cb;
+        comp->uct.count  = 1;
+        comp->uct.status = UCS_OK;
+        comp->done       = 0;
+    }
+
+    /* cuda_ipc does not report errors of posted operations, and a copy to an
+     * invalid remote address is a fatal CUDA error */
+    void skip_no_op_failure() const
+    {
+        if (has_cuda_ipc()) {
+            UCS_TEST_SKIP_R("cuda_ipc does not fail posted operations");
+        }
+    }
+
+    ucs_memory_type_t mem_type() const
+    {
+        return has_cuda_ipc() ? UCS_MEMORY_TYPE_CUDA : UCS_MEMORY_TYPE_HOST;
+    }
+
+    /* The element at failed_index points outside of the remote buffer */
+    static void set_remote_sgl(const mapped_buffer &remotebuf,
+                               size_t failed_index, uint64_t *remote_addrs,
+                               uct_rkey_t *rkeys)
+    {
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            remote_addrs[i] = (i == failed_index) ?
+                              0 : (remotebuf.addr() + (i * SGL_LENGTH));
+            rkeys[i]        = remotebuf.rkey();
+        }
+    }
+
+    ucs_status_t post_sgl_zcopy(bool is_put_op, const mapped_buffer &localbuf,
+                                const uint64_t *remote_addrs,
+                                const uct_rkey_t *rkeys, op_completion *comp,
+                                size_t empty_index = NO_INDEX)
+    {
+        void *buffers[SGL_COUNT];
+        size_t lengths[SGL_COUNT];
+        uct_mem_h memhs[SGL_COUNT];
+
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            buffers[i] = UCS_PTR_BYTE_OFFSET(localbuf.ptr(), i * SGL_LENGTH);
+            lengths[i] = (i == empty_index) ? 0 : SGL_LENGTH;
+            memhs[i]   = localbuf.memh();
+        }
+
+        init_completion(comp);
+        if (is_put_op) {
+            return uct_ep_put_sgl_zcopy(ep0(), buffers, lengths, memhs,
+                                        remote_addrs, rkeys, NULL, NULL,
+                                        SGL_COUNT, &comp->uct);
+        }
+
+        return uct_ep_get_sgl_zcopy(ep0(), buffers, lengths, memhs,
+                                    remote_addrs, rkeys, NULL, NULL, SGL_COUNT,
+                                    &comp->uct);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_first,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_middle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_last,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT - 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_first,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_middle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, SGL_COUNT / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_last,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, SGL_COUNT - 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy,
+                     put_after_failed_put_short,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_PUT_SHORT,
+                                 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_after_failed_put_short();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy,
+                     put_zcopy_after_failed_sgl,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY,
+                                 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_put_zcopy_after_failed_sgl_zcopy();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_completion,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_completion,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(false);
+}
+
+/* Only put allows elements of zero length */
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_empty,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_empty_element_failure();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_after_empty,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT / 2, 0);
+}
+
+/* TODO: run on cuda_ipc when it supports zero-length SGL elements */
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_completion_empty,
+                     has_cuda_ipc() ||
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(true, SGL_COUNT / 2);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_sgl_zcopy, rc_mlx5)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_sgl_zcopy, cuda_ipc)
