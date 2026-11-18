@@ -231,15 +231,21 @@ typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t
 #define UCP_EP_PATH_BW_INVALID (-1.0)
 
 
+/* Sources of path bandwidth samples */
+typedef enum {
+    UCP_EP_PATH_BW_OP_PUT,
+    UCP_EP_PATH_BW_OP_LAST
+} ucp_ep_path_bw_op_t;
+
+
 /* Path samples of one configuration and set of lanes of an endpoint,
  * allocated for endpoints on interfaces which report path events. */
 typedef struct {
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
     uint32_t               lane_generation; /* Lanes of the samples */
-    double                 bandwidth[];     /* Lane bandwidth below the path
-                                               estimate, or
-                                               UCP_EP_PATH_BW_INVALID if the
-                                               path is not degraded */
+    /* Lane bandwidth of each source below the path estimate, or
+     * UCP_EP_PATH_BW_INVALID if the path is not degraded */
+    double                 bandwidth[][UCP_EP_PATH_BW_OP_LAST];
 } ucp_ep_path_bw_t;
 
 
