@@ -1179,8 +1179,12 @@ void test_ucp_fault_tolerance::run_probe_gated_recovery()
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
 
     ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    wait_for_cond([ep]() {
-        return ucp_ep_get_failed_lanes(ep) == 0;
+
+    /* Target invalidate shows up on the sender later. Lanes that are not
+     * failed yet are not a finished recovery, so wait until the aux probe
+     * has been armed and the failed lanes are clear. */
+    wait_for_cond([this, ep]() {
+        return (m_probe_count != 0) && (ucp_ep_get_failed_lanes(ep) == 0);
     }, [this]() {
         short_progress_loop();
     });
