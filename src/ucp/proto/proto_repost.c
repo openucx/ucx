@@ -266,9 +266,8 @@ static uct_completion_t *ucp_proto_repost_origin_comp(const ucp_request_t *req)
 }
 
 /* Protocol v2 stores this completion in the origin request. */
-static ucp_request_t *ucp_proto_repost_origin_req(const ucp_request_t *req)
+static ucp_request_t *ucp_proto_repost_origin_req(uct_completion_t *origin)
 {
-    uct_completion_t *origin = ucp_proto_repost_origin_comp(req);
     ucp_request_t *origin_req;
 
     if (origin == NULL) {
@@ -312,7 +311,7 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
-    origin = ucp_proto_repost_origin_req(req);
+    origin = ucp_proto_repost_origin_req(ucp_proto_repost_origin_comp(req));
     if (origin == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
@@ -338,7 +337,8 @@ static ucs_status_t
 ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
 {
     uct_ep_op_info_t *op_info = req->send.repost.info;
-    ucp_request_t *origin     = ucp_proto_repost_origin_req(req);
+    ucp_request_t *origin     = ucp_proto_repost_origin_req(
+            ucp_proto_repost_origin_comp(req));
     ucp_md_index_t md_index;
     uct_mem_h uct_memh;
     ucp_mem_h memh;
@@ -590,6 +590,15 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
         ucp_trace_req(req, "repost restart op %s",
                       uct_ep_operation_names[op_info->operation]);
         ucp_proto_request_restart(req);
+        return UCS_OK;
+    }
+
+    /* A tracked short is a whole request. Reselect PUT with its original
+     * remote address and rkey on the current endpoint configuration. */
+    if ((op_info->operation == UCT_EP_OP_PUT_SHORT) &&
+        (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL)) {
+        ucp_proto_request_restart(ucp_proto_repost_origin_req(op_info->comp));
         return UCS_OK;
     }
 

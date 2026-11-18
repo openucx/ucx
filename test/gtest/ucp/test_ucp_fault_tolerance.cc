@@ -14,11 +14,12 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/proto/proto_single.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 }
@@ -1304,6 +1305,93 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 #undef UCP_FT_TEST
 #undef UCP_FT_TESTS
+
+UCS_TEST_P(test_ucp_fault_tolerance_tf, put_short_repost,
+           "MAX_RMA_LANES=2", "MAX_EAGER_LANES=2", "IB_NUM_PATHS?=1")
+{
+    if (get_variant_value() != (TEST_OP_PUT | TEST_MSG_SIZE_SMALL)) {
+        UCS_TEST_SKIP_R("PUT short variant only");
+    }
+
+    ucp_ep_h ep         = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_worker_h worker = ep->worker;
+    const uint8_t value = 0x5a;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_select_param_t select_param;
+    ucp_memory_info_t mem_info;
+
+    flush_workers();
+    mapped_buffer rbuf(sizeof(value), receiver());
+    rbuf.memset(0);
+    auto rkey = rbuf.rkey(sender());
+
+    const auto &key = ucp_ep_config(ep)->key;
+    ucp_md_map_t rma_md_map = 0;
+    for (ucp_lane_index_t lane : key.rma_bw_lanes) {
+        if ((lane != UCP_NULL_LANE) &&
+            (key.lanes[lane].dst_md_index != UCP_NULL_RESOURCE)) {
+            rma_md_map |= UCS_BIT(key.lanes[lane].dst_md_index);
+        }
+    }
+
+    if (ucs_popcount(rma_md_map & rkey->md_map) < 2) {
+        UCS_TEST_SKIP_R("requires two RMA lanes with different destination MDs");
+    }
+
+    ucp_memory_info_set_host(&mem_info);
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_PUT, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+    auto *proto_select = ucp_proto_select_get(worker, ep->cfg_index,
+                                              rkey->cfg_index, &rkey_cfg_index);
+    ASSERT_NE(nullptr, proto_select);
+    auto *elem = ucp_proto_select_lookup_slow(worker, proto_select, 0,
+                                               ep->cfg_index, rkey_cfg_index,
+                                               &select_param);
+    ASSERT_NE(nullptr, elem);
+    const auto *thresh = ucp_proto_thresholds_search_slow(elem->thresholds,
+                                                         sizeof(value));
+    ASSERT_NE(nullptr, thresh);
+    ASSERT_STREQ("put/offload/short/token", thresh->proto_config.proto->name);
+
+    const auto *initial = static_cast<const ucp_proto_single_priv_t*>(
+            thresh->proto_config.priv);
+    ucp_lane_index_t initial_lane = initial->super.lane;
+    ucp_md_index_t initial_md      = key.lanes[initial_lane].dst_md_index;
+    uct_rkey_t initial_rkey = ucp_rkey_get_tl_rkey(rkey.get(),
+                                                 initial->super.rkey_index);
+    ucp_md_index_t md;
+    ucs_for_each_bit(md, rma_md_map & rkey->md_map & ~UCS_BIT(initial_md)) {
+        auto index = ucs_bitmap2idx(rkey->md_map, md);
+        if (ucp_rkey_get_tl_rkey(rkey.get(), index) == initial_rkey) {
+            UCS_TEST_SKIP_R("requires distinct transport keys");
+        }
+    }
+
+    /* Put the old QP in error before posting, without letting UCP progress
+     * the error. The initial write is posted but cannot reach the target. */
+    ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, initial_lane), 0));
+    void *sptr = ucp_put_nbx(ep, &value, sizeof(value),
+                             reinterpret_cast<uintptr_t>(rbuf.ptr()), rkey.get(),
+                             &m_req_empty_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    ucs::handle<void*> request(sptr, ucp_request_release);
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sptr));
+    EXPECT_EQ(0u, *static_cast<const uint8_t*>(rbuf.ptr()));
+
+    ASSERT_UCS_OK(request_progress(sptr, entities()));
+    const auto *req = static_cast<const ucp_request_t*>(sptr) - 1;
+    ASSERT_STREQ("put/offload/short/token", req->send.proto_config->proto->name);
+    const auto *reposted = static_cast<const ucp_proto_single_priv_t*>(
+            req->send.proto_config->priv);
+    ucp_lane_index_t replay_lane = reposted->super.lane;
+    EXPECT_NE(initial_lane, replay_lane);
+    EXPECT_NE(initial_md, ucp_ep_config(ep)->key.lanes[replay_lane].dst_md_index);
+    EXPECT_NE(initial_rkey,
+              ucp_rkey_get_tl_rkey(rkey.get(), reposted->super.rkey_index));
+
+    ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
+    EXPECT_EQ(value, *static_cast<const uint8_t*>(rbuf.ptr()));
+}
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")

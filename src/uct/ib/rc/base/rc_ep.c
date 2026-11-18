@@ -387,6 +387,13 @@ void uct_rc_ep_short_dm_desc_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put_inline(op);
 }
 
+void uct_rc_ep_put_short_dm_completion_handler(
+        uct_rc_iface_send_op_t *op, const void *UCS_V_UNUSED resp)
+{
+    uct_invoke_completion(op->user_comp, UCS_OK);
+    uct_rc_ep_put_short_dm_release(op);
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags)
 {
@@ -594,6 +601,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);
+        } else if (op->handler == uct_rc_ep_put_short_dm_completion_handler) {
+            uct_rc_ep_put_short_dm_release(op);
         } else if ((op->handler == iface->config.atomic32_ext_handler) ||
                    (op->handler == iface->config.atomic64_ext_handler) ||
                    (op->handler == iface->config.atomic64_handler) ||

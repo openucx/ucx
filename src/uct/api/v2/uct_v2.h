@@ -1302,6 +1302,7 @@ enum uct_iface_attr_field {
                                                                support token query, and
                                                                @ref uct_ep_outstanding_purge
                                                                is supported. */
+#define UCT_IFACE_FLAG_V2_PUT_SHORT_COMP     UCS_BIT(3)  /**< Tracked short put */
 /**
  * @}
  */

@@ -30,6 +30,7 @@
     _macro(ucp_put_am_bcopy_proto) \
     _macro(ucp_put_sgl_am_bcopy_proto) \
     _macro(ucp_put_offload_short_proto) \
+    _macro(ucp_put_offload_short_token_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
     _macro(ucp_put_rndv_proto) \
