@@ -340,7 +340,9 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::tx_token */
     UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
     /** Enables @ref uct_ep_attr::bandwidth */
-    UCT_EP_ATTR_FIELD_BANDWIDTH       = UCS_BIT(3)
+    UCT_EP_ATTR_FIELD_BANDWIDTH       = UCS_BIT(3),
+    /** Enables @ref uct_ep_attr::operation */
+    UCT_EP_ATTR_FIELD_OPERATION       = UCS_BIT(4)
 };
 
 
@@ -498,8 +500,16 @@ struct uct_ep_attr {
      * Defaults to @ref uct_perf_attr_t::path_bandwidth value provided
      * by @ref uct_iface_estimate_perf when
      * unsupported.
+     * The estimate is for @ref operation if @ref UCT_EP_ATTR_FIELD_OPERATION
+     * is set, and for sending data to the peer otherwise.
      */
     uct_ppn_bandwidth_t      bandwidth;
+
+    /**
+     * Operation of the @ref bandwidth estimate, set by the caller.
+     * Valid when @ref UCT_EP_ATTR_FIELD_OPERATION is set in @ref field_mask.
+     */
+    uct_ep_operation_t      operation;
 };
 
 
