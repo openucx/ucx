@@ -143,7 +143,8 @@ uct_cuda_ipc_iface_dev_addr_ext(const uct_device_addr_t *addr,
     return (dev_addr_len >= min_len) ? addr : NULL;
 }
 
-/* Whether both peers support fabric IPC handles */
+/* Whether fabric IPC handles exported by the peer can be imported: both peers
+ * must support them, and use the same IMEX channel if the peer sent it */
 static int uct_cuda_ipc_iface_fabric_reachable(
         const uct_cuda_ipc_md_t *md,
         const uct_iface_is_reachable_params_t *params,
@@ -154,11 +155,22 @@ static int uct_cuda_ipc_iface_fabric_reachable(
     int remote_fabric_supported =
             !!(uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
                UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
+    const uct_cuda_ipc_imex_device_addr_t *imex_addr;
 
     if (!local_fabric_supported || !remote_fabric_supported) {
         uct_iface_fill_info_str_buf(
                 params, "%s and FABRIC support local=%d remote=%d", reason,
                 local_fabric_supported, remote_fabric_supported);
+        return 0;
+    }
+
+    imex_addr = uct_cuda_ipc_iface_dev_addr_ext(params->device_addr,
+                                                dev_addr_len,
+                                                sizeof(*imex_addr));
+    if ((imex_addr != NULL) && (imex_addr->imex_channel != md->imex_channel)) {
+        uct_iface_fill_info_str_buf(
+                params, "%s and different IMEX channel local %u vs %u", reason,
+                md->imex_channel, imex_addr->imex_channel);
         return 0;
     }
 
@@ -174,7 +186,6 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                                  uct_cuda_ipc_md_t);
     const uct_cuda_ipc_device_addr_t *dev_addr;
     const uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr;
-    const uct_cuda_ipc_imex_device_addr_t *imex_addr;
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int same_uuid;
@@ -237,21 +248,11 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                 return 0;
             }
         }
-
-        imex_addr = uct_cuda_ipc_iface_dev_addr_ext(params->device_addr,
-                                                    dev_addr_len,
-                                                    sizeof(*imex_addr));
-        if ((imex_addr != NULL) &&
-            (imex_addr->imex_channel != md->imex_channel)) {
-            uct_iface_fill_info_str_buf(
-                    params, "different IMEX channel local %u vs %u",
-                    md->imex_channel, imex_addr->imex_channel);
-            return 0;
-        }
     }
 
     /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces;
-     * both peers must support fabric IPC handles in that case. */
+     * both peers must support fabric IPC handles in that case, and use the
+     * same IMEX channel if the peer sent it. */
     /* Older peers do not send pid_ns, so preserve legacy same-node reachability
      * and apply the cross-namespace fabric check only to extended addresses. */
     if ((iface_addr_len >= sizeof(ipc_addr)) &&

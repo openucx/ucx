@@ -12,6 +12,7 @@
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_iface.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_iface_address.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 }
 
@@ -115,7 +116,8 @@ protected:
     }
 
     bool is_reachable(entity &sender, entity &receiver,
-                      const std::string &dev_addr, std::string &info)
+                      const std::string &dev_addr, std::string &info,
+                      bool other_pid_ns = false)
     {
         const uint64_t field_mask =
                 UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
@@ -130,6 +132,11 @@ protected:
 
         ASSERT_UCS_OK(uct_iface_get_address(
                 receiver.iface(), (uct_iface_addr_t*)&iface_addr[0]));
+        if (other_pid_ns) {
+            /* Same peer, but in another PID namespace */
+            EXPECT_EQ(sizeof(uct_cuda_ipc_iface_address_t), iface_addr.size());
+            ((uct_cuda_ipc_iface_address_t*)&iface_addr[0])->pid_ns ^= 1;
+        }
 
         params.field_mask         = field_mask;
         params.info_string        = info_str;
@@ -236,7 +243,8 @@ UCS_TEST_P(test_cuda_ipc_iface_reachability, remote_host_imex)
     remote_addr = dev_addr;
     set_other_imex_channel(remote_addr);
     EXPECT_FALSE(is_reachable(*e1, *e2, remote_addr, info));
-    EXPECT_EQ(0u, info.find("different IMEX channel")) << info;
+    EXPECT_EQ(0u, info.find("different machine and different IMEX channel"))
+            << info;
 
     remote_addr = dev_addr;
     set_no_fabric(remote_addr);
@@ -249,6 +257,26 @@ UCS_TEST_P(test_cuda_ipc_iface_reachability, remote_host_imex)
     EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info));
     EXPECT_EQ(0u, info.find("different machine and FABRIC support local=0 "
                             "remote=1")) << info;
+}
+
+/* Peers on the same host in different PID namespaces exchange fabric handles,
+ * so they are reachable only if both have access to the same IMEX channel */
+UCS_TEST_P(test_cuda_ipc_iface_reachability, other_pid_ns_imex)
+{
+    entity *e1           = create_mnnvl_entity();
+    entity *e2           = create_mnnvl_entity();
+    std::string dev_addr = get_device_address(*e2);
+    std::string info;
+
+    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info, true)) << info;
+
+    set_other_imex_channel(dev_addr);
+    EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info, true));
+    EXPECT_EQ(0u, info.find("different PID namespace and different IMEX "
+                            "channel")) << info;
+
+    /* The channel is not checked in the same PID namespace */
+    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_iface_reachability, cuda_ipc)
