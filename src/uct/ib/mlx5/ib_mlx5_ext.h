@@ -147,6 +147,8 @@ void uct_ib_mlx5_ext_unregister(const char *name);
  */
 ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
+const uct_rc_mlx5_ext_ops_t *uct_ib_mlx5_ext_get_rc_provider(void);
+
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void);
 
 ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,

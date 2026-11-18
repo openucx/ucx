@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -61,6 +62,7 @@ typedef struct uct_rc_mlx5_base_ep {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
     uint8_t                  err_handler_inprogress;
+    void                    *ext_ctx;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;

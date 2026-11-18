@@ -335,8 +335,9 @@ UCS_STATIC_INIT
 
 UCS_STATIC_CLEANUP
 {
-    ucx_perf_ze_destroy_tls_cmdlist();
-
+    /* No driver calls here: the module is unloaded at process exit, possibly
+       after the Level Zero driver has been destroyed. The command lists and
+       the context are released with the process. */
     ucx_perf_allocator_unregister(&ze_managed_allocator);
     ucx_perf_allocator_unregister(&ze_device_allocator);
     ucx_perf_allocator_unregister(&ze_host_allocator);
