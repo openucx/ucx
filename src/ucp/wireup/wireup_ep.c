@@ -399,23 +399,6 @@ static ucs_status_t ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_wireup_ep_invalidate(uct_ep_h uct_ep,
-                         const uct_ep_invalidate_params_t *params)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-
-    /* The stub iface reports no-resource. The transport endpoint may already
-     * exist as next_ep while the lane is still proxied. */
-    ucs_assert(wireup_ep != NULL);
-
-    if (wireup_ep->super.uct_ep != NULL) {
-        return uct_ep_invalidate(wireup_ep->super.uct_ep, params);
-    }
-
-    return UCS_ERR_NO_RESOURCE;
-}
-
 static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
@@ -472,15 +455,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep, int block_worker_flush)
         .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
 
-    uct_base_iface_t *base_iface;
-
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
-
-    base_iface = ucs_derived_of(self->super.iface, uct_base_iface_t);
-
-    self->internal_ops               = *base_iface->internal_ops;
-    self->internal_ops.ep_invalidate = ucp_wireup_ep_invalidate;
-    base_iface->internal_ops         = &self->internal_ops;
 
     self->aux_ep        = NULL;
     self->aux_rsc_index = UCP_NULL_RESOURCE;

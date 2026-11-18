@@ -12,7 +12,6 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_proxy_ep.h>
-#include <uct/base/uct_iface.h>
 #include <ucs/datastruct/queue_types.h>
 
 
@@ -61,8 +60,6 @@ struct ucp_wireup_ep {
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
     /**< TLs which are available on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
-    /**< Stub iface ops, with invalidate forwarded to next_ep */
-    uct_iface_internal_ops_t  internal_ops;
 };
 
 
