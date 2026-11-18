@@ -51,9 +51,9 @@ jobs:
             rm -rf "$(CONDA_CHANNEL_DIR)"
             mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-conda-python-${{ slice.conda_slice }}" "$(CONDA_CHANNEL_DIR)"
           displayName: Stage conda-python artifact
-        - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_cpp
+        - bash: bash $(UCXX_UCX_DIR)/buildlib/tools/test_ucxx.sh test_cpp
           displayName: Run UCXX C++ tests
         # GPU slices only: cupy variants need a real device.
         - ${{ if eq(slice.gpu, true) }}:
-          - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_python
+          - bash: bash $(UCXX_UCX_DIR)/buildlib/tools/test_ucxx.sh test_python
             displayName: Run UCXX Python tests
