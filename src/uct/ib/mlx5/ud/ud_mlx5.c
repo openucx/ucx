@@ -34,7 +34,6 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
-/* Includes 50 ns calibration for UD/DC selection in hybrid Alltoallv. */
 #define UCT_UD_MLX5_IFACE_OVERHEAD 130e-9
 
 
