@@ -32,6 +32,17 @@ static void uct_rocm_base_signal_desc_cleanup(ucs_mpool_t *mp, void *obj)
     }
 }
 
+void uct_rocm_base_signal_desc_set(uct_rocm_base_signal_desc_t *desc,
+                                   uct_completion_t *comp, void *mapped_addr,
+                                   uct_rocm_base_signal_release_cb_t release,
+                                   void *release_arg)
+{
+    desc->comp        = comp;
+    desc->mapped_addr = mapped_addr;
+    desc->release     = release;
+    desc->release_arg = release_arg;
+}
+
 ucs_mpool_ops_t uct_rocm_base_signal_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -63,6 +74,12 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
 
         if (rocm_signal->comp != NULL) {
             uct_invoke_completion(rocm_signal->comp, completion_status);
+        }
+
+        if (rocm_signal->release != NULL) {
+            rocm_signal->release(rocm_signal->release_arg);
+            rocm_signal->release     = NULL;
+            rocm_signal->release_arg = NULL;
         }
 
         if (rocm_signal->mapped_addr != NULL) {
