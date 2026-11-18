@@ -141,11 +141,16 @@ protected:
             if (expect_equal_bandwidth) {
                 EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
                                  get_perf.bandwidth.shared);
-                EXPECT_DOUBLE_EQ(put_perf.path_bandwidth.shared,
-                                 get_perf.path_bandwidth.shared);
             } else {
                 EXPECT_GT(put_perf.bandwidth.shared,
                           get_perf.bandwidth.shared);
+            }
+
+            if (expect_equal_bandwidth && uct_ib_iface_is_roce(iface) &&
+                (uct_ib_iface_device(iface)->lag_level > 1)) {
+                EXPECT_DOUBLE_EQ(put_perf.path_bandwidth.shared,
+                                 get_perf.path_bandwidth.shared);
+            } else {
                 EXPECT_GT(put_perf.path_bandwidth.shared,
                           get_perf.path_bandwidth.shared);
             }
