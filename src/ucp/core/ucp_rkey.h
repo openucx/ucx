@@ -52,7 +52,12 @@ enum {
     UCP_RKEY_CONFIG_FLAG_FLUSH            = UCS_BIT(0),
 
     /* Synthetic key used only for protocol performance estimation */
-    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1)
+    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1),
+
+    /* Some MDs in unreachable_md_map failed to unpack because the remote
+     * device is not reachable at all (rather than only the remote buffer), so
+     * the peer is not expected to access local buffers through them either */
+    UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE = UCS_BIT(2)
 };
 
 
@@ -77,15 +82,6 @@ struct ucp_rkey_config_key {
 
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
-
-    /* Subset of unreachable_md_map: MDs for which the rkey is not reachable
-     * because the local device cannot access the remote device at all (e.g.
-     * no P2P support between two GPUs), regardless of the remote buffer. In
-     * this case the peer is not expected to access local buffers through these
-     * MDs either. For the other unreachable MDs only the specific remote
-     * buffer is not accessible (e.g. it has no IPC handle), and the peer may
-     * still be able to access local buffers, such as the rndv fragments. */
-    ucp_md_map_t           peer_unreachable_md_map;
 };
 
 

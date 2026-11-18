@@ -2273,7 +2273,7 @@ protected:
         rkey_config_key.md_map             &= ~UCS_BIT(md_index);
         rkey_config_key.unreachable_md_map |= UCS_BIT(md_index);
         if (peer_unreachable) {
-            rkey_config_key.peer_unreachable_md_map |= UCS_BIT(md_index);
+            rkey_config_key.flags |= UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE;
         }
 
         EXPECT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,

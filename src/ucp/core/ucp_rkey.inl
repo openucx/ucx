@@ -17,8 +17,7 @@ ucp_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
 {
     return kh_int64_hash_func(
             rkey_config_key.md_map ^
-            (rkey_config_key.unreachable_md_map << 32) ^
-            (rkey_config_key.peer_unreachable_md_map << 48)) ^
+            (rkey_config_key.unreachable_md_map << 32)) ^
            (rkey_config_key.ep_cfg_index << 8) ^
            (rkey_config_key.sys_dev << 16) ^
            (rkey_config_key.mem_type << 24) ^
@@ -35,9 +34,7 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
            (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
            (rkey_config_key1.flags == rkey_config_key2.flags) &&
            (rkey_config_key1.unreachable_md_map ==
-            rkey_config_key2.unreachable_md_map) &&
-           (rkey_config_key1.peer_unreachable_md_map ==
-            rkey_config_key2.peer_unreachable_md_map);
+            rkey_config_key2.unreachable_md_map);
 }
 
 /**
