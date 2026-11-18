@@ -5,7 +5,8 @@
 job: ucx-basic-compile
 
 failFast: false
-timeout_minutes: 30
+# Includes the wait for a pod.
+timeout_minutes: 90
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
