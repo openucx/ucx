@@ -73,6 +73,8 @@
 #define UCP_CPU_EST_BCOPY_BW_DEFAULT         (7000 * UCS_MBYTE)
 #define UCP_CPU_EST_BCOPY_BW_DEFAULT_PROTOV1 (5800 * UCS_MBYTE)
 #define UCP_CPU_EST_BCOPY_BW_AMD_PROTOV1     (5008 * UCS_MBYTE)
+#define UCP_MAX_RNDV_LANES_DEFAULT           2
+#define UCP_MAX_RMA_LANES_DEFAULT            1
 
 #define UCP_TL_AUX_SUFFIX    "aux"
 #define UCP_TL_AUX(_tl_name) _tl_name ":" UCP_TL_AUX_SUFFIX
@@ -246,18 +248,26 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
   {"MAX_RNDV_LANES", NULL,"",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
-  {"MAX_RNDV_RAILS", "2",
-   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RNDV_RAILS", "auto",
+   "Maximal number of devices on which a rendezvous operation may be executed in parallel.\n"
+   "An 'auto' value uses the default of 2 and lets multi-send GET operations use\n"
+   "the number of paths recommended by the transport.",
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"MAX_RMA_LANES", NULL, "",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
-  {"MAX_RMA_RAILS", "1",
-   "Maximal number of devices on which a RMA operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RMA_RAILS", "auto",
+   "Maximal number of devices on which a RMA operation may be executed in parallel.\n"
+   "An 'auto' value uses the default of 1 and lets multi-send GET operations use\n"
+   "the number of paths recommended by the transport.",
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"MIN_RNDV_CHUNK_SIZE", "16k",
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
@@ -2600,17 +2610,36 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
 }
 
 static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
-                                      unsigned max_rails)
+                                      unsigned long max_rails)
 {
     const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
 
     if (max_rails > max_lanes) {
-        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+        ucs_error("%s%s %lu exceeds the maximal number of lanes %u", env_prefix,
                   name, max_rails, max_lanes);
         return 0;
     }
 
     return 1;
+}
+
+static ucs_status_t
+ucp_context_resolve_max_lanes(const char *env_prefix, const char *name,
+                              unsigned long config_value,
+                              unsigned default_value, unsigned *value_p)
+{
+    if (config_value == UCS_ULUNITS_AUTO) {
+        config_value = default_value;
+    } else if (config_value == UCS_ULUNITS_INF) {
+        config_value = UCP_MAX_LANES;
+    }
+
+    if (!ucp_max_rails_config_valid(env_prefix, name, config_value)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *value_p = config_value;
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_fill_config(ucp_context_h context,
@@ -2632,6 +2661,23 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                           ucp_context_config_table);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    status = ucp_context_resolve_max_lanes(
+            config->env_prefix, "MAX_RNDV_RAILS",
+            context->config.ext.max_rndv_lanes_config,
+            UCP_MAX_RNDV_LANES_DEFAULT,
+            &context->config.ext.max_rndv_lanes);
+    if (status != UCS_OK) {
+        goto err_free_config_ext;
+    }
+
+    status = ucp_context_resolve_max_lanes(
+            config->env_prefix, "MAX_RMA_RAILS",
+            context->config.ext.max_rma_lanes_config,
+            UCP_MAX_RMA_LANES_DEFAULT, &context->config.ext.max_rma_lanes);
+    if (status != UCS_OK) {
+        goto err_free_config_ext;
     }
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
@@ -2700,11 +2746,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
 
     if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
-                                    context->config.ext.max_eager_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
-                                    context->config.ext.max_rndv_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
-                                    context->config.ext.max_rma_lanes)) {
+                                    context->config.ext.max_eager_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }

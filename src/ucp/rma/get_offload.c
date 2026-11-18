@@ -165,20 +165,41 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
     size_t offset      = req->send.state.dt_iter.offset;
-    const ucp_proto_multi_priv_t *mpriv;
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    size_t max_payload;
     uct_iov_t iov;
 
+    if (mpriv->lane_per_request) {
+        max_payload = lpriv->max_frag;
+        *lane_shift = 0;
+    } else {
+        max_payload = ucp_proto_multi_max_payload(req, lpriv, 0);
+    }
+
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                               ucp_proto_multi_max_payload(req, lpriv, 0),
+                               max_payload,
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
 
-    mpriv = req->send.proto_config->priv;
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             &iov, 1, req->send.rma.remote_addr + offset,
                             tl_rkey, &req->send.state.uct_comp);
+}
+
+static ucs_status_t
+ucp_proto_get_offload_zcopy_request_init(ucp_request_t *req)
+{
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    status = ucp_proto_multi_rma_init_func(req);
+    if ((status == UCS_OK) && mpriv->lane_per_request) {
+        ucp_proto_multi_request_init_lane(req, mpriv);
+    }
+
+    return status;
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
@@ -187,7 +208,8 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
+            req, req->send.proto_config->priv,
+            ucp_proto_get_offload_zcopy_request_init,
             UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
@@ -226,6 +248,12 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .max_lanes                  = context->config.ext.max_rma_lanes,
+        .use_device_num_paths       =
+                (context->config.ext.max_rma_lanes_config ==
+                 UCS_ULUNITS_AUTO) &&
+                (ucp_proto_select_op_attr_unpack(
+                         init_params->select_param->op_attr) &
+                 UCP_OP_ATTR_FLAG_MULTI_SEND),
         .min_chunk                  = context->config.ext.min_rma_chunk_size,
         .use_single_lane_min_length = 1,
         .initial_reg_md_map         = 0,

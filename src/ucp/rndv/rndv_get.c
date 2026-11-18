@@ -50,6 +50,12 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
+        .use_device_num_paths  =
+                (context->config.ext.max_rndv_lanes_config ==
+                 UCS_ULUNITS_AUTO) &&
+                (ucp_proto_select_op_attr_unpack(
+                         init_params->select_param->op_attr) &
+                 UCP_OP_ATTR_FLAG_MULTI_SEND),
         .min_chunk           = context->config.ext.min_rndv_chunk_size,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
@@ -257,6 +263,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
     size_t offset                           = req->send.state.dt_iter.offset;
     uct_iov_t iov;
+
+    if (rpriv->mpriv.lane_per_request) {
+        *lane_shift = 0;
+    }
 
     ucp_proto_rndv_mtype_next_iov(req, rpriv, lpriv, next_iter, &iov);
 

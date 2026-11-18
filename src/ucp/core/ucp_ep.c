@@ -282,6 +282,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->unflushed_lanes              = 0;
     ep->ext->lane_generation              = 0;
     ep->ext->fence_seq                    = 0;
+    ep->ext->next_multi_send_lane         = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
 
