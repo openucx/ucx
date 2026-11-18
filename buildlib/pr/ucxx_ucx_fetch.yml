@@ -10,7 +10,8 @@ steps:
       artifactName: ucx-pr-$(UCXX_UCX_SLICE)
       downloadPath: $(System.DefaultWorkingDirectory)/_dl_ucx_pr
   - bash: |
+      set -eo pipefail
       rm -rf /tmp/ucx-pr
       tar -C /tmp -xzf "$(System.DefaultWorkingDirectory)/_dl_ucx_pr/ucx-pr-$(UCXX_UCX_SLICE)/ucx-pr.tar.gz"
-      /tmp/ucx-pr/bin/ucx_info -v | head -3
+      /tmp/ucx-pr/bin/ucx_info -v | sed -n '1,3p'
     displayName: Stage UCX (PR)
