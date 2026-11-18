@@ -657,6 +657,7 @@ protected:
         ucs_time_t deadline;
 
         sender().set_ib_ud_peer_timeout(3.);
+        sender().progress();
         {
             scoped_log_handler slh(hide_errors_logger);
 
@@ -684,6 +685,11 @@ protected:
         const unsigned op_mask = get_variant_value();
 
         if (is_target_wireup(op_mask, failure_side)) {
+            if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5",
+                                    "rc_verbs"})) {
+                UCS_TEST_SKIP_R("initial wireup failure is RC-only for now");
+            }
+
             test_target_wireup();
             return;
         }

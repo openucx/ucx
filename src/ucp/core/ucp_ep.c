@@ -1622,7 +1622,18 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
-static ucs_status_t
+int ucp_ep_failover_in_wireup(ucp_ep_h ucp_ep, ucp_lane_index_t lane)
+{
+    /* Sockaddr keeps its CM path. REMOTE_CONNECTED is the p2p handshake;
+     * CONNECT_TO_IFACE is one-sided and can recover without it. */
+    return ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+           !(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) &&
+           (ucp_ep_config(ucp_ep)->p2p_lanes != 0) &&
+           (ucp_ep_get_cm_lane(ucp_ep) == UCP_NULL_LANE) &&
+           (ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane)) != NULL);
+}
+
+ucs_status_t
 ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
@@ -2515,6 +2526,19 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
          * idle until the completion holds it. */
         arg = ucp_ep_recovery_arg(ep);
         ucs_assert((arg == NULL) || (arg->tf_reply != NULL));
+        goto done;
+    }
+
+    /* TODO: recovery in the middle of p2p wireup is not recoverable,
+     *       need to store address for that and implement re-try logic.
+     *       LOCAL_CONNECTED is set after connect_local; REMOTE_CONNECTED
+     *       is the completed p2p handshake. */
+    if ((ucp_ep_config(ep)->p2p_lanes != 0) &&
+        !(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ucs_diag("ep %p: recovery in the middle of p2p wireup is not recoverable, "
+                "setting lanes failed", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        ret = 1;
         goto done;
     }
 
