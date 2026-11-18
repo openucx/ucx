@@ -603,15 +603,6 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
             goto out;
         }
 
-        /* The remote buffer could not be exported (e.g. a memory pool without
-         * an exportable handle type), so it cannot be mapped regardless of the
-         * devices */
-        if (rkey->super.super.ph.handle_type ==
-            UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC) {
-            *accessible = UCT_CUDA_IPC_ACCESS_NO_HANDLE;
-            goto out;
-        }
-
         /* Check if peer is reachable by trying to open memory handle. This is
          * necessary when the device is not visible through CUDA_VISIBLE_DEVICES
          * and checking peer accessibility through CUDA driver API is not
@@ -636,12 +627,15 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
 
         if ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS)) {
             *accessible = UCT_CUDA_IPC_ACCESS_OK;
-        } else if (peer_accessible == UCS_YES) {
-            /* The devices have P2P access, so only the handle is the problem */
+        } else if ((peer_accessible == UCS_YES) &&
+                   (rkey->super.super.ph.handle_type ==
+                    UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC)) {
+            /* The devices have P2P access, but the remote buffer has no IPC
+             * handle (e.g. a memory pool without an exportable handle type),
+             * so other buffers of the peer may still be accessible */
             *accessible = UCT_CUDA_IPC_ACCESS_NO_HANDLE;
         } else {
-            /* NVML could not tell, the failure may be caused by missing P2P
-             * access */
+            /* The failure may be caused by missing P2P access */
             *accessible = UCT_CUDA_IPC_ACCESS_UNREACHABLE;
         }
     }

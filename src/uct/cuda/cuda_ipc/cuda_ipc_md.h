@@ -98,13 +98,11 @@ typedef enum {
     UCT_CUDA_IPC_ACCESS_UNKNOWN = 0,
     /* Remote memory handles can be mapped */
     UCT_CUDA_IPC_ACCESS_OK,
-    /* Only remote memory handles of this type cannot be used: the remote
-     * buffer has no IPC handle, or mapping failed although NVML reports P2P
-     * access between the devices. Other memory of the same peer (e.g. with a
-     * different handle type) may still be accessible, and vice versa. */
+    /* NVML reports P2P access, but the remote buffer has no IPC handle, so
+     * other memory of the same peer may still be accessible, and vice versa */
     UCT_CUDA_IPC_ACCESS_NO_HANDLE,
     /* The remote device is not accessible: NVML reports no native P2P access,
-     * or mapping failed and NVML could not tell whether P2P access exists */
+     * or mapping a remote memory handle failed */
     UCT_CUDA_IPC_ACCESS_UNREACHABLE
 } uct_cuda_ipc_access_t;
 

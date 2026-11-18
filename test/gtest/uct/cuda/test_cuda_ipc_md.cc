@@ -205,6 +205,14 @@ protected:
        EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
     }
 
+    static void
+    tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0, int64_t value1)
+    {
+        int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
+        uuid64[0]       = value0;
+        uuid64[1]       = value1;
+    }
+
 #if HAVE_DECL_SYS_PIDFD_GETFD
     ucs_status_t pack_posix_fd_key(cuda_posix_fd_mem_buffer &buf, size_t size,
                                    uct_mem_h *memh, uct_cuda_ipc_rkey_t *rkey)
@@ -220,14 +228,6 @@ protected:
 
         return uct_md_mkey_pack_v2(md(), *memh, buf.ptr(), size, &pack_params,
                                    rkey);
-    }
-
-    static void
-    tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0, int64_t value1)
-    {
-        int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
-        uuid64[0]       = value0;
-        uuid64[1]       = value1;
     }
 
 #endif
@@ -295,19 +295,26 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 
 /*
  * Memory without an exportable IPC handle (e.g. from the default memory pool)
- * cannot be mapped by any peer, but this does not mean that the peer device is
- * unreachable, so the rkey unpack must return UCS_ERR_UNSUPPORTED rather than
- * UCS_ERR_UNREACHABLE.
+ * cannot be mapped by any peer. If NVML reports P2P access to the peer device,
+ * this does not mean that the peer device is unreachable, so the rkey unpack
+ * must return UCS_ERR_UNSUPPORTED. If NVML cannot tell, missing P2P access may
+ * be the reason, so it must return UCS_ERR_UNREACHABLE.
  */
 UCS_TEST_P(test_cuda_ipc_md, unpack_no_ipc_handle)
 {
-#if HAVE_CUDA_FABRIC
-    constexpr size_t size = 4096;
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+    constexpr size_t size                  = 4096;
+    uct_rkey_unpack_params_t unpack_params = {0};
+    int num_devices, device_index, can_access;
+    CUdevice local_device, peer_device;
     uct_cuda_ipc_extended_rkey_t rkey;
+    uct_rkey_bundle_t rkey_bundle;
+    CUuuid local_uuid, peer_uuid;
     CUstream cu_stream;
     CUdeviceptr ptr;
     uct_mem_h memh;
 
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&local_device));
     ASSERT_EQ(CUDA_SUCCESS, cuStreamCreate(&cu_stream, CU_STREAM_NON_BLOCKING));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAllocAsync(&ptr, size, cu_stream));
     ASSERT_EQ(CUDA_SUCCESS, cuStreamSynchronize(cu_stream));
@@ -316,16 +323,39 @@ UCS_TEST_P(test_cuda_ipc_md, unpack_no_ipc_handle)
     ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void*)ptr, size, NULL,
                                        &rkey));
     EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC, rkey.super.ph.handle_type);
+    local_uuid = rkey.super.uuid;
 
-    /* Bypass the same-process shortcut; NVML cannot resolve this UUID */
-    auto uuid64 = reinterpret_cast<int64_t*>(rkey.super.uuid.bytes);
-    uuid64[0]   = 0xDEADLL;
-    uuid64[1]   = 0xBEEFLL;
+    /* A key of this process on the same device is accessible directly */
+    ASSERT_UCS_OK(uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
+                                     &rkey_bundle));
+    uct_rkey_release(md()->component, &rkey_bundle);
 
-    uct_rkey_unpack_params_t unpack_params = {0};
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+    /* NVML cannot resolve this UUID */
+    tamper_rkey_uuid(&rkey.super, 0xDEADLL, 0xBEEFLL);
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
               uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params, NULL));
 
+    /* Pretend the memory is on a peer device with P2P access */
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetCount(&num_devices));
+    for (device_index = 0; device_index < num_devices; ++device_index) {
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&peer_device, device_index));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&peer_uuid, peer_device));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceCanAccessPeer(&can_access, local_device,
+                                                      peer_device));
+        if ((peer_device == local_device) || !can_access ||
+            (uct_cuda_ipc_nvml_peer_accessible(local_device, &peer_uuid) !=
+             UCS_YES)) {
+            continue;
+        }
+
+        rkey.super.uuid = peer_uuid;
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+                  uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
+                                     NULL));
+        break;
+    }
+
+    rkey.super.uuid = local_uuid;
     uct_md_mem_dereg_params_t dereg_params;
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
     dereg_params.memh       = memh;
@@ -333,8 +363,12 @@ UCS_TEST_P(test_cuda_ipc_md, unpack_no_ipc_handle)
     EXPECT_EQ(CUDA_SUCCESS, cuMemFreeAsync(ptr, cu_stream));
     EXPECT_EQ(CUDA_SUCCESS, cuStreamSynchronize(cu_stream));
     EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(cu_stream));
+
+    if (device_index == num_devices) {
+        UCS_TEST_SKIP_R("no peer device with P2P access reported by NVML");
+    }
 #else
-    UCS_TEST_SKIP_R("built without fabric support");
+    UCS_TEST_SKIP_R("built without fabric or pidfd support");
 #endif
 }
 
