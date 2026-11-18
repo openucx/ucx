@@ -29,7 +29,7 @@ esac
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${UCXX_DIR:?UCXX_DIR required}"
 
-export UCX_PR_PREFIX=/tmp/ucx-pr
+UCX_PR_PREFIX=/tmp/ucx-pr
 
 # The PR's UCX was built once by the UCXX_ucx stage and staged at
 # UCX_PR_PREFIX by the fetch step; every build and test consumes it.
@@ -53,8 +53,8 @@ shim_download_helper() {
 
 cd "$UCXX_DIR"
 
-# Point every ucxx test at the PR's UCX instead of released ucx, through the
-# ucxx UCXX_NO_LIBUCX switch.
+# ucxx asks for its UCXX_NO_LIBUCX switch in every job (ci/README.md). The
+# tests load the PR's UCX through the overlay and LD_LIBRARY_PATH below.
 export UCXX_NO_LIBUCX=true
 
 # Tolerate missing nvidia-smi on CPU containers. Guard catches upstream rewording.
