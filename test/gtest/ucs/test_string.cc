@@ -255,6 +255,36 @@ UCS_TEST_F(test_string, to_memunits) {
     }
 }
 
+UCS_TEST_F(test_string, to_ulong) {
+    static const char *invalid[] = {"", "abc", "-1", "+1", " 1", "1 ", "1x",
+                                    "99999999999999999999"};
+    unsigned long value;
+    char *end;
+
+    EXPECT_EQ(UCS_OK, ucs_str_to_ulong("123", 0, &value, NULL));
+    EXPECT_EQ(123ul, value);
+
+    EXPECT_EQ(UCS_OK, ucs_str_to_ulong("0x1f", 0, &value, NULL));
+    EXPECT_EQ(0x1ful, value);
+
+    EXPECT_EQ(UCS_OK, ucs_str_to_ulong("010", 10, &value, NULL));
+    EXPECT_EQ(10ul, value);
+
+    EXPECT_EQ(UCS_OK, ucs_str_to_ulong("18446744073709551615", 0, &value,
+                                       NULL));
+    EXPECT_EQ(ULONG_MAX, value);
+
+    const char *str = "12:34";
+    EXPECT_EQ(UCS_OK, ucs_str_to_ulong(str, 0, &value, &end));
+    EXPECT_EQ(12ul, value);
+    EXPECT_EQ(str + 2, end);
+
+    for (const char *s : invalid) {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_ulong(s, 0, &value, NULL))
+                << "'" << s << "'";
+    }
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
