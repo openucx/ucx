@@ -56,11 +56,36 @@
     (_wiface)->iface, UCT_TL_RESOURCE_DESC_ARG( \
             &(_wiface)->worker->context->tl_rscs[(_wiface)->rsc_index].tl_rsc)
 
+/* Path bandwidth equal to the path estimate, see ucp_ep_path_bw_path_t */
+#define UCP_EP_PATH_BW_RATIO_ONE UINT16_MAX
+
 
 typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_ADD,
     UCP_WORKER_EPFD_OP_DEL
 } ucp_worker_event_fd_op_t;
+
+
+/*
+ * Put bandwidth of the paths of an endpoint, followed by its paths. The peer
+ * splits get by it, since the data of get crosses the same paths.
+ */
+typedef struct {
+    uint64_t ep_id;     /* Endpoint ID of the peer */
+    uint8_t  num_paths; /* Number of paths */
+} UCS_S_PACKED ucp_ep_path_bw_hdr_t;
+
+
+/* Path between a device of the sender and a device of the receiver */
+typedef struct {
+    ucp_md_index_t   md_index;     /* Memory domain of the sender */
+    ucs_sys_device_t sys_dev;      /* System device of the sender */
+    ucp_md_index_t   dst_md_index; /* Memory domain of the receiver */
+    ucs_sys_device_t dst_sys_dev;  /* System device of the receiver, as packed
+                                      in its address */
+    uint16_t         ratio;        /* Put bandwidth relative to the path
+                                      estimate, of UCP_EP_PATH_BW_RATIO_ONE */
+} UCS_S_PACKED ucp_ep_path_bw_path_t;
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
@@ -964,10 +989,19 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 
 static unsigned ucp_worker_iface_path_bw_progress(void *arg);
 
+static unsigned ucp_worker_ep_path_bw_sync_progress(void *arg);
+
 static int ucp_worker_iface_path_bw_filter(const ucs_callbackq_elem_t *elem,
                                            void *arg)
 {
     return (elem->cb == ucp_worker_iface_path_bw_progress) &&
+           (elem->arg == arg);
+}
+
+static int ucp_worker_ep_path_bw_sync_filter(const ucs_callbackq_elem_t *elem,
+                                             void *arg)
+{
+    return (elem->cb == ucp_worker_ep_path_bw_sync_progress) &&
            (elem->arg == arg);
 }
 
@@ -976,6 +1010,9 @@ void ucp_worker_ep_path_bw_cleanup(ucp_ep_h ep)
     ucp_worker_h worker = ep->worker;
     khiter_t it;
 
+    /* A scheduled send of the samples goes away with them */
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_worker_ep_path_bw_sync_filter, ep);
     it = kh_get(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep);
     if (it != kh_end(&worker->ep_path_bw)) {
         ucs_free(kh_value(&worker->ep_path_bw, it));
@@ -987,6 +1024,7 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
     ucp_ep_path_bw_t *state;
+    ucp_ep_path_bw_op_t op;
     ucp_lane_index_t lane;
     khiter_t it;
     int ret;
@@ -1011,8 +1049,12 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
 
     state->cfg_index       = ep->cfg_index;
     state->lane_generation = ep->ext->lane_generation;
+    /* The peer may hold samples of the previous lanes of this side */
+    state->sync_peer       = 1;
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        state->bandwidth[lane] = UCP_EP_PATH_BW_INVALID;
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+        }
     }
 
     it = kh_put(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep, &ret);
@@ -1026,26 +1068,275 @@ static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
     return state;
 }
 
-/* Sample the lanes of the endpoint on the interface, and mark the endpoint
- * degraded while a lane is below the path estimate */
+/* RMA bandwidth lanes whose paths can be sampled */
+static ucp_lane_map_t ucp_worker_ep_path_bw_lanes(ucp_ep_h ep)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map        = 0;
+    ucp_worker_iface_t *wiface;
+    ucp_lane_index_t i, lane;
+
+    for (i = 0; (i < UCP_MAX_LANES) && (key->rma_bw_lanes[i] != UCP_NULL_LANE);
+         ++i) {
+        lane = key->rma_bw_lanes[i];
+        if ((key->lanes[lane].rsc_index == UCP_NULL_RESOURCE) ||
+            (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) ||
+            (ucp_ep_get_lane(ep, lane) == NULL)) {
+            continue;
+        }
+
+        /* Port speed changed: sample the lane after endpoint reconfiguration */
+        wiface = ucp_worker_iface(ep->worker, key->lanes[lane].rsc_index);
+        if (key->lanes[lane].port_speed == wiface->port_speed) {
+            lane_map |= UCS_BIT(lane);
+        }
+    }
+
+    return lane_map;
+}
+
+/* Static path estimate, which the samples of a source are compared with. It
+ * stays while the port speed does, so it is queried once per port speed. */
+static ucs_status_t
+ucp_worker_iface_path_bw_estimate(ucp_worker_iface_t *wiface,
+                                  ucp_ep_path_bw_op_t op, double *bandwidth_p)
+{
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+
+    if (wiface->path_bw_speed != wiface->port_speed) {
+        wiface->path_bw_speed = wiface->port_speed;
+        wiface->path_bw_valid = 0;
+    }
+
+    if (!(wiface->path_bw_valid & UCS_BIT(op))) {
+        /* Put samples are compared with the estimate which a path without
+         * samples reports. Get can be limited by the read path, so the put
+         * samples of the peer, which split get, are scaled to the path
+         * estimate of get. */
+        perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+        if (op == UCP_EP_PATH_BW_OP_PEER_PUT) {
+            perf_attr.field_mask |= UCT_PERF_ATTR_FIELD_OPERATION;
+            perf_attr.operation   = UCT_EP_OP_GET_ZCOPY;
+        }
+
+        status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        wiface->path_bw[op]    = ucp_proto_common_iface_bandwidth(
+                wiface->worker->context, &perf_attr.path_bandwidth);
+        wiface->path_bw_valid |= UCS_BIT(op);
+    }
+
+    *bandwidth_p = wiface->path_bw[op];
+    return UCS_OK;
+}
+
+/* Keep a sample below the path estimate, other paths are not degraded */
+static void
+ucp_worker_ep_path_bw_set(ucp_ep_path_bw_t *state, ucp_lane_index_t lane,
+                          ucp_ep_path_bw_op_t op, double bandwidth,
+                          double path_bandwidth)
+{
+    if (bandwidth >= path_bandwidth) {
+        state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+    } else {
+        /* Below 1 B/s, the path is considered stalled */
+        state->bandwidth[lane][op] = (bandwidth < 1.0) ? 0 : bandwidth;
+    }
+}
+
+/* Mark the endpoint degraded while a lane is below the path estimate, and
+ * keep the sources of such samples for the operations they split */
+static void
+ucp_worker_ep_path_bw_update_flag(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
+{
+    uint8_t degraded = 0;
+    ucp_ep_path_bw_op_t op;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            if (state->bandwidth[lane][op] != UCP_EP_PATH_BW_INVALID) {
+                degraded |= UCS_BIT(op);
+            }
+        }
+    }
+
+    ep->ext->path_bw_degraded = degraded;
+    if (degraded != 0) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_PATH_DEGRADED, 0);
+    } else {
+        ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+    }
+}
+
+static size_t ucp_worker_ep_path_bw_pack(void *dest, void *arg)
+{
+    ucp_request_t *req             = arg;
+    ucp_ep_h ep                    = req->send.ep;
+    ucp_worker_h worker            = ep->worker;
+    ucp_context_h context          = worker->context;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_ep_path_bw_hdr_t *hdr      = dest;
+    ucp_ep_path_bw_path_t *path    = (ucp_ep_path_bw_path_t*)(hdr + 1);
+    const ucp_ep_path_bw_t *state;
+    const ucp_tl_resource_desc_t *rsc;
+    double bandwidth, path_bandwidth, ratio;
+    ucp_lane_map_t lane_map;
+    ucp_lane_index_t lane;
+    khiter_t it;
+
+    hdr->ep_id     = ucp_ep_remote_id(ep);
+    hdr->num_paths = 0;
+
+    /* The latest samples of the current lanes, since the request could wait
+     * for send resources */
+    it = kh_get(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep);
+    if (it == kh_end(&worker->ep_path_bw)) {
+        goto out;
+    }
+
+    state = kh_value(&worker->ep_path_bw, it);
+    if (!ucp_worker_ep_path_bw_is_current(ep, state)) {
+        goto out;
+    }
+
+    lane_map = ucp_worker_ep_path_bw_lanes(ep);
+    ucs_for_each_bit(lane, lane_map) {
+        rsc       = &context->tl_rscs[key->lanes[lane].rsc_index];
+        bandwidth = state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT];
+        if ((bandwidth == UCP_EP_PATH_BW_INVALID) ||
+            (ucp_worker_iface_path_bw_estimate(
+                     ucp_worker_iface(worker, key->lanes[lane].rsc_index),
+                     UCP_EP_PATH_BW_OP_PUT, &path_bandwidth) != UCS_OK) ||
+            (bandwidth >= path_bandwidth)) {
+            ratio = 1;
+        } else {
+            ratio = bandwidth / path_bandwidth;
+        }
+
+        path->md_index     = rsc->md_index;
+        path->sys_dev      = rsc->tl_rsc.sys_device;
+        path->dst_md_index = key->lanes[lane].dst_md_index;
+        path->dst_sys_dev  = key->lanes[lane].dst_sys_dev;
+        path->ratio        = (uint16_t)((ratio * UCP_EP_PATH_BW_RATIO_ONE) +
+                                        0.5);
+        ++path;
+        ++hdr->num_paths;
+    }
+
+out:
+    ucs_debug("ep %p: send put bandwidth of %u paths to the peer", ep,
+              hdr->num_paths);
+    return UCS_PTR_BYTE_DIFF(dest, path);
+}
+
+static ucs_status_t ucp_worker_ep_path_bw_progress_send(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_h ep        = req->send.ep;
+    ssize_t packed_len;
+
+    req->send.lane = ucp_ep_get_am_lane(ep);
+    packed_len     = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+                                     UCP_AM_ID_EP_PATH_BW,
+                                     ucp_worker_ep_path_bw_pack, req, 0);
+    if (packed_len == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* After a failure, the next update of the samples sends them again */
+    ucp_request_complete_send(req, (packed_len < 0) ?
+                                           (ucs_status_t)packed_len : UCS_OK);
+    return UCS_OK;
+}
+
+/* Send the latest put samples of the endpoint */
+static unsigned ucp_worker_ep_path_bw_sync_progress(void *arg)
+{
+    ucp_ep_h ep = arg;
+    ucp_request_t *req;
+
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+    if (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) {
+        goto out;
+    }
+
+    req = ucp_request_get(ep->worker);
+    if (req == NULL) {
+        ucs_error("ep %p: failed to allocate path bandwidth request", ep);
+        goto out;
+    }
+
+    ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
+    req->flags         = UCP_REQUEST_FLAG_RELEASED;
+    req->send.ep       = ep;
+    req->send.datatype = ucp_dt_make_contig(1);
+    req->send.uct.func = ucp_worker_ep_path_bw_progress_send;
+    ucp_request_send(req);
+
+out:
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    return 1;
+}
+
+/* Send the put samples to the peer, whose get data crosses the same paths. A
+ * failed send can invoke the error callback of the user, which may close
+ * endpoints, so it runs from progress, after the update of all endpoints. */
+static void ucp_worker_ep_path_bw_send(ucp_ep_h ep, ucp_ep_path_bw_t *state)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map        = ucp_worker_ep_path_bw_lanes(ep);
+    int degraded                   = 0;
+    ucp_lane_index_t lane;
+
+    if ((lane_map == 0) || (key->am_lane == UCP_NULL_LANE) ||
+        (key->dst_version < UCP_MIN_DST_VERSION_EP_PATH_BW) ||
+        !(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+        ((sizeof(ucp_ep_path_bw_hdr_t) +
+          (ucs_popcount(lane_map) * sizeof(ucp_ep_path_bw_path_t))) >
+         ucp_ep_get_iface_attr(ep, key->am_lane)->cap.am.max_bcopy)) {
+        return;
+    }
+
+    ucs_for_each_bit(lane, lane_map) {
+        degraded |= (state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT] !=
+                     UCP_EP_PATH_BW_INVALID);
+    }
+
+    /* A degraded path is sent on every update, so the peer gets it again
+     * after its endpoint reconfiguration, and its recovery is sent once */
+    if (!degraded && !state->sync_peer) {
+        return;
+    }
+
+    /* The updates before the send are sent once, with the latest samples */
+    state->sync_peer = degraded;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 ucp_worker_ep_path_bw_sync_filter, ep);
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_worker_ep_path_bw_sync_progress, ep);
+}
+
+/* Sample the lanes of the endpoint on the interface, mark the endpoint
+ * degraded while a lane is below the path estimate, and send the samples to
+ * the peer */
 static void
 ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
                              double path_bandwidth)
 {
     const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map        = ucp_worker_ep_path_bw_lanes(ep);
     ucp_ep_path_bw_t *state        = NULL;
     uct_ep_attr_t attr;
-    ucp_lane_index_t i, lane;
+    ucp_lane_index_t lane;
     double bandwidth;
 
-    for (i = 0; (i < UCP_MAX_LANES) && (key->rma_bw_lanes[i] != UCP_NULL_LANE);
-         ++i) {
-        lane = key->rma_bw_lanes[i];
-        /* Port speed changed: query the lane after endpoint reconfiguration */
-        if ((key->lanes[lane].rsc_index != wiface->rsc_index) ||
-            (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) ||
-            (key->lanes[lane].port_speed != wiface->port_speed) ||
-            (ucp_ep_get_lane(ep, lane) == NULL)) {
+    ucs_for_each_bit(lane, lane_map) {
+        if (key->lanes[lane].rsc_index != wiface->rsc_index) {
             continue;
         }
 
@@ -1070,44 +1361,29 @@ ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
                     bandwidth);
         ucs_debug("ep %p lane[%u] path bandwidth %.0f B/s", ep, lane,
                   bandwidth);
-        if (bandwidth >= path_bandwidth) {
-            state->bandwidth[lane] = UCP_EP_PATH_BW_INVALID;
-        } else {
-            /* Below 1 B/s, the path is considered stalled */
-            state->bandwidth[lane] = (bandwidth < 1.0) ? 0 : bandwidth;
-        }
+        ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PUT,
+                                  bandwidth, path_bandwidth);
     }
 
     if (state == NULL) {
         return;
     }
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (state->bandwidth[lane] != UCP_EP_PATH_BW_INVALID) {
-            ucp_ep_update_flags(ep, UCP_EP_FLAG_PATH_DEGRADED, 0);
-            return;
-        }
-    }
-
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+    ucp_worker_ep_path_bw_update_flag(ep, state);
+    ucp_worker_ep_path_bw_send(ep, state);
 }
 
 static unsigned ucp_worker_iface_path_bw_progress(void *arg)
 {
     ucp_worker_iface_t *wiface = arg;
     ucp_worker_h worker        = wiface->worker;
-    uct_perf_attr_t perf_attr;
     ucp_ep_ext_t *ep_ext;
     double path_bandwidth;
 
     UCS_ASYNC_BLOCK(&worker->async);
     wiface->flags &= ~UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING;
-
-    /* The estimate which a path without samples reports */
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
-    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK) {
-        path_bandwidth = ucp_proto_common_iface_bandwidth(
-                worker->context, &perf_attr.path_bandwidth);
+    if (ucp_worker_iface_path_bw_estimate(wiface, UCP_EP_PATH_BW_OP_PUT,
+                                          &path_bandwidth) == UCS_OK) {
         ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
             if (!(ep_ext->ep->flags &
                   (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED))) {
@@ -1143,6 +1419,112 @@ static void ucp_worker_iface_ep_event_cb(void *arg, uct_ep_h uct_ep,
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
+
+/* A system device which is not packed in the address matches any device */
+static int ucp_worker_ep_path_bw_sys_dev_match(ucs_sys_device_t sys_dev1,
+                                               ucs_sys_device_t sys_dev2)
+{
+    return (sys_dev1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+           (sys_dev2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev1 == sys_dev2);
+}
+
+/* Keep the put samples of the peer on the lanes of the paths they sampled */
+static void
+ucp_worker_ep_path_bw_peer_update(ucp_ep_h ep, ucp_ep_path_bw_t *state,
+                                  const ucp_ep_path_bw_path_t *paths,
+                                  unsigned num_paths)
+{
+    ucp_worker_h worker            = ep->worker;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map        = ucp_worker_ep_path_bw_lanes(ep);
+    const ucp_tl_resource_desc_t *rsc;
+    double ratio, path_bandwidth;
+    ucp_lane_index_t lane;
+    unsigned i, count;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        state->bandwidth[lane][UCP_EP_PATH_BW_OP_PEER_PUT] =
+                UCP_EP_PATH_BW_INVALID;
+    }
+
+    ucs_for_each_bit(lane, lane_map) {
+        rsc   = &worker->context->tl_rscs[key->lanes[lane].rsc_index];
+        ratio = 0;
+        count = 0;
+        for (i = 0; i < num_paths; ++i) {
+            if ((paths[i].dst_md_index == rsc->md_index) &&
+                (paths[i].md_index == key->lanes[lane].dst_md_index) &&
+                ucp_worker_ep_path_bw_sys_dev_match(paths[i].dst_sys_dev,
+                                                    rsc->tl_rsc.sys_device) &&
+                ucp_worker_ep_path_bw_sys_dev_match(
+                        paths[i].sys_dev, key->lanes[lane].dst_sys_dev)) {
+                ratio += paths[i].ratio;
+                ++count;
+            }
+        }
+
+        if ((count == 0) ||
+            (ucp_worker_iface_path_bw_estimate(
+                     ucp_worker_iface(worker, key->lanes[lane].rsc_index),
+                     UCP_EP_PATH_BW_OP_PEER_PUT, &path_bandwidth) != UCS_OK)) {
+            continue;
+        }
+
+        /* Paths between the same devices are not told apart, so they share
+         * the mean of their samples */
+        ratio /= count * UCP_EP_PATH_BW_RATIO_ONE;
+        ucs_debug("ep %p lane[%u] peer put path bandwidth %.0f B/s", ep, lane,
+                  ratio * path_bandwidth);
+        ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PEER_PUT,
+                                  ratio * path_bandwidth, path_bandwidth);
+    }
+
+    ucp_worker_ep_path_bw_update_flag(ep, state);
+}
+
+static ucs_status_t
+ucp_worker_ep_path_bw_handler(void *arg, void *data, size_t length,
+                              unsigned am_flags)
+{
+    ucp_worker_h worker             = arg;
+    const ucp_ep_path_bw_hdr_t *hdr = data;
+    ucp_ep_path_bw_t *state;
+    ucp_ep_h ep;
+
+    ucs_assertv(length >= (sizeof(*hdr) +
+                           (hdr->num_paths * sizeof(ucp_ep_path_bw_path_t))),
+                "length=%zu num_paths=%u", length, hdr->num_paths);
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, hdr->ep_id, return UCS_OK,
+                                  "path bandwidth");
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+        state = ucp_worker_ep_path_bw_get(ep);
+        if (state != NULL) {
+            ucp_worker_ep_path_bw_peer_update(
+                    ep, state, (const ucp_ep_path_bw_path_t*)(hdr + 1),
+                    hdr->num_paths);
+        }
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return UCS_OK;
+}
+
+static void ucp_worker_ep_path_bw_dump(ucp_worker_h worker,
+                                       uct_am_trace_type_t type, uint8_t id,
+                                       const void *data, size_t length,
+                                       char *buffer, size_t max)
+{
+    const ucp_ep_path_bw_hdr_t *hdr = data;
+
+    snprintf(buffer, max, "EP_PATH_BW [ep_id 0x%" PRIx64 " paths %u]",
+             hdr->ep_id, hdr->num_paths);
+}
+
+UCP_DEFINE_AM_WITH_PROXY(UINT64_MAX, UCP_AM_ID_EP_PATH_BW,
+                         ucp_worker_ep_path_bw_handler,
+                         ucp_worker_ep_path_bw_dump, 0);
 
 static void
 ucp_worker_iface_async_fd_event(int fd, ucs_event_set_types_t events, void *arg)

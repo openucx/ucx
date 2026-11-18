@@ -166,14 +166,20 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
                                               lpriv->super.rkey_index);
     size_t offset      = req->send.state.dt_iter.offset;
     const ucp_proto_multi_priv_t *mpriv;
+    ucp_proto_multi_lane_priv_t adjusted;
     uct_iov_t iov;
+
+    mpriv = req->send.proto_config->priv;
+    lpriv = ucp_proto_rma_lane_priv(req, mpriv, lpriv, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
 
-    mpriv = req->send.proto_config->priv;
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),

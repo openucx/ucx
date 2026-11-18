@@ -578,6 +578,8 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    uint8_t                       path_bw_degraded; /* Sources of the samples
+                                                       of degraded lane paths */
     /* TODO: tf_request_id and lane_generation could be reused. */
     /* LANES_ADDR request id this endpoint sends. Kept across recovery so the
      * next failure does not restart at 1. */
