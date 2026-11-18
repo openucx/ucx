@@ -31,14 +31,20 @@ typedef struct {
 
 
 /* Device address extended with the multi-node NVLINK info, sent if FLAG_MNNVL
- * is set. Fields were appended over releases, so a peer may send only a prefix
- * of this struct: check the address length before reading a field. */
+ * is set (since v1.23) */
 typedef struct {
     uct_cuda_ipc_device_addr_t super;
-    uint64_t                   nvlink_domain; /* Since v1.23 */
-    uint32_t                   imex_channel;  /* Not sent by v1.23, valid
-                                                 if FLAG_FABRIC is set */
+    uint64_t                   nvlink_domain;
 } UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
+
+
+/* Multi-node NVLINK device address extended with the IMEX channel, which is
+ * valid if FLAG_FABRIC is set. Older peers may send only
+ * uct_cuda_ipc_mnnvl_device_addr_t, so check the address length first. */
+typedef struct {
+    uct_cuda_ipc_mnnvl_device_addr_t super;
+    uint32_t                         imex_channel;
+} UCS_S_PACKED uct_cuda_ipc_imex_device_addr_t;
 
 
 typedef struct {

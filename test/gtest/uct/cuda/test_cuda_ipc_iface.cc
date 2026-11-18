@@ -52,7 +52,7 @@ protected:
 
     static std::string get_device_address(entity &e)
     {
-        std::string dev_addr(sizeof(uct_cuda_ipc_mnnvl_device_addr_t), '\0');
+        std::string dev_addr(sizeof(uct_cuda_ipc_imex_device_addr_t), '\0');
         uct_iface_attr_t iface_attr;
 
         /* Query again, since the cached entity attributes were taken before
@@ -65,36 +65,36 @@ protected:
         return dev_addr;
     }
 
-    static uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr(std::string &dev_addr)
+    static uct_cuda_ipc_imex_device_addr_t *imex_addr(std::string &dev_addr)
     {
-        return (uct_cuda_ipc_mnnvl_device_addr_t*)&dev_addr[0];
+        return (uct_cuda_ipc_imex_device_addr_t*)&dev_addr[0];
     }
 
     /* Same peer, but on another host */
     static void set_remote_host(std::string &dev_addr)
     {
-        mnnvl_addr(dev_addr)->super.system_uuid ^= 0xDEADBEEFDEADBEEFULL;
+        imex_addr(dev_addr)->super.super.system_uuid ^= 0xDEADBEEFDEADBEEFULL;
     }
 
     /* Same peer, but in another NVLink domain */
     static void set_other_domain(std::string &dev_addr)
     {
-        mnnvl_addr(dev_addr)->nvlink_domain ^= 1;
+        imex_addr(dev_addr)->super.nvlink_domain ^= 1;
     }
 
     /* Same peer, but with another IMEX channel */
     static void set_other_imex_channel(std::string &dev_addr)
     {
-        mnnvl_addr(dev_addr)->imex_channel ^= 1;
+        imex_addr(dev_addr)->imex_channel ^= 1;
     }
 
     /* Same peer, but without access to an IMEX channel */
     static void set_no_fabric(std::string &dev_addr)
     {
-        mnnvl_addr(dev_addr)->super.flags &=
+        imex_addr(dev_addr)->super.super.flags &=
                 ~UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
-        if (dev_addr.size() == sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
-            mnnvl_addr(dev_addr)->imex_channel =
+        if (dev_addr.size() == sizeof(uct_cuda_ipc_imex_device_addr_t)) {
+            imex_addr(dev_addr)->imex_channel =
                     UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
         }
     }
@@ -111,8 +111,7 @@ protected:
      * without the IMEX channel */
     static void set_v1_23_peer(std::string &dev_addr)
     {
-        dev_addr.resize(ucs_offsetof(uct_cuda_ipc_mnnvl_device_addr_t,
-                                     imex_channel));
+        dev_addr.resize(sizeof(uct_cuda_ipc_mnnvl_device_addr_t));
     }
 
     bool is_reachable(entity &sender, entity &receiver,
