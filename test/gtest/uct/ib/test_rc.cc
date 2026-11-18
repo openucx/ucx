@@ -3308,6 +3308,278 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_sgl_zcopy,
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
 
+/* An RC provider which reports put and get apart, and adds data to the
+ * address of an endpoint, which the provider of the peer endpoint gets */
+class test_rc_mlx5_provider : public test_rc {
+public:
+    ~test_rc_mlx5_provider()
+    {
+        /* A skip from init() does not call cleanup() */
+        unregister_provider();
+    }
+
+    void init() override
+    {
+        uct_ib_mlx5_ext_ops_t ops = {};
+
+        ucs_strncpy_zero(ops.name, PROVIDER_NAME, sizeof(ops.name));
+        ops.rc_ops = rc_ops();
+        ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
+        m_registered = true;
+
+        test_rc::init();
+        if (rc_mlx5_iface(m_e1)->ext_ops != rc_ops()) {
+            UCS_TEST_SKIP_R("another rc provider is attached");
+        }
+    }
+
+    void cleanup() override
+    {
+        test_rc::cleanup();
+        unregister_provider();
+    }
+
+protected:
+    static constexpr char PROVIDER_NAME[] = "gtest_rc";
+    static constexpr double PUT_BANDWIDTH = 1234.5e6;
+    static constexpr double GET_BANDWIDTH = 567.8e6;
+    static constexpr size_t DATA_LENGTH   = 7;
+
+    /* The registry cuts a longer name, and then does not find it */
+    static_assert(sizeof(PROVIDER_NAME) <= UCT_COMPONENT_NAME_MAX,
+                  "provider name is too long");
+
+    /* Provider state of an endpoint */
+    struct ep_ctx {
+        uct_ep_h             ep;
+        std::vector<uint8_t> peer_data;
+    };
+
+    /* The provider measures get */
+    static bool s_get;
+
+    static uct_rc_mlx5_iface_common_t *rc_mlx5_iface(entity *e)
+    {
+        return ucs_derived_of(e->iface(), uct_rc_mlx5_iface_common_t);
+    }
+
+    static ep_ctx *get_ep_ctx(entity *e, unsigned ep_index = 0)
+    {
+        return static_cast<ep_ctx*>(
+                ucs_derived_of(e->ep(ep_index), uct_rc_mlx5_base_ep_t)
+                        ->ext_ctx);
+    }
+
+    /* Data of an endpoint: its QP number and a pattern */
+    static std::vector<uint8_t> ep_data(uct_ep_h ep)
+    {
+        uint32_t qp_num = ucs_derived_of(ep, uct_rc_mlx5_base_ep_t)
+                                  ->tx.wq.super.qp_num;
+        std::vector<uint8_t> data(DATA_LENGTH, 0xa5);
+
+        memcpy(data.data(), &qp_num, sizeof(qp_num));
+        return data;
+    }
+
+    /* UCT_EP_OP_LAST queries without an operation */
+    double query_bandwidth(uct_ep_operation_t op = UCT_EP_OP_LAST)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
+        if (op != UCT_EP_OP_LAST) {
+            attr.field_mask |= UCT_EP_ATTR_FIELD_OPERATION;
+            attr.operation   = op;
+        }
+
+        EXPECT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
+        return attr.bandwidth.dedicated + attr.bandwidth.shared;
+    }
+
+    double estimate_bandwidth(uct_ep_operation_t op)
+    {
+        uct_perf_attr_t perf_attr = {};
+
+        perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                               UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+        perf_attr.operation  = op;
+        EXPECT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+        return perf_attr.path_bandwidth.dedicated +
+               perf_attr.path_bandwidth.shared;
+    }
+
+    /* Each endpoint passes its data to the provider of the peer endpoint */
+    void check_peer_data()
+    {
+        size_t length = sizeof(uct_rc_mlx5_ep_ext_address_t) + DATA_LENGTH;
+
+        if (uct_rc_iface_flush_rkey_enabled(&rc_mlx5_iface(m_e1)->super)) {
+            length += sizeof(uint16_t);
+        }
+
+        EXPECT_EQ(length, m_e1->iface_attr().ep_addr_len);
+        EXPECT_EQ(ep_data(m_e2->ep(0)), get_ep_ctx(m_e1)->peer_data);
+        EXPECT_EQ(ep_data(m_e1->ep(0)), get_ep_ctx(m_e2)->peer_data);
+        send_am_messages(m_e1, 1, UCS_OK);
+        send_am_messages(m_e2, 1, UCS_OK);
+        flush();
+    }
+
+    /* An endpoint connects to an older peer, which has no provider data */
+    void check_older_peer()
+    {
+        std::vector<uint8_t> dev_addr(m_e2->iface_attr().device_addr_len);
+        std::vector<uint8_t> ep_addr(m_e2->iface_attr().ep_addr_len);
+        uct_ep_connect_to_ep_params_t params = {};
+        uct_rc_mlx5_ep_ext_address_t *ext_addr;
+
+        m_e1->create_ep(1);
+        m_e2->create_ep(1);
+        m_e2->connect_p2p_ep(m_e2->ep(1), m_e1->ep(1));
+
+        /* The address of the peer as an older peer packs it: only the older
+         * flags, followed by the flush key */
+        ASSERT_UCS_OK(uct_iface_get_device_address(
+                m_e2->iface(), (uct_device_addr_t*)dev_addr.data()));
+        ASSERT_UCS_OK(uct_ep_get_address(m_e2->ep(1),
+                                         (uct_ep_addr_t*)ep_addr.data()));
+        /* An address with provider data has the flags also without the flush
+         * key */
+        ASSERT_GE(ep_addr.size(), sizeof(*ext_addr));
+        ext_addr         = (uct_rc_mlx5_ep_ext_address_t*)ep_addr.data();
+        ext_addr->flags &= UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY |
+                           UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET;
+
+        params.field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH |
+                            UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH;
+        params.ep_addr_length = uct_rc_iface_flush_rkey_enabled(
+                                        &rc_mlx5_iface(m_e2)->super) ?
+                                (sizeof(*ext_addr) + sizeof(uint16_t)) :
+                                sizeof(uct_rc_mlx5_ep_address_t);
+        params.device_addr_length = dev_addr.size();
+        ASSERT_UCS_OK(uct_ep_connect_to_ep_v2(
+                m_e1->ep(1), (uct_device_addr_t*)dev_addr.data(),
+                (uct_ep_addr_t*)ep_addr.data(), &params));
+
+        /* The provider gets no data of an older peer, and the flush key of the
+         * peer is the same as with the data */
+        EXPECT_TRUE(get_ep_ctx(m_e1, 1)->peer_data.empty());
+        EXPECT_EQ(ep_data(m_e1->ep(1)), get_ep_ctx(m_e2, 1)->peer_data);
+        EXPECT_EQ(rc_ep(m_e1, 0)->flush_rkey, rc_ep(m_e1, 1)->flush_rkey);
+        send_am_messages(m_e1, 1, UCS_OK, 0, 1);
+        send_am_messages(m_e2, 1, UCS_OK, 0, 1);
+        flush();
+    }
+
+private:
+    static ucs_status_t ep_init(uct_ep_h ep, void *iface_ctx, void **ep_ctx_p)
+    {
+        *ep_ctx_p = new ep_ctx{ep, {}};
+        return UCS_OK;
+    }
+
+    static void ep_cleanup(void *ctx)
+    {
+        delete static_cast<ep_ctx*>(ctx);
+    }
+
+    static ucs_status_t ep_query(void *ctx, uct_ep_attr_t *attr)
+    {
+        bool get = (attr->field_mask & UCT_EP_ATTR_FIELD_OPERATION) &&
+                   uct_ep_op_is_get(attr->operation);
+
+        if (get && !s_get) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        attr->bandwidth = {get ? GET_BANDWIDTH : PUT_BANDWIDTH, 0};
+        return UCS_OK;
+    }
+
+    static void ep_pack_address(void *ctx, void *buffer)
+    {
+        auto data = ep_data(static_cast<ep_ctx*>(ctx)->ep);
+
+        memcpy(buffer, data.data(), data.size());
+    }
+
+    static void ep_connect_to_ep(void *ctx, const void *data, size_t length)
+    {
+        static_cast<ep_ctx*>(ctx)->peer_data.assign(
+                static_cast<const uint8_t*>(data),
+                static_cast<const uint8_t*>(data) + length);
+    }
+
+    /* Static, since an interface uses it until the interface is closed */
+    static const uct_rc_mlx5_ext_ops_t *rc_ops()
+    {
+        static uct_rc_mlx5_ext_ops_t ops = {};
+
+        ops.ep_init          = ep_init;
+        ops.ep_cleanup       = ep_cleanup;
+        ops.ep_query         = ep_query;
+        ops.ep_addr_len      = DATA_LENGTH;
+        ops.ep_pack_address  = ep_pack_address;
+        ops.ep_connect_to_ep = ep_connect_to_ep;
+        return &ops;
+    }
+
+    void unregister_provider()
+    {
+        if (m_registered) {
+            uct_ib_mlx5_ext_unregister(PROVIDER_NAME);
+            m_registered = false;
+        }
+    }
+
+    bool m_registered = false;
+};
+
+constexpr char test_rc_mlx5_provider::PROVIDER_NAME[];
+constexpr double test_rc_mlx5_provider::PUT_BANDWIDTH;
+constexpr double test_rc_mlx5_provider::GET_BANDWIDTH;
+constexpr size_t test_rc_mlx5_provider::DATA_LENGTH;
+bool test_rc_mlx5_provider::s_get = true;
+
+UCS_TEST_P(test_rc_mlx5_provider, ep_query_operation)
+{
+    /* Without an operation, the provider reports put */
+    EXPECT_DOUBLE_EQ(PUT_BANDWIDTH, query_bandwidth());
+    EXPECT_DOUBLE_EQ(PUT_BANDWIDTH, query_bandwidth(UCT_EP_OP_PUT_ZCOPY));
+    EXPECT_DOUBLE_EQ(GET_BANDWIDTH, query_bandwidth(UCT_EP_OP_GET_ZCOPY));
+
+    /* An operation which the provider does not measure gets its estimate */
+    s_get = false;
+    EXPECT_DOUBLE_EQ(estimate_bandwidth(UCT_EP_OP_GET_ZCOPY),
+                     query_bandwidth(UCT_EP_OP_GET_ZCOPY));
+    s_get = true;
+}
+
+UCS_TEST_P(test_rc_mlx5_provider, peer_data)
+{
+    check_peer_data();
+}
+
+UCS_TEST_P(test_rc_mlx5_provider, peer_data_no_flush_rkey, "IB_MLX5_DEVX=n")
+{
+    /* The provider data follows the flags */
+    ASSERT_FALSE(uct_rc_iface_flush_rkey_enabled(&rc_mlx5_iface(m_e1)->super));
+    check_peer_data();
+}
+
+UCS_TEST_P(test_rc_mlx5_provider, older_peer)
+{
+    check_older_peer();
+}
+
+UCS_TEST_P(test_rc_mlx5_provider, older_peer_no_flush_rkey, "IB_MLX5_DEVX=n")
+{
+    ASSERT_FALSE(uct_rc_iface_flush_rkey_enabled(&rc_mlx5_iface(m_e2)->super));
+    check_older_peer();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_provider, rc_mlx5)
+
 class test_rc_srq : public test_rc {
 public:
     test_rc_srq() : m_buf8b(NULL), m_buf8k(NULL)
