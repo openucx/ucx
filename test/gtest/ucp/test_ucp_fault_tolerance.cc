@@ -437,6 +437,8 @@ protected:
 
         flush_workers();
 
+        std::vector<ucp_lane_index_t> am_bw_lanes = get_lanes(op_mask);
+
         UCS_TEST_MESSAGE << "Attempting " << op_str
                          << " operation before failure injection...";
         ucs_status_t status = do_am_send_and_wait(
@@ -444,8 +446,6 @@ protected:
                 op_mask & TEST_OP_FLUSH);
         EXPECT_EQ(UCS_OK, status) << op_str << " completed with status: "
                                   << ucs_status_string(status);
-
-        std::vector<ucp_lane_index_t> am_bw_lanes = get_lanes(op_mask);
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t num_lanes_to_fail = (op_mask & TEST_OP_ALL_LANES_FAILED) ? am_bw_lanes.size() :
