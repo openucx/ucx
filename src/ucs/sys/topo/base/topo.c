@@ -1718,10 +1718,10 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 {
     const char *pci_width_file_name = "current_link_width";
     const char *pci_speed_file_name = "current_link_speed";
-    char *physfn_path               = NULL;
 
     double bw_gbps, effective_bw, link_utilization;
     const ucs_topo_pci_info_t *p;
+    char physfn_path[PATH_MAX];
     char pci_width_str[16];
     char pci_speed_str[16];
     ucs_status_t status;
@@ -1731,12 +1731,8 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
     /* VFs share the physical link and may not report its speed or width. */
     if (sysfs_path != NULL) {
-        status = ucs_string_alloc_formatted_path(&physfn_path, "physfn_path",
-                                                "%s/physfn", sysfs_path);
-        if (status != UCS_OK) {
-            goto out_max_bw;
-        }
-
+        ucs_snprintf_safe(physfn_path, sizeof(physfn_path), "%s/physfn",
+                          sysfs_path);
         if (access(physfn_path, F_OK) == 0) {
             ucs_debug("%s: using the physical function link at '%s'", dev_name,
                       physfn_path);
@@ -1788,15 +1784,12 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
                   dev_name, p->name, width, effective_bw / UCS_MBYTE,
                   effective_bw * 8e-9);
-        goto out_free_path;
+        return effective_bw;
     }
 
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
-    effective_bw = UCS_INFINITY;
-out_free_path:
-    ucs_free(physfn_path);
-    return effective_bw;
+    return UCS_INFINITY;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
