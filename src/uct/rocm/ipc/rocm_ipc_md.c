@@ -14,6 +14,9 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
+#include <ucs/arch/atomic.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
 #include <unistd.h>
 
@@ -52,10 +55,27 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* A VMM rkey covers a single chunk; a range crossing the chunk boundary
+     * cannot be packed, so fall back to staging. */
+    if (key->is_vmm &&
+        (((uintptr_t)address < key->address) ||
+         (((uintptr_t)address + length) > (key->address + key->length)))) {
+        ucs_debug("VMM rkey range [%p, +0x%zx) exceeds mapping [0x%lx, +0x%zx)",
+                  address, length, (unsigned long)key->address, key->length);
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
     *packed = *key;
 
     return UCS_OK;
 }
+
+#ifdef HAVE_ROCM_VMM_TYPE
+/* Unique per-registration id; survives fd reuse for cache matching. */
+static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
+#endif
 
 static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
@@ -76,6 +96,84 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         return UCS_ERR_INVALID_ADDR;
     }
 
+#ifdef HAVE_ROCM_VMM_TYPE
+    if (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+        hsa_amd_vmem_alloc_handle_t vmem_handle;
+        void *vmm_base;
+        size_t vmm_size;
+        uint64_t vmm_reg_id;
+
+        /* hsa_amd_pointer_info() reports agentBaseAddress as the queried pointer
+         * for VMEM, not the hsa_amd_vmem_map() base that
+         * hsa_amd_vmem_retain_alloc_handle() requires. Resolve the true base
+         * (and a stable per-live-mapping reg_id) from the vmm registry; fall
+         * back to page-alignment (correct when the buffer is in the mapping's
+         * first page) on a miss. */
+        if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size,
+                                          &vmm_reg_id) == UCS_OK) {
+            /* A buffer that straddles a vmem_map boundary (e.g. a pool
+             * allocator that maps a large reservation in adjacent chunks)
+             * cannot be described by a single exported handle. Reject so UCP
+             * falls back to the staging pipeline instead of transferring past
+             * the mapping. */
+            if (((uintptr_t)address + length) >
+                ((uintptr_t)vmm_base + vmm_size)) {
+                ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
+                          "[%p, +0x%zx); falling back from rocm_ipc", address,
+                          length, vmm_base, vmm_size);
+                return UCS_ERR_INVALID_ADDR;
+            }
+            /* Importing a pooled buffer's many chunks over IPC starts failing
+             * past a point, so stage it and keep IPC for standalone mappings. */
+            if (uct_rocm_base_vmm_is_pooled(vmm_base, vmm_size)) {
+                ucs_debug("VMM buffer [%p, +0x%zx) is a pooled chunk; falling "
+                          "back from rocm_ipc", address, length);
+                return UCS_ERR_INVALID_ADDR;
+            }
+        } else {
+            /* Registry miss: page-align (correct when the buffer is in the
+             * mapping's first page) and fall back to a unique per-registration
+             * id. */
+            vmm_base   = ucs_align_down_pow2_ptr(base_ptr, ucs_get_page_size());
+            vmm_size   = size;
+            vmm_reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
+        }
+
+        hsa_status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, vmm_base);
+        if (hsa_status != HSA_STATUS_SUCCESS) {
+            ucs_error("hsa_amd_vmem_retain_alloc_handle failed for base %p "
+                      "(reg addr %p) status %d", vmm_base, address, hsa_status);
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        hsa_status = hsa_amd_vmem_export_shareable_handle(&key->vmm.fd,
+                                                          vmem_handle, 0);
+        hsa_amd_vmem_handle_release(vmem_handle);
+        if (hsa_status != HSA_STATUS_SUCCESS) {
+            ucs_error("hsa_amd_vmem_export_shareable_handle failed for %p",
+                      vmm_base);
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        key->vmm.reg_id = vmm_reg_id;
+        key->address    = (uintptr_t)vmm_base;
+        key->length     = vmm_size;
+        key->dev_num    = uct_rocm_base_get_dev_num(agent);
+        key->is_vmm     = 1;
+        key->pid        = getpid();
+        key->pid_ns     = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        /* Export a free-invalidation signal so the owner's vmem_unmap tells
+         * importers to detach, releasing the allocation their mapping pins. */
+        memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        status = uct_rocm_ipc_export_add(key->address, key->length,
+                                         &key->ipc_signal);
+        if (status != UCS_OK) {
+            memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        }
+        return UCS_OK;
+    }
+#endif
+
     hsa_status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
     if (hsa_status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to create ipc for %p/%lx", address, length);
@@ -85,6 +183,7 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->address = (uintptr_t)base_ptr;
     key->length  = size;
     key->dev_num = uct_rocm_base_get_dev_num(agent);
+    key->is_vmm  = 0;
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
@@ -107,7 +206,7 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     uct_rocm_ipc_key_t *key;
     ucs_status_t status;
 
-    key = ucs_malloc(sizeof(*key), "uct_rocm_ipc_key_t");
+    key = ucs_calloc(1, sizeof(*key), "uct_rocm_ipc_key_t");
     if (NULL == key) {
         ucs_error("Failed to allocate memory for uct_rocm_ipc_key_t");
         return UCS_ERR_NO_MEMORY;
@@ -134,6 +233,12 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
     /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* The exported dmabuf fd is owned by this registration. */
+    if (mem_hndl->is_vmm) {
+        close(mem_hndl->vmm.fd);
+    }
+#endif
     ucs_free(mem_hndl);
     return UCS_OK;
 }
