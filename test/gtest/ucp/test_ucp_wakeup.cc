@@ -230,7 +230,7 @@ protected:
 
         if (wakeup) {
             ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &efd));
-            EXPECT_EQ(1, poll_efd(efd, 10000))
+            EXPECT_EQ(1, poll_efd(efd, 10000 * ucs::test_time_multiplier()))
                     << "worker " << worker_index << " was not woken up";
         }
 
@@ -252,8 +252,10 @@ UCS_TEST_P(test_ucp_wakeup_shared_context, efd_every_worker)
     sender().connect(&receiver(), get_ep_params());
 
     for (int i = 0; i < receiver().get_num_workers(); ++i) {
-        /* Complete the wireup before waiting for the event */
+        /* poll() does not progress the sender, so complete the wireup and
+         * flush the sender before waiting for the event */
         send_recv(i, i, false);
+        flush_worker(sender(), i);
         send_recv(i, i + 1, true);
     }
 }
