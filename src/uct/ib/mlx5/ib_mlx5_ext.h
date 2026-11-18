@@ -100,12 +100,49 @@ typedef struct uct_rc_mlx5_ext_ops {
      *
      * This optional hook requires the endpoint bandwidth-query attribute
      * extension. It may be omitted when that extension is unavailable.
+     * If @ref UCT_EP_ATTR_FIELD_OPERATION is set, the hook reports the
+     * bandwidth of that operation, or returns UCS_ERR_UNSUPPORTED to use the
+     * static estimate of the operation.
      *
      * @param [in]     ep_ctx  Provider context from ep_init.
      * @param [in,out] ep_attr Requested attributes and provider-owned outputs.
      * @return UCS_OK if the requested bandwidth was filled.
      */
     ucs_status_t (*ep_query)(void *ep_ctx, uct_ep_attr_t *ep_attr);
+
+    /**
+     * Length of the data which @ref ep_pack_address adds to the address of an
+     * RC endpoint, or 0 if the provider adds no data. Every RC endpoint
+     * address carries the data, also in the private data of a client-server
+     * connection, whose connection manager may not have room for it. In
+     * unified mode, the peers must add data of the same length.
+     */
+    uint8_t         ep_addr_len;
+
+    /**
+     * @brief Pack provider data of an endpoint to its address.
+     *
+     * Optional hook, called if @ref ep_addr_len is not 0. The provider of the
+     * peer endpoint gets the data in @ref ep_connect_to_ep.
+     *
+     * @param [in]  ep_ctx Provider context from ep_init.
+     * @param [out] buffer Buffer of @ref ep_addr_len bytes, which the hook
+     *                     fills in full.
+     */
+    void (*ep_pack_address)(void *ep_ctx, void *buffer);
+
+    /**
+     * @brief Pass provider data of the peer endpoint.
+     *
+     * Optional hook, called when the endpoint connects to a peer endpoint
+     * whose address has provider data. The data is valid only during the
+     * call.
+     *
+     * @param [in] ep_ctx Provider context from ep_init.
+     * @param [in] data   Data which @ref ep_pack_address packed on the peer.
+     * @param [in] length Length of the data.
+     */
+    void (*ep_connect_to_ep)(void *ep_ctx, const void *data, size_t length);
 } uct_rc_mlx5_ext_ops_t;
 
 
