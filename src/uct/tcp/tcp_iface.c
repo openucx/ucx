@@ -325,31 +325,13 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     size_t am_buf_size     = iface->config.tx_seg_size -
                              sizeof(uct_tcp_am_hdr_t);
-    ucs_status_t status;
-    int is_default;
-    double pci_bw, network_bw, calculated_bw;
-    char *path_buffer;
-    const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
-    pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
-    calculated_bw          = ucs_min(pci_bw, network_bw);
-
+    attr->latency.c        = iface->netif_caps.latency;
     /* Bandwidth is bounded by TCP stack computation time */
-    attr->bandwidth.shared = ucs_min(calculated_bw, iface->config.max_bw);
-
+    attr->bandwidth.shared = ucs_min(iface->netif_caps.bandwidth,
+                                     iface->config.max_bw);
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
     attr->device_addr_len  = uct_tcp_iface_get_device_address_length(iface);
@@ -397,22 +379,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->bandwidth.dedicated = 0;
     attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
+    attr->priority            = (iface->config.prefer_default &&
+                                 !iface->netif_caps.is_default) ? 1 : 0;
 
-    if (iface->config.prefer_default) {
-        status = uct_tcp_netif_is_default(iface->if_name, &is_default);
-        if (status != UCS_OK) {
-            goto out_free_path_buffer;
-        }
-
-        attr->priority    = is_default ? 0 : 1;
-    } else {
-        attr->priority    = 0;
-    }
-
-out_free_path_buffer:
-    ucs_free(path_buffer);
-out:
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
@@ -696,6 +666,39 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
+static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
+{
+    double pci_bw, network_bw;
+    const char *sysfs_path;
+    char *path_buffer;
+    ucs_status_t status;
+
+    status = uct_tcp_netif_caps(iface->if_name, &iface->netif_caps.latency,
+                                &network_bw);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    sysfs_path = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
+    pci_bw     = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
+    ucs_free(path_buffer);
+
+    iface->netif_caps.bandwidth = ucs_min(pci_bw, network_bw);
+
+    if (!iface->config.prefer_default) {
+        iface->netif_caps.is_default = 0;
+        return UCS_OK;
+    }
+
+    return uct_tcp_netif_is_default(iface->if_name,
+                                    &iface->netif_caps.is_default);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -805,6 +808,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
                   self->config.rx_seg_size, self->config.tx_seg_size);
         status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    status = uct_tcp_iface_netif_caps_init(self);
+    if (status != UCS_OK) {
         goto err;
     }
 
