@@ -200,39 +200,34 @@ public:
     }
 
 protected:
-    void send_recv(int worker_index, uint64_t send_data, bool wakeup)
+    void send_recv(int worker_index, uint64_t send_data)
     {
         const ucp_datatype_t datatype = ucp_dt_make_contig(1);
         const uint64_t tag            = 0xdeadbeef;
         ucp_worker_h recv_worker      = receiver().worker(worker_index);
         uint64_t recv_data            = 0;
-        int poll_ret                  = 1;
         void *rreq, *sreq;
         ucs_status_t status;
-        int efd;
+        int efd, poll_ret;
 
         rreq = ucp_tag_recv_nb(recv_worker, &recv_data, sizeof(recv_data),
                                datatype, tag, (ucp_tag_t)-1, recv_completion);
         ASSERT_UCS_PTR_OK(rreq);
 
-        if (wakeup) {
-            do {
-                while (ucp_worker_progress(recv_worker) != 0) {
-                }
-                status = ucp_worker_arm(recv_worker);
-            } while (status == UCS_ERR_BUSY);
-            ASSERT_UCS_OK(status);
-        }
+        do {
+            while (ucp_worker_progress(recv_worker) != 0) {
+            }
+            status = ucp_worker_arm(recv_worker);
+        } while (status == UCS_ERR_BUSY);
+        ASSERT_UCS_OK(status);
 
         sreq = ucp_tag_send_nb(sender().ep(worker_index), &send_data,
                                sizeof(send_data), datatype, tag,
                                send_completion);
         ASSERT_UCS_PTR_OK(sreq);
 
-        if (wakeup) {
-            ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &efd));
-            poll_ret = poll_efd(efd, 10000 * ucs::test_time_multiplier());
-        }
+        ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &efd));
+        poll_ret = poll_efd(efd, 10000 * ucs::test_time_multiplier());
 
         ASSERT_UCS_OK(requests_wait({sreq, rreq}, worker_index));
         ASSERT_EQ(1, poll_ret) << "worker " << worker_index
@@ -244,13 +239,11 @@ protected:
 UCS_TEST_P(test_ucp_wakeup_shared_context, efd_every_worker)
 {
     sender().connect(&receiver(), get_ep_params());
+    /* poll() does not progress the sender, so complete the wireup first */
+    flush_workers();
 
     for (int i = 0; i < receiver().get_num_workers(); ++i) {
-        /* poll() does not progress the sender, so complete the wireup and
-         * flush the sender before waiting for the event */
-        ASSERT_NO_FATAL_FAILURE(send_recv(i, i, false));
-        flush_worker(sender(), i);
-        ASSERT_NO_FATAL_FAILURE(send_recv(i, i + 1, true));
+        ASSERT_NO_FATAL_FAILURE(send_recv(i, i + 1));
     }
 }
 
