@@ -234,6 +234,7 @@ typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t
 /* Sources of path bandwidth samples */
 typedef enum {
     UCP_EP_PATH_BW_OP_PUT,
+    UCP_EP_PATH_BW_OP_GET,
     UCP_EP_PATH_BW_OP_LAST
 } ucp_ep_path_bw_op_t;
 

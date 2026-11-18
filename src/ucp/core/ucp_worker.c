@@ -1062,15 +1062,23 @@ ucp_worker_ep_path_bw_update_flag(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
 }
 
-/* Sample the lanes of the endpoint on the interface, and mark the endpoint
- * degraded while a lane is below the path estimate */
+/* Operation of the samples and of the path estimate of each source */
+static const uct_ep_operation_t ucp_worker_path_bw_uct_ops[] = {
+    [UCP_EP_PATH_BW_OP_PUT] = UCT_EP_OP_PUT_ZCOPY,
+    [UCP_EP_PATH_BW_OP_GET] = UCT_EP_OP_GET_ZCOPY
+};
+
+/* Sample the lanes of the endpoint on the interface for each source, and mark
+ * the endpoint degraded while a lane is below the path estimate */
 static void
 ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
-                             double path_bandwidth)
+                             const double *path_bandwidth)
 {
     const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
     ucp_ep_path_bw_t *state        = NULL;
-    uct_ep_attr_t attr;
+    ucp_ep_path_bw_op_t op;
+    uct_ep_attr_t attr = {.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH |
+                                        UCT_EP_ATTR_FIELD_OPERATION};
     ucp_lane_index_t i, lane;
     double bandwidth;
 
@@ -1093,21 +1101,24 @@ ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
             }
         }
 
-        memset(&attr, 0, sizeof(attr));
-        attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
-        if (uct_ep_query(ucp_ep_get_lane(ep, lane), &attr) != UCS_OK) {
-            /* Without a newer sample, the previous one is still the best */
-            continue;
-        }
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            attr.operation = ucp_worker_path_bw_uct_ops[op];
+            if (uct_ep_query(ucp_ep_get_lane(ep, lane), &attr) != UCS_OK) {
+                /* Without a newer sample, the previous one is still the
+                 * best */
+                continue;
+            }
 
-        bandwidth = ucp_proto_common_iface_bandwidth(ep->worker->context,
-                                                     &attr.bandwidth);
-        ucs_assertv(bandwidth >= 0, "ep %p lane[%u] bandwidth=%f", ep, lane,
-                    bandwidth);
-        ucs_debug("ep %p lane[%u] path bandwidth %.0f B/s", ep, lane,
-                  bandwidth);
-        ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PUT,
-                                  bandwidth, path_bandwidth);
+            bandwidth = ucp_proto_common_iface_bandwidth(ep->worker->context,
+                                                         &attr.bandwidth);
+            ucs_assertv(bandwidth >= 0, "ep %p lane[%u] bandwidth=%f", ep,
+                        lane, bandwidth);
+            ucs_debug("ep %p lane[%u] %s path bandwidth %.0f B/s", ep, lane,
+                      (op == UCP_EP_PATH_BW_OP_GET) ? "get" : "put",
+                      bandwidth);
+            ucp_worker_ep_path_bw_set(state, lane, op, bandwidth,
+                                      path_bandwidth[op]);
+        }
     }
 
     if (state == NULL) {
@@ -1121,18 +1132,28 @@ static unsigned ucp_worker_iface_path_bw_progress(void *arg)
 {
     ucp_worker_iface_t *wiface = arg;
     ucp_worker_h worker        = wiface->worker;
+    double path_bandwidth[UCP_EP_PATH_BW_OP_LAST];
     uct_perf_attr_t perf_attr;
+    ucp_ep_path_bw_op_t op;
     ucp_ep_ext_t *ep_ext;
-    double path_bandwidth;
 
     UCS_ASYNC_BLOCK(&worker->async);
     wiface->flags &= ~UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING;
 
-    /* The estimate which a path without samples reports */
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
-    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK) {
-        path_bandwidth = ucp_proto_common_iface_bandwidth(
+    /* The estimate which a path without samples reports, for each source */
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+        perf_attr.operation = ucp_worker_path_bw_uct_ops[op];
+        if (uct_iface_estimate_perf(wiface->iface, &perf_attr) != UCS_OK) {
+            break;
+        }
+
+        path_bandwidth[op] = ucp_proto_common_iface_bandwidth(
                 worker->context, &perf_attr.path_bandwidth);
+    }
+
+    if (op == UCP_EP_PATH_BW_OP_LAST) {
         ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
             if (!(ep_ext->ep->flags &
                   (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED))) {
