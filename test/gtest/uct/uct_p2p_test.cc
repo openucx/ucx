@@ -1,7 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
-* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -46,22 +45,6 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
 
     return filter_resources<p2p_resource>(all_resources,
                                           resource::is_equal_tl_name, tl_name);
-}
-
-std::vector<const resource*>
-uct_p2p_test::enum_loopback_resources(const std::string &tl_name)
-{
-    std::vector<const resource*> resources = enum_resources(tl_name);
-    std::vector<const resource*> result;
-
-    for (const resource *rsc : resources) {
-        const p2p_resource *p2p_rsc = dynamic_cast<const p2p_resource*>(rsc);
-        if ((p2p_rsc != NULL) && p2p_rsc->loopback) {
-            result.push_back(rsc);
-        }
-    }
-
-    return result;
 }
 
 uct_p2p_test::uct_p2p_test(size_t rx_headroom,

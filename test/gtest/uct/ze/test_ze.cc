@@ -20,7 +20,19 @@ public:
     static std::vector<const resource*>
     enum_resources(const std::string &tl_name)
     {
-        return enum_loopback_resources(tl_name);
+        std::vector<const resource*> resources =
+                uct_p2p_rma_test::enum_resources(tl_name);
+        std::vector<const resource*> result;
+
+        for (const resource *rsc : resources) {
+            const p2p_resource *p2p_rsc = dynamic_cast<const p2p_resource*>(
+                    rsc);
+            if ((p2p_rsc != NULL) && p2p_rsc->loopback) {
+                result.push_back(rsc);
+            }
+        }
+
+        return result;
     }
 
 protected:
@@ -266,6 +278,19 @@ protected:
         return ucs_array_elem(&ze_iface()->queues, queue_index).device;
     }
 
+    /* ze_copy completes the copy before returning */
+    void
+    zcopy(const uct_iov_t *iov, void *remote_addr, bool is_put, uct_rkey_t rkey)
+    {
+        if (is_put) {
+            ASSERT_UCS_OK(uct_ep_put_zcopy(sender().ep(0), iov, 1,
+                                           (uintptr_t)remote_addr, rkey, NULL));
+        } else {
+            ASSERT_UCS_OK(uct_ep_get_zcopy(sender().ep(0), iov, 1,
+                                           (uintptr_t)remote_addr, rkey, NULL));
+        }
+    }
+
     void zcopy(void *buffer, void *remote_addr, size_t length, bool is_put)
     {
         uct_iov_t iov;
@@ -276,12 +301,88 @@ protected:
         iov.stride = 0;
         iov.count  = 1;
 
-        if (is_put) {
-            ASSERT_UCS_OK(uct_ep_put_zcopy(sender().ep(0), &iov, 1,
-                                           (uintptr_t)remote_addr, 0, NULL));
-        } else {
-            ASSERT_UCS_OK(uct_ep_get_zcopy(sender().ep(0), &iov, 1,
-                                           (uintptr_t)remote_addr, 0, NULL));
+        zcopy(&iov, remote_addr, is_put, 0);
+    }
+
+    static constexpr size_t CHUNK = 64 * UCS_KBYTE;
+
+    /* [offset, offset + length) in CHUNK units */
+    using range = std::pair<size_t, size_t>;
+
+    /* The host memory import tests copy between device memory and imported
+       host memory. The skip condition is also checked before the entities
+       are created, so it asks the driver rather than the MD; with the
+       tests' ZE_COPY_HOST_IMPORT=try the MD imports exactly when the driver
+       can. */
+    bool can_test_import()
+    {
+        return (uct_ze_copy_md_get_host_import() != NULL) &&
+               mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE) &&
+               check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_GET_ZCOPY);
+    }
+
+    /* Register a host range with the receiver's MD, which imports it */
+    uct_allocated_memory_t reg_host(void *ptr, size_t length)
+    {
+        const uct_ze_copy_host_import_t *hi = uct_ze_copy_md_get_host_import();
+        uct_allocated_memory_t mem          = {};
+        void *base                          = NULL;
+
+        mem.address    = ptr;
+        mem.length     = length;
+        mem.mem_type   = UCS_MEMORY_TYPE_HOST;
+        mem.method     = UCT_ALLOC_METHOD_LAST;
+        mem.memh       = UCT_MEM_HANDLE_NULL;
+        mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        receiver().mem_type_reg(&mem, UCT_MD_MEM_ACCESS_ALL);
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, hi->get_base(hi->driver, ptr, &base));
+        EXPECT_EQ(ptr, base);
+        return mem;
+    }
+
+    /*
+     * Copies whose host side crosses the boundary of imported host memory.
+     * The driver serves such a copy without the import, so the data must
+     * still land correctly on both sides of the boundary. Import the given
+     * ranges of a four-chunk host buffer, then copy its two middle chunks to
+     * and from the device and compare every byte, including the untouched
+     * chunks on both sides.
+     */
+    void test_copy(const std::vector<range> &ranges)
+    {
+        std::vector<char> host(4 * CHUNK);
+        char *middle = host.data() + CHUNK;
+        char *last   = host.data() + (3 * CHUNK);
+        std::vector<uct_allocated_memory_t> regs;
+        uct_rkey_bundle_t rkey;
+
+        for (const range &r : ranges) {
+            regs.push_back(reg_host(host.data() + (r.first * CHUNK),
+                                    r.second * CHUNK));
+        }
+
+        receiver().rkey_unpack(&regs.front(), &rkey);
+        mapped_buffer dev(2 * CHUNK, sender(), 0, UCS_MEMORY_TYPE_ZE_DEVICE);
+
+        mem_buffer::pattern_fill(host.data(), CHUNK, SEED3);
+        mem_buffer::pattern_fill(last, CHUNK, SEED3);
+
+        mem_buffer::pattern_fill(middle, 2 * CHUNK, SEED1);
+        dev.memset(0);
+        zcopy(dev.iov(), middle, false, rkey.rkey);
+        dev.pattern_check(SEED1);
+
+        dev.pattern_fill(SEED2);
+        zcopy(dev.iov(), middle, true, rkey.rkey);
+        mem_buffer::pattern_check(middle, 2 * CHUNK, SEED2);
+
+        mem_buffer::pattern_check(host.data(), CHUNK, SEED3);
+        mem_buffer::pattern_check(last, CHUNK, SEED3);
+
+        receiver().rkey_release(&rkey);
+        for (uct_allocated_memory_t &reg : regs) {
+            receiver().mem_type_dereg(&reg);
         }
     }
 };
@@ -473,6 +574,21 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, ze_caps_and_mem_types,
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST));
     EXPECT_TRUE(sender().md_attr().reg_mem_types &
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST));
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, inside_import, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 4}});
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, across_two_imports, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 2}, {2, 2}});
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, across_import_end, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 2}});
 }
 
 UCT_INSTANTIATE_ZE_TEST_CASE(test_ze_copy_rma)

@@ -63,9 +63,9 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
 
 
 /* Registration handle of a range that was not imported; an imported range is
-   registered with the base address of its import */
-static char uct_ze_copy_dummy_memh;
-#define UCT_ZE_COPY_DUMMY_MEMH ((uct_mem_h)&uct_ze_copy_dummy_memh)
+   registered with the base address of its import, which is never the last
+   byte of the address space */
+#define UCT_ZE_COPY_DUMMY_MEMH ((uct_mem_h)UINTPTR_MAX)
 
 /* zel_handle_type_t value of a driver handle (level_zero/loader/ze_loader.h) */
 #define UCT_ZE_COPY_ZEL_HANDLE_DRIVER 0
@@ -96,7 +96,6 @@ typedef struct {
     khash_t(ze_copy_import)   hash;
     uct_ze_copy_host_import_t funcs;
     int                       available; /* Entry points were resolved */
-    int                       enabled; /* Driver did not reject imports */
 } uct_ze_copy_import_registry_t;
 
 
@@ -180,7 +179,6 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     funcs->release      = (uct_ze_copy_release_ptr_func_t)release;
     funcs->get_base     = (uct_ze_copy_get_base_func_t)get_base;
     registry->available = 1;
-    registry->enabled   = 1;
 }
 
 const uct_ze_copy_host_import_t *uct_ze_copy_md_get_host_import(void)
@@ -206,10 +204,8 @@ static ucs_status_t uct_ze_copy_import_get_base(void *ptr, void **base_p)
     ze_result_t ret;
 
     ret = funcs->get_base(funcs->driver, ptr, &base);
-    if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
-        return UCS_ERR_UNSUPPORTED;
-    } else if ((ret != ZE_RESULT_SUCCESS) &&
-               (ret != ZE_RESULT_ERROR_INVALID_ARGUMENT)) {
+    if ((ret != ZE_RESULT_SUCCESS) &&
+        (ret != ZE_RESULT_ERROR_INVALID_ARGUMENT)) {
         /* INVALID_ARGUMENT means that the pointer is not imported */
         ucs_debug("zexDriverGetHostPointerBaseAddress(%p) failed: 0x%x", ptr,
                   ret);
@@ -218,14 +214,6 @@ static ucs_status_t uct_ze_copy_import_get_base(void *ptr, void **base_p)
 
     *base_p = (ret == ZE_RESULT_SUCCESS) ? base : NULL;
     return UCS_OK;
-}
-
-/* Called with the registry lock held */
-static void uct_ze_copy_import_disable(void)
-{
-    uct_ze_copy_imports.enabled = 0;
-    ucs_diag("level zero driver does not support host pointer import, "
-             "registered host memory will not be imported");
 }
 
 /* Called with the registry lock held */
@@ -256,10 +244,6 @@ static ucs_status_t uct_ze_copy_import_create(void *address, size_t length,
     ret = funcs->import(funcs->driver, address, length);
     if (ret != ZE_RESULT_SUCCESS) {
         kh_del(ze_copy_import, hash, iter);
-        if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-
         ucs_log(log_level,
                 "zexDriverImportExternalPointer(%p, %zu) failed: 0x%x", address,
                 length, ret);
@@ -279,9 +263,9 @@ static void uct_ze_copy_import_acquire(void *address, size_t length,
                                        uint64_t flags, uct_mem_h *memh_p)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
-    ucs_status_t status                     = UCS_OK;
     ucs_log_level_t log_level;
     void *end, *base_start, *base_end;
+    ucs_status_t status;
     khiter_t iter;
 
     *memh_p   = UCT_ZE_COPY_DUMMY_MEMH;
@@ -290,10 +274,6 @@ static void uct_ze_copy_import_acquire(void *address, size_t length,
                                                         UCS_LOG_LEVEL_DIAG;
 
     pthread_mutex_lock(&registry->lock);
-    if (!registry->enabled) {
-        goto out_unlock;
-    }
-
     status = uct_ze_copy_import_get_base(address, &base_start);
     if (status != UCS_OK) {
         goto out;
@@ -326,10 +306,6 @@ static void uct_ze_copy_import_acquire(void *address, size_t length,
     }
 
 out:
-    if (status == UCS_ERR_UNSUPPORTED) {
-        uct_ze_copy_import_disable();
-    }
-out_unlock:
     pthread_mutex_unlock(&registry->lock);
 }
 
@@ -351,9 +327,9 @@ static void uct_ze_copy_import_release(void *address)
 
     kh_del(ze_copy_import, &registry->hash, iter);
 
-    /* The driver fails a release only when no import contains the address
-       (already released) or when it has no host pointer manager at all, so
-       the import is gone either way and its entry goes with it */
+    /* The driver fails a release only when no import contains the address,
+       which was already released, so the import is gone and its entry goes
+       with it */
     ret = funcs->release(funcs->driver, address);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_diag("zexDriverReleaseImportedPointer(%p) failed: 0x%x", address,

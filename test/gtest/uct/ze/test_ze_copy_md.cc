@@ -3,7 +3,6 @@
  * See file LICENSE for terms.
  */
 
-#include "test_ze_copy_import.h"
 #include <common/mem_buffer.h>
 #include <uct/test_md.h>
 
@@ -15,6 +14,19 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ze/copy/ze_copy_md.h>
 #include <ucs/memory/memtype_cache.h>
+}
+
+
+/* Host pointer import entry points; skips the test when unavailable */
+static const uct_ze_copy_host_import_t *ze_copy_host_import_or_skip()
+{
+    const uct_ze_copy_host_import_t *hi = uct_ze_copy_md_get_host_import();
+
+    if (hi == NULL) {
+        UCS_TEST_SKIP_R("Level Zero host pointer import is not available");
+    }
+
+    return hi;
 }
 
 
@@ -78,14 +90,6 @@ protected:
     static void mem_dereg(uct_md_h md, uct_mem_h memh)
     {
         EXPECT_UCS_OK(dereg_status(md, memh));
-    }
-
-    /* Open one more MD of the tested resource */
-    void open_another_md(ucs::handle<uct_md_h> &md_h) const
-    {
-        UCS_TEST_CREATE_HANDLE(uct_md_h, md_h, uct_md_close, uct_md_open,
-                               GetParam().component, GetParam().md_name.c_str(),
-                               m_md_config);
     }
 
     /* Run func(0) and func(1) in two threads released at the same time, and
@@ -238,7 +242,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_shared_by_mds,
     char *ptr = buf.data();
     ucs::handle<uct_md_h> md2;
 
-    ASSERT_NO_FATAL_FAILURE(open_another_md(md2));
+    ASSERT_NO_FATAL_FAILURE(open_md(md2));
 
     uct_mem_h memh1 = mem_reg(md(), ptr, buf.size());
     uct_mem_h memh2 = mem_reg(md2, ptr, buf.size());
@@ -264,7 +268,7 @@ UCS_TEST_P(test_ze_copy_md, host_import_shared_mt, "ZE_COPY_HOST_IMPORT=try") {
     ucs_status_t status[2];
     uct_mem_h memh[2];
 
-    ASSERT_NO_FATAL_FAILURE(open_another_md(md2));
+    ASSERT_NO_FATAL_FAILURE(open_md(md2));
     const uct_md_h mds[] = {md(), md2};
 
     auto reg   = [&](int i) {

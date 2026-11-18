@@ -21,8 +21,10 @@ typedef struct uct_ze_copy_md {
     uct_md_t            super; /**< Domain info */
     ze_context_handle_t ze_context;
     ze_device_handle_t  ze_device;
-    int                 dmabuf_supported; /**< Expose memory as DMA-BUF */
-    int                 host_import; /**< Import registered host memory */
+    /** Expose memory as DMA-BUF */
+    int                 dmabuf_supported;
+    /** Import registered host memory */
+    int                 host_import;
 } uct_ze_copy_md_t;
 
 

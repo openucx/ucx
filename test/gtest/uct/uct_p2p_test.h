@@ -1,6 +1,5 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
-* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -18,11 +17,6 @@ public:
     uct_p2p_test(size_t rx_headroom, uct_error_handler_t err_handler = NULL);
 
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
-
-    /* Loopback resources only, for transports that reach only their own
-       interface */
-    static std::vector<const resource*>
-    enum_loopback_resources(const std::string &tl_name);
 
     virtual void init();
     virtual void cleanup();
