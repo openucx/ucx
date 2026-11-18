@@ -69,6 +69,7 @@ steps:
   - name: Build
     parallel: false
     timeout: 180
+    always: sh .ci/scripts/pod_usage.sh
     run: |
       # Workspace UID differs from container UID; trust it for git.
       git config --global --add safe.directory '*'

@@ -32,6 +32,7 @@ steps:
   - name: Build Static
     parallel: false
     timeout: 30
+    always: sh .ci/scripts/pod_usage.sh
     run: |
       set -euo pipefail
       ./buildlib/tools/build_static.sh

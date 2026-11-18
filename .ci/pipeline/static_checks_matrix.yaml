@@ -25,5 +25,6 @@ steps:
   - name: Static Checks
     parallel: false
     timeout: 30
+    always: sh .ci/scripts/pod_usage.sh
     run: |
       ./buildlib/tools/static_checks.sh

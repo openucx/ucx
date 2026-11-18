@@ -38,5 +38,6 @@ steps:
   - name: Coverity
     parallel: false
     timeout: 30
+    always: sh .ci/scripts/pod_usage.sh
     run: |
       ./buildlib/tools/coverity.sh ${type} --clean --with-cuda --with-gdrcopy --with-java

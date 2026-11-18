@@ -34,5 +34,6 @@ steps:
   - name: Test
     parallel: false
     timeout: 360
+    always: sh .ci/scripts/pod_usage.sh
     run: |
       ./contrib/test_jenkins.sh
