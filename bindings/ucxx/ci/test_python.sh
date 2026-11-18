@@ -27,6 +27,7 @@ rapids-dependency-file-generator \
 
 rapids-mamba-retry env create --yes -f env.yaml -n test
 conda activate test
+overlay_external_ucx
 
 rapids-print-env
 

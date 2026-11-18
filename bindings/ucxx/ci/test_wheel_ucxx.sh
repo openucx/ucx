@@ -44,6 +44,16 @@ rapids-pip-retry install \
     "${LIBUCXX_WHEELHOUSE}/libucxx_${RAPIDS_PY_CUDA_SUFFIX}"*.whl \
     "$(echo "${UCXX_WHEELHOUSE}"/"${package_name}_${RAPIDS_PY_CUDA_SUFFIX}"*.whl)[test]"
 
+# With UCXX_NO_LIBUCX=true the wheels carry no libucx dependency: assert the
+# UCX loaded at runtime is the one at ucx_ROOT. ucxx reports MAJOR.MINOR.PATCH
+# only, so any extra version suffix is dropped.
+if [[ "${UCXX_NO_LIBUCX:-false}" == "true" ]]; then
+  want=$("${ucx_ROOT:?}/bin/ucx_info" -v | sed -n "s/^# Library version: //p" | grep -oE "^[0-9]+[.][0-9]+[.][0-9]+")
+  got=$(python -c 'import ucxx; print(*ucxx.get_ucx_version(), sep=".")')
+  [ "${got}" = "${want}" ] || { echo "ERROR: UCX version mismatch: ${got} != ${want}" >&2; exit 1; }
+  echo "UCXX runs UCX ${got} from ${ucx_ROOT}"
+fi
+
 print_system_stats
 
 rapids-logger "Run Python tests with wheels"

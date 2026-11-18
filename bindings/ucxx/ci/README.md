@@ -29,9 +29,12 @@ and run the CI scripts in this directory unmodified. When unset, behavior is unc
 | `dependencies.yaml` | Every `rapids-dependency-file-generator` call in these scripts passes `no_libucx=true`, selecting the existing empty `no_libucx` matrix entries, so no `ucx` / `libucx-cu*` requirement is generated. |
 | `build_wheel_libucxx.sh` | Exports `RAPIDS_MATRIX_ENTRY="cuda_suffixed=true;no_libucx=true"` so `rapids-build-backend` omits `libucx-cu*` from the wheel's build and runtime dependencies. |
 | `conda/recipes/{libucxx,ucxx}` | Drop `ucx` from `host`/`run` requirements and allowlist `libucp`, `libucs`, `libuct` and `libucm` in the overlinking check (`missing_dso_allowlist`). |
+| `test_cpp.sh`, `test_python.sh`, `build_docs.sh` | Copy the UCX installation at `ucx_ROOT` (libraries and tools) into the conda environment they create. The test scripts fail if a released `ucx` package is present there as well. |
+| `test_wheel_ucxx.sh` | Asserts that the UCX version loaded by `ucxx` is the one installed at `ucx_ROOT`. |
 
 The value must be exactly `true`. Any other value (`1`, `yes`, `True`, ...) is silently
-treated as unset. Set it consistently for **all** jobs (builds and tests).
+treated as unset. Set it consistently for **all** jobs (builds and tests). The test and
+docs jobs also require `ucx_ROOT`.
 
 ### Locating the UCX installation
 
@@ -68,12 +71,14 @@ UCX installed with prefix `/usr` does not work for conda builds, even with `ucx_
   i.e., registered with `ldconfig` (e.g., via `/etc/ld.so.conf.d/`) or present in
   `LD_LIBRARY_PATH`. Neither conda packages nor wheels record UCX's location.
   `LD_LIBRARY_PATH` is not passed into `rattler-build`'s isolated environments; the CI
-  test jobs inherit it normally. Conda builds load UCX while building `ucxx-tests`, so if
+  test jobs inherit it normally. The conda test and docs jobs do not depend on it: they
+  copy the installation at `ucx_ROOT` into their environment. Conda builds load UCX while building `ucxx-tests`, so if
   UCX is not registered with `ldconfig`, `ucx_ROOT` (or `UCX_ROOT`) must be set: the
   build then adds `<prefix>/lib` and `<prefix>/lib64` to its own `LD_LIBRARY_PATH`.
   Package import tests are skipped regardless (see [Conda limitations](#conda-limitations)).
-- **`ucx_info` must be on `PATH`** in conda test jobs (`test_cpp.sh`, `test_python.sh`),
-  which call it unconditionally to print the UCX configuration. Wheel test jobs fall back to querying the version from Python.
+- **`ucx_info` must be in `<ucx_ROOT>/bin`**: the conda test jobs (`test_cpp.sh`,
+  `test_python.sh`) call it unconditionally to print the UCX configuration, and
+  `test_wheel_ucxx.sh` reads the UCX version from it.
 - **For conda builds, UCX should be built against glibc 2.28 or older** (the conda
   sysroot version). See [Conda limitations](#conda-limitations).
 

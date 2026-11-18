@@ -23,7 +23,8 @@ print_system_stats() {
   nproc --all
 
   rapids-logger "Check GPU usage"
-  nvidia-smi
+  # CPU-only jobs run in containers without nvidia-smi.
+  command -v nvidia-smi > /dev/null && nvidia-smi || echo "(no GPU)"
 
   rapids-logger "Check NICs"
   awk 'END{print $1}' /etc/hosts
@@ -39,6 +40,21 @@ print_node_health() {
   # Report-only: helps attributing failures to degraded CI nodes, never fails the job.
   rapids-logger "Node health"
   python "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/node_health.py" || true
+}
+
+overlay_external_ucx() {
+  # With UCXX_NO_LIBUCX=true the conda environment carries no ucx package: copy
+  # the UCX installation at ucx_ROOT into the active environment. A released
+  # ucx package in the same environment would shadow the copy, so fail on it.
+  [[ "${UCXX_NO_LIBUCX:-false}" == "true" ]] || return 0
+
+  cp -a "${ucx_ROOT:?}/lib/." "${CONDA_PREFIX}/lib/"
+  cp -a "${ucx_ROOT}/bin/." "${CONDA_PREFIX}/bin/"
+  if conda list | grep -E "^ucx +[0-9]" > /dev/null; then
+    echo "ERROR: released ucx package present in the environment - it would shadow ${ucx_ROOT}" >&2
+    exit 1
+  fi
+  echo "UCX from ${ucx_ROOT} overlaid into ${CONDA_PREFIX}"
 }
 
 print_ucx_config() {

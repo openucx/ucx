@@ -31,9 +31,18 @@ rapids-dependency-file-generator \
 rapids-mamba-retry env create --yes -f "${ENV_YAML_DIR}/env.yaml" -n docs
 conda activate docs
 
+# With UCXX_NO_LIBUCX=true the docs environment carries no ucx package: copy
+# the UCX installation at ucx_ROOT into it.
+if [[ "${UCXX_NO_LIBUCX:-false}" == "true" ]]; then
+  cp -a "${ucx_ROOT:?}/lib/." "${CONDA_PREFIX}/lib/"
+  cp -a "${ucx_ROOT}/bin/." "${CONDA_PREFIX}/bin/"
+  echo "UCX from ${ucx_ROOT} overlaid into ${CONDA_PREFIX}"
+fi
+
 rapids-print-env
 
-RAPIDS_DOCS_DIR="$(mktemp -d)"
+# The caller may set the output directory to collect the docs from it.
+RAPIDS_DOCS_DIR="${RAPIDS_DOCS_DIR:-$(mktemp -d)}"
 export RAPIDS_DOCS_DIR
 
 rapids-logger "Build CPP docs"

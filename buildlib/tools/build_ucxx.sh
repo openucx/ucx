@@ -5,8 +5,8 @@
 # See file LICENSE for terms.
 #
 # Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs>
-# Env: UCXX_DIR (all phases except ucx_pr). Build phases also need
-#   RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
+# Env: ucx_pr needs RAPIDS_CUDA_VERSION and UCX_PR_TARBALL; every other phase
+#   needs UCXX_DIR, RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
 # Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
 #
@@ -43,10 +43,10 @@ fi
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
-export UCX_PR_PREFIX=/tmp/ucx-pr
+UCX_PR_PREFIX=/tmp/ucx-pr
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
-# upstream test-env matrices select the dependency set via this key
+# the ucxx test-env matrices select the dependency set via this key
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
 # persistent pip cache (host volume); pip disables caching itself if unwritable
 [ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
@@ -133,16 +133,6 @@ case "$phase" in
     : "${WHEEL_INPUT_DIR:?WHEEL_INPUT_DIR required for wheel_ucxx (libucxx wheel dir)}"
     bash ci/build_wheel_ucxx.sh ;;
   docs)
-    # Upstream forces RAPIDS_DOCS_DIR=$(mktemp -d); make it default-if-unset
-    # so our staged output dir survives. Guard catches upstream rewording.
-    sed -i 's|RAPIDS_DOCS_DIR="$(mktemp -d)"|: "${RAPIDS_DOCS_DIR:=$(mktemp -d)}"|' ci/build_docs.sh
-    grep -q 'RAPIDS_DOCS_DIR:=' ci/build_docs.sh \
-      || { echo "ERROR: docs patch did not apply to ci/build_docs.sh" >&2; exit 1; }
-    # The docs env carries no ucx package; provide the PR's UCX libraries.
-    grep -q "ucx-pr" ci/build_docs.sh \
-      || sed -i 's#^conda activate docs$#conda activate docs\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\necho "UCX-PR overlaid into docs env"#' ci/build_docs.sh
-    grep -q "ucx-pr" ci/build_docs.sh \
-      || { echo "ERROR: UCX-PR overlay patch did not apply to ci/build_docs.sh" >&2; exit 1; }
     bash ci/build_docs.sh ;;
   *) echo "Unknown phase: $phase" >&2; exit 1 ;;
 esac
