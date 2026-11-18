@@ -122,7 +122,8 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
       testScript: >-
-        cd /ws; source .ci/scripts/cap_output.sh; source buildlib/az-helpers.sh; failed="";
+        cd /ws; bash .ci/scripts/cap_output.sh bash -c '
+        source buildlib/az-helpers.sh; failed="";
         export AZP_AGENT_ID=$((${BUILD_NUMBER} % 50));
         for ucx_tag in v1.15.x v1.16.x v1.17.x v1.18.x; do
         (
@@ -146,7 +147,7 @@ steps:
         [ $? -eq 0 ] || failed="$failed $ucx_tag";
         pkill -9 -f "/ws/ucx_$ucx_tag/examples/";
         done;
-        if [ -n "$failed" ]; then echo "Wire compatibility failed with UCX:$failed"; exit 1; fi
+        if [ -n "$failed" ]; then echo "Wire compatibility failed with UCX:$failed"; exit 1; fi'
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
