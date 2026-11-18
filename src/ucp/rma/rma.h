@@ -92,6 +92,6 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
-ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
+ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep, ucp_request_t *req);
 
 #endif
