@@ -468,12 +468,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 {
     ucp_wireup_ep_t *wireup_ep;
 
-    ucs_debug("ep %p: handle uct ep failure lane[%d] uct_ep=%p status=%s "
-              "ep_flags=0x%x cfg=%u wireup_ep=%p local_connected=%d",
-              ucp_ep, lane, uct_ep, ucs_status_string(status), ucp_ep->flags,
-              ucp_ep->cfg_index, ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane)),
-              ucp_ep_is_local_connected(ucp_ep));
-
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         /* No pending operations should be scheduled */
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
@@ -483,7 +477,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     if (ucp_ep_failover_in_wireup(ucp_ep, lane)) {
         /* No connected lane to rebuild yet. Discard every lane, including
          * requests queued on the wireup endpoint. */
-        ucs_debug("ep %p: initial failover wireup failure, set_failed", ucp_ep);
         ucp_ep_set_failed(ucp_ep, lane, status);
         return UCS_OK;
     }
@@ -520,8 +513,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        ucs_debug("ep %p: aux failure while wireup_ep ready flags=0x%x",
-                  ucp_ep, wireup_ep->flags);
         return UCS_OK;
     }
 
@@ -531,9 +522,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
      * wireup/AUX EP. If remote EP is dead, it will be detected by send
      * operations or KA.
      */
-    ucs_debug("ep %p: aux failure after address, remote_connected shortcut "
-              "wireup_flags=0x%x",
-              ucp_ep, wireup_ep->flags);
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
