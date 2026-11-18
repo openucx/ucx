@@ -69,7 +69,8 @@ enum {
     UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
-    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
+    UCP_REQUEST_FLAG_PENDING_RMA           = UCS_BIT(30)
 };
 
 
@@ -628,6 +629,8 @@ extern ucs_mpool_ops_t ucp_request_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 extern const ucp_request_param_t ucp_request_null_param;
 
+
+void ucp_request_pending_rma_add(ucp_request_t *req);
 
 int ucp_request_pending_add(ucp_request_t *req);
 

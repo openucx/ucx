@@ -290,6 +290,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
+    ucs_hlist_head_init(&ep->ext->pending_rma_reqs);
 
     memset(ep->uct_eps, 0, sizeof(ep->uct_eps));
 #if ENABLE_DEBUG_DATA
@@ -552,6 +553,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_ep_refcount_assert(ep, discard, ==, 0);
     ucp_ep_refcount_assert(ep, probe, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ep->ext->proto_reqs));
+    ucs_assert(ucs_hlist_is_empty(&ep->ext->pending_rma_reqs));
 
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucs_assert(worker->num_all_eps > 0);

@@ -17,6 +17,7 @@
 
 static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
 static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg);
+static unsigned ucp_ep_pending_rma_reqs_resume(void *arg);
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req);
 
 static void
@@ -510,6 +511,15 @@ static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg)
     ucs_assert(req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING);
     req->send.flush.lane_mask |= ucp_ep_get_live_lanes(req->send.ep);
     ucp_ep_flush_request_reset(req);
+
+    /* The requests restarted by the lane failure may be queued again */
+    if (!ucs_hlist_is_empty(&req->send.ep->ext->pending_rma_reqs)) {
+        ucp_trace_req(req, "flush ep %p restart after RMA requests",
+                      req->send.ep);
+        ucp_ep_pending_rma_reqs_add(req);
+        return 1;
+    }
+
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
     return 1;
@@ -615,21 +625,78 @@ void ucp_ep_flush_remote_completed(ucp_request_t *req)
     }
 }
 
-ucs_status_ptr_t
-ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
-                            const ucp_request_param_t *param,
-                            ucp_request_t *worker_req,
-                            ucp_request_callback_t flushed_cb,
-                            const char *debug_name, unsigned uct_flags,
-                            ucp_lane_map_t lane_mask)
+static int ucp_ep_pending_rma_reqs_is_flush(ucp_request_t *req)
 {
-    ucs_status_t status;
+    return req->send.uct.func == ucp_ep_flush_progress_pending;
+}
+
+void ucp_ep_pending_rma_reqs_add(ucp_request_t *req)
+{
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PENDING_RMA));
+
+    ucp_trace_req(req, "ep %p add to pending RMA requests", req->send.ep);
+    req->flags |= UCP_REQUEST_FLAG_PENDING_RMA;
+    ucs_hlist_add_tail(&req->send.ep->ext->pending_rma_reqs,
+                       &req->send.list);
+}
+
+void ucp_ep_pending_rma_reqs_remove(ucp_request_t *req)
+{
+    ucp_ep_h ep                    = req->send.ep;
+    ucs_hlist_head_t *pending_reqs = &ep->ext->pending_rma_reqs;
+    int is_head;
+
+    ucs_assert(!ucp_ep_pending_rma_reqs_is_flush(req));
+
+    ucp_trace_req(req, "ep %p remove from pending RMA requests", ep);
+    is_head     = ucs_hlist_head_elem(pending_reqs, ucp_request_t,
+                                      send.list) == req;
+    req->flags &= ~UCP_REQUEST_FLAG_PENDING_RMA;
+    ucs_hlist_del(pending_reqs, &req->send.list);
+
+    /* Resume from the progress queue, since this request may complete while
+     * a lane pending queue is dispatched or purged. The endpoint must not be
+     * destroyed before the waiting flushes are resumed. */
+    if (is_head && !ucs_hlist_is_empty(pending_reqs) &&
+        ucp_ep_pending_rma_reqs_is_flush(
+                ucs_hlist_head_elem(pending_reqs, ucp_request_t, send.list))) {
+        ucp_ep_refcount_add(ep, flush);
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_pending_rma_reqs_resume, ep);
+        ucp_worker_signal_internal(ep->worker);
+    }
+}
+
+static unsigned ucp_ep_pending_rma_reqs_resume(void *arg)
+{
+    ucp_ep_h ep = arg;
+    ucp_request_t *req;
+
+    ucs_hlist_for_each_extract_if(req, &ep->ext->pending_rma_reqs, send.list,
+                                  ucp_ep_pending_rma_reqs_is_flush(req)) {
+        ucp_trace_req(req, "flush ep %p resume after RMA requests", ep);
+        req->flags &= ~UCP_REQUEST_FLAG_PENDING_RMA;
+        ucp_ep_flush_progress(req);
+        ucp_flush_check_completion(req);
+    }
+
+    ucp_ep_refcount_remove(ep, flush);
+    return 1;
+}
+
+static ucp_request_t *
+ucp_ep_flush_request_get(ucp_ep_h ep, unsigned req_flags,
+                         const ucp_request_param_t *param,
+                         ucp_request_t *worker_req,
+                         ucp_request_callback_t flushed_cb,
+                         const char *debug_name, unsigned uct_flags,
+                         ucp_lane_map_t lane_mask)
+{
     ucp_request_t *req;
 
     ucs_debug("%s ep %p", debug_name, ep);
 
-    req = ucp_request_get_param(ep->worker, param,
-                                {return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);});
+    req = ucp_request_get_param(ep->worker, param, {return NULL;});
 
     /*
      * Flush operation can be queued on the pending queue of only one of the
@@ -652,6 +719,15 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
 
     ucp_request_set_super(req, worker_req);
     ucp_request_set_send_callback_param(param, req, send);
+    return req;
+}
+
+static ucs_status_ptr_t
+ucp_ep_flush_request_start(ucp_request_t *req, const ucp_request_param_t *param)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucs_status_t status;
+
     ucp_ep_flush_progress(req);
 
     if (ucp_ep_flush_is_completed(req)) {
@@ -669,6 +745,25 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
     return req + 1;
 }
 
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask)
+{
+    ucp_request_t *req;
+
+    req = ucp_ep_flush_request_get(ep, req_flags, param, worker_req, flushed_cb,
+                                   debug_name, uct_flags, lane_mask);
+    if (req == NULL) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    return ucp_ep_flush_request_start(req, param);
+}
+
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
@@ -676,9 +771,21 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags)
 {
-    return ucp_ep_flush_lanes_internal(ep, req_flags, param, worker_req,
-                                       flushed_cb, debug_name, uct_flags,
-                                       (ucp_lane_map_t)-1);
+    ucp_request_t *req;
+
+    req = ucp_ep_flush_request_get(ep, req_flags, param, worker_req, flushed_cb,
+                                   debug_name, uct_flags, (ucp_lane_map_t)-1);
+    if (req == NULL) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    if (ucs_hlist_is_empty(&ep->ext->pending_rma_reqs)) {
+        return ucp_ep_flush_request_start(req, param);
+    }
+
+    ucp_trace_req(req, "flush ep %p wait for pending RMA requests", ep);
+    ucp_ep_pending_rma_reqs_add(req);
+    return req + 1;
 }
 
 static void ucp_ep_flushed_callback(ucp_request_t *req)
@@ -1030,8 +1137,9 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
     return uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);
 }
 
-ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
+ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep, ucp_request_t *req)
 {
+    ucs_hlist_head_t *pending_reqs = &ep->ext->pending_rma_reqs;
     ucs_status_t status;
     void *request;
 
@@ -1039,10 +1147,28 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
                 "ep=%p unflushed_lanes=0x%" PRIx64, ep,
                 ep->ext->unflushed_lanes);
 
-    request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
-                                    ucp_ep_flushed_callback, "ep_fence_strong",
-                                    UCT_FLUSH_FLAG_REMOTE);
-    status  = ucp_flush_wait(ep->worker, request);
+    if (!(req->flags & UCP_REQUEST_FLAG_PENDING_RMA)) {
+        request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
+                                        ucp_ep_flushed_callback,
+                                        "ep_fence_strong",
+                                        UCT_FLUSH_FLAG_REMOTE);
+    } else {
+        /* A flush would wait for this request too, so wait only for the
+         * requests which were queued before it */
+        while ((req->flags & UCP_REQUEST_FLAG_PENDING_RMA) &&
+               (ucs_hlist_head_elem(pending_reqs, ucp_request_t, send.list) !=
+                req)) {
+            ucp_worker_progress(ep->worker);
+        }
+
+        request = ucp_ep_flush_lanes_internal(ep, 0, &ucp_request_null_param,
+                                              NULL, ucp_ep_flushed_callback,
+                                              "ep_fence_strong",
+                                              UCT_FLUSH_FLAG_REMOTE,
+                                              (ucp_lane_map_t)-1);
+    }
+
+    status = ucp_flush_wait(ep->worker, request);
     if (status != UCS_OK) {
         return status;
     }
