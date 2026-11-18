@@ -2,27 +2,10 @@ parameters:
   demands: []
   name: subtest
   container:
-  ucx_targets:
-    ucx_1_14:
-      ucx_tag: v1.14.0
-    ucx_1_15:
-      ucx_tag: v1.15.x
-    ucx_1_16:
-      ucx_tag: v1.16.x
-    ucx_1_17:
-      ucx_tag: v1.17.x
-    ucx_1_18:
-      ucx_tag: v1.18.x
-    ucx_1_19:
-      ucx_tag: v1.19.x
-    ucx_1_20:
-      ucx_tag: v1.20.x
-    ucx_1_21:
-      ucx_tag: v1.21.x
-    ucx_1_22:
-      ucx_tag: v1.22.x
-    ucx_1_23:
-      ucx_tag: v1.23.x
+  # Oldest release branch to test, newer ones are found at runtime
+  min_release: v1.15.x
+  # Refs to test on top of the release branches
+  extra_refs: v1.14.0
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -39,6 +22,11 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 1
+        retryCountOnTaskFailure: 5
+
+      - bash: buildlib/tools/wire_compat_matrix.sh ${{ parameters.min_release }} ${{ parameters.extra_refs }}
+        name: targets
+        displayName: Find UCX releases to test
         retryCountOnTaskFailure: 5
 
       - bash: |
@@ -64,7 +52,7 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     strategy:
-      matrix: ${{ parameters.ucx_targets }}
+      matrix: $[ dependencies.build_pr_${{ parameters.name }}.outputs['targets.matrix'] ]
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     variables:
