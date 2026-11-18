@@ -3732,10 +3732,15 @@ ucp_worker_keepalive_uct_ep(ucp_ep_h ep, ucp_lane_index_t *lane_p,
 {
     ucp_lane_index_t lane      = ucp_ep_config(ep)->key.keepalive_lane;
     uct_ep_h uct_ep            = ucp_ep_get_lane(ep, lane);
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_wireup_ep_t *wireup_ep;
     ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_uct_ep;
 
+    if (uct_ep == NULL) {
+        goto out;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
     if ((wireup_ep == NULL) ||
         (wireup_ep->flags & UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED) ||
         (wireup_ep->aux_ep != NULL)) {
@@ -3748,7 +3753,11 @@ ucp_worker_keepalive_uct_ep(ucp_ep_h ep, ucp_lane_index_t *lane_p,
     }
 
     wireup_uct_ep = ucp_ep_get_lane(ep, wireup_lane);
-    wireup_ep     = ucp_wireup_ep(wireup_uct_ep);
+    if (wireup_uct_ep == NULL) {
+        goto out;
+    }
+
+    wireup_ep = ucp_wireup_ep(wireup_uct_ep);
     if ((wireup_ep != NULL) && (wireup_ep->aux_ep != NULL)) {
         lane   = wireup_lane;
         uct_ep = wireup_uct_ep;
@@ -3789,6 +3798,12 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ucp_worker_keepalive_uct_ep(ep, &lane, &uct_ep);
     rsc_index = ucp_ep_get_rsc_index(ep, lane);
+
+    /* When wireup fails to connect the lanes of a new configuration, they
+     * stay unset until the scheduled endpoint failure runs */
+    if (uct_ep == NULL) {
+        goto out_done;
+    }
 
     ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
                 (lane == ucp_ep_get_cm_lane(ep)),
