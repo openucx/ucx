@@ -49,7 +49,9 @@ enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
-    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
+    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1),
+    /* EP address ends with data of the RC provider */
+    UCT_RC_MLX5_EP_ADDR_FLAG_PROVIDER_DATA    = UCS_BIT(2)
 };
 
 
@@ -107,6 +109,47 @@ typedef struct uct_rc_mlx5_ep_ext_address {
     uct_rc_mlx5_ep_address_t super;
     uint8_t                  flags;
 } UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
+
+
+static inline uint8_t
+uct_rc_mlx5_iface_provider_addr_len(const uct_rc_mlx5_iface_common_t *iface)
+{
+    if ((iface->ext_ops == NULL) ||
+        (iface->ext_ops->ep_pack_address == NULL)) {
+        return 0;
+    }
+
+    return iface->ext_ops->ep_addr_len;
+}
+
+
+static inline uint8_t
+uct_rc_mlx5_iface_ep_addr_flags(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+    uint8_t flags   = 0;
+
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
+        flags |= UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
+        if (!md->config.enable_indirect_atomic) {
+            flags |= UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET;
+        }
+    }
+
+    if (uct_rc_mlx5_iface_provider_addr_len(iface) != 0) {
+        flags |= UCT_RC_MLX5_EP_ADDR_FLAG_PROVIDER_DATA;
+    }
+
+    return flags;
+}
+
+
+static inline size_t uct_rc_mlx5_ep_addr_provider_offset(uint8_t flags)
+{
+    return sizeof(uct_rc_mlx5_ep_ext_address_t) +
+           ((flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) ? sizeof(uint16_t) :
+                                                            0);
+}
 
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);

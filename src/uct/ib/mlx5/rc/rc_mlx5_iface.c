@@ -148,6 +148,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_iface_t *rc_iface   = &iface->super;
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
+    uint8_t ep_addr_flags      = uct_rc_mlx5_iface_ep_addr_flags(iface);
     ucs_status_t status;
     size_t ep_addr_len;
 
@@ -169,10 +170,11 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
-        ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t) + sizeof(uint16_t);
-    } else {
+    if (ep_addr_flags == 0) {
         ep_addr_len = sizeof(uct_rc_mlx5_ep_address_t);
+    } else {
+        ep_addr_len = uct_rc_mlx5_ep_addr_provider_offset(ep_addr_flags) +
+                      uct_rc_mlx5_iface_provider_addr_len(iface);
     }
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
