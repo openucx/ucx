@@ -708,6 +708,125 @@ UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
 
 
+/* Endpoints connected to each other's endpoint send and receive on one
+ * socket */
+class test_uct_tcp_p2p : public test_uct_tcp {
+public:
+    void init()
+    {
+        /* Small socket buffers fill up after a few messages */
+        modify_config("TCP_SNDBUF", "64k");
+        modify_config("TCP_RCVBUF", "64k");
+        test_uct_tcp::init();
+
+        m_sender = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_sender);
+        for (entity *e : {m_ent, m_sender}) {
+            ASSERT_UCS_OK(uct_iface_set_am_handler(e->iface(), AM_ID,
+                                                   am_handler, this, 0));
+        }
+
+        m_sender->connect(0, *m_ent, 0);
+        wait_for_cond([this]() {
+                          return is_connected(*m_sender) &&
+                                 is_connected(*m_ent);
+                      },
+                      [this]() { progress(); });
+        ASSERT_TRUE(is_connected(*m_sender));
+        ASSERT_TRUE(is_connected(*m_ent));
+    }
+
+protected:
+    static constexpr uint8_t AM_ID    = 1;
+    static constexpr size_t MAX_SENDS = 100000;
+
+    static uct_tcp_ep_t *tcp_ep(const entity &e)
+    {
+        return ucs_derived_of(e.ep(0), uct_tcp_ep_t);
+    }
+
+    static bool is_connected(const entity &e)
+    {
+        return tcp_ep(e)->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED;
+    }
+
+    static ucs_status_t
+    am_handler(void *arg, void *data, size_t length, unsigned flags)
+    {
+        ++static_cast<test_uct_tcp_p2p*>(arg)->m_am_count;
+        return UCS_OK;
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        ++static_cast<test_uct_tcp_p2p*>(arg)->m_err_count;
+        return UCS_OK;
+    }
+
+    static void completion_cb(uct_completion_t *self)
+    {
+        ADD_FAILURE() << "both operations of the completion are done";
+    }
+
+    entity *m_sender   = NULL;
+    size_t m_am_count  = 0;
+    size_t m_err_count = 0;
+    std::vector<char> m_buf;
+    /* The second count stands for another operation of the same request */
+    uct_completion_t m_comp = {completion_cb, 2, UCS_OK};
+};
+
+UCS_TEST_P(test_uct_tcp_p2p, peer_reset_while_zcopy_pending)
+{
+    ucs_status_t status = UCS_OK;
+    struct pollfd pfd;
+    int timeout_ms;
+    uct_iov_t iov;
+
+    m_buf.resize(m_sender->iface_attr().cap.am.max_zcopy);
+    iov.buffer = m_buf.data();
+    iov.length = m_buf.size();
+    iov.memh   = UCT_MEM_HANDLE_NULL;
+    iov.stride = 0;
+    iov.count  = 1;
+
+    /* The sender does not progress, so the message stays in its socket */
+    ASSERT_UCS_OK(send_am_message(m_ent, AM_ID));
+
+    /* Send until the socket is full, so the last message is sent in part */
+    for (size_t i = 0; (i < MAX_SENDS) && (status == UCS_OK); ++i) {
+        status = uct_ep_am_zcopy(m_sender->ep(0), AM_ID, NULL, 0, &iov, 1, 0,
+                                 &m_comp);
+    }
+    ASSERT_EQ(UCS_INPROGRESS, status);
+
+    /* The peer closes its socket with unread data, which resets the
+     * connection */
+    m_ent->destroy_ep(0);
+
+    /* Wait for the reset without reading the socket: poll() reports a hang-up
+     * without requesting it */
+    pfd.fd     = tcp_ep(*m_sender)->fd;
+    pfd.events = 0;
+    timeout_ms = static_cast<int>(DEFAULT_TIMEOUT_SEC * UCS_MSEC_PER_SEC *
+                                  ucs::test_time_multiplier());
+    ASSERT_EQ(1, poll(&pfd, 1, timeout_ms));
+
+    /* Receiving returns the message, so sending the rest of the zcopy is the
+     * first to fail */
+    wait_for_cond([this]() { return m_err_count > 0; },
+                  [this]() { m_sender->progress(); });
+    EXPECT_EQ(1u, m_am_count);
+    EXPECT_EQ(1u, m_err_count);
+
+    /* The zcopy is completed once */
+    EXPECT_EQ(1, m_comp.count);
+    EXPECT_EQ(UCS_ERR_CONNECTION_RESET, m_comp.status);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_p2p, tcp)
+
+
 class test_uct_tcp_base : public ucs::test {
 };
 
