@@ -29,6 +29,28 @@ static size_t ucp_am_eager_single_hdr_size(ucp_operation_id_t op_id)
            ((op_id == UCP_OP_ID_AM_SEND) ? 0 : sizeof(ucp_am_reply_ftr_t));
 }
 
+/* AUTO keeps transport selection unchanged and is rewritten to SW only when
+ * indirect atomics are enabled. Otherwise token replay is used on lanes that
+ * can query a token. */
+static int
+ucp_am_eager_enable_token_failover(ucp_proto_single_init_params_t *params)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_failover_mode_t failover_mode          =
+            init_params->worker->context->config.ext.failover_mode;
+
+    if ((init_params->ep_config_key->err_mode !=
+         UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        ((failover_mode != UCP_FAILOVER_MODE_TOKEN) &&
+         (failover_mode != UCP_FAILOVER_MODE_AUTO))) {
+        return 0;
+    }
+
+    params->super.flags     |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+    params->tl_v2_cap_flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    return 1;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
@@ -118,13 +140,9 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
 
     /* Token purge copies the inline payload and reposts it. The short
      * fast path posts on am_lane, so this protocol has to use that lane. */
-    if ((init_params->ep_config_key->err_mode ==
-         UCP_ERR_HANDLING_MODE_FAILOVER) &&
-        (init_params->worker->context->config.ext.failover_mode ==
-         UCP_FAILOVER_MODE_TOKEN)) {
+    if (ucp_am_eager_enable_token_failover(&params)) {
         ucp_lane_index_t am_lane = init_params->ep_config_key->am_lane;
 
-        params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
         if (am_lane != UCP_NULL_LANE) {
             params.super.exclude_map |= ~(ucp_lane_map_t)UCS_BIT(am_lane);
         }
@@ -263,11 +281,7 @@ static void ucp_am_eager_single_bcopy_probe_common(
     };
 
     /* Token purge copies this descriptor and reposts it on another lane. */
-    if ((init_params->ep_config_key->err_mode ==
-         UCP_ERR_HANDLING_MODE_FAILOVER) &&
-        (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN)) {
-        params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
-    }
+    ucp_am_eager_enable_token_failover(&params);
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
