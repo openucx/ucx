@@ -4696,6 +4696,34 @@ public:
         EXPECT_EQ(worker->ep_config.length, ep_config_count);
     }
 
+protected:
+    std::map<std::string, double> m_port_speed;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_port_speed([this]() {
+        return send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    }, UCP_OP_ID_PUT);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_port_speed([this]() {
+        return send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET);
+    }, UCP_OP_ID_GET);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rc_mlx5,
+                              "rc_mlx5")
+
+/* rc_x, since the endpoint needs the UD transport for the wireup. The test does
+ * not depend on the number of remote key configurations, which UD can change */
+class test_ucp_proto_mock_rcx_speed_change_sgl :
+    public test_ucp_proto_mock_rcx_speed_change {
+public:
     /* Put an SGL of the first @a count buffers of @a rbufs, each element with
      * its own remote key from @a rkeys, and check the remote data */
     ucs_status_t put_sgl(const ucs::ptr_vector<mapped_buffer> &rbufs,
@@ -4761,31 +4789,12 @@ public:
 
         EXPECT_EQ(ep_config_index(sender()), rkey_config->key.ep_cfg_index);
     }
-
-protected:
-    std::map<std::string, double> m_port_speed;
 };
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
-           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
-{
-    test_port_speed([this]() {
-        return send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
-    }, UCP_OP_ID_PUT);
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
-           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
-{
-    test_port_speed([this]() {
-        return send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET);
-    }, UCP_OP_ID_GET);
-}
 
 /* Each element of the SGL has its own remote key. After a port speed change,
  * the put moves the first remote key to a configuration for the new endpoint
  * configuration, and it works also when the first one has it already. */
-UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put_sgl,
+UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change_sgl, rma_put_sgl,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     const size_t num_elems = 4;
@@ -4818,8 +4827,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put_sgl,
     EXPECT_UCS_OK(put_sgl(rbufs, rkeys, 4, num_elems));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rc_mlx5,
-                              "rc_mlx5")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change_sgl, rcx,
+                              "rc_x")
 
 #ifdef ENABLE_STATS
 
