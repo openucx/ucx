@@ -1151,9 +1151,7 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
             return 0;
         }
 
-        status = uct_tcp_ep_handle_send_err(ep, status);
-        uct_tcp_ep_zcopy_completed(ep, ctx->comp, status);
-        return status;
+        return uct_tcp_ep_handle_send_err(ep, status);
     }
 
     uct_tcp_ep_tx_completed(ep, sent_length);
