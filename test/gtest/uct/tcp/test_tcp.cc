@@ -581,6 +581,121 @@ UCS_TEST_P(test_uct_tcp, maxseg_auto)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
 
 
+/* Two interfaces connect to each other at the same time: connection matching
+ * keeps one socket for both endpoints, and each of them sends and receives on
+ * it */
+class test_uct_tcp_duplex : public test_uct_tcp {
+public:
+    void init()
+    {
+        /* Small socket buffers fill up after a few messages */
+        modify_config("TCP_SNDBUF", "64k");
+        modify_config("TCP_RCVBUF", "64k");
+        test_uct_tcp::init();
+        if (m_ent->tcp_vrf_drops_loopback()) {
+            UCS_TEST_SKIP_R("same-host traffic in VRF is dropped");
+        }
+
+        m_peer = uct_test::create_entity(0);
+        m_entities.push_back(m_peer);
+        for (entity *e : {m_ent, m_peer}) {
+            ASSERT_UCS_OK(uct_iface_set_am_handler(e->iface(), AM_ID,
+                                                   am_handler, this, 0));
+        }
+
+        /* Neither interface progresses before both endpoints exist, so each
+         * of them receives a connection request that matches its endpoint */
+        m_ent->connect_to_iface(0, *m_peer);
+        m_peer->connect_to_iface(0, *m_ent);
+        wait_for_cond([this]() {
+                          return is_duplex(*m_ent) && is_duplex(*m_peer);
+                      },
+                      [this]() { progress(); });
+        ASSERT_TRUE(is_duplex(*m_ent));
+        ASSERT_TRUE(is_duplex(*m_peer));
+    }
+
+protected:
+    static constexpr uint8_t AM_ID    = 1;
+    static constexpr size_t MAX_SENDS = 100000;
+
+    static bool is_duplex(const entity &e)
+    {
+        const uct_tcp_ep_t *ep = ucs_derived_of(e.ep(0), uct_tcp_ep_t);
+
+        return (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
+               ucs_test_all_flags(ep->flags, UCT_TCP_EP_CTX_CAPS);
+    }
+
+    static ucs_status_t
+    am_handler(void *arg, void *data, size_t length, unsigned flags)
+    {
+        ++static_cast<test_uct_tcp_duplex*>(arg)->m_am_count;
+        return UCS_OK;
+    }
+
+    static size_t pack_cb(void *dest, void *arg)
+    {
+        const size_t length = *static_cast<const size_t*>(arg);
+
+        memset(dest, 0, length);
+        return length;
+    }
+
+    /* Send until the socket is full, so the TX buffer keeps the rest of the
+     * last message. Return the number of messages sent. */
+    size_t fill_socket(entity &e)
+    {
+        size_t length = e.iface_attr().cap.am.max_bcopy;
+        ssize_t packed;
+
+        for (size_t count = 0; count < MAX_SENDS; ++count) {
+            packed = uct_ep_am_bcopy(e.ep(0), AM_ID, pack_cb, &length, 0);
+            if (packed < 0) {
+                EXPECT_EQ(UCS_ERR_NO_RESOURCE, (ucs_status_t)packed);
+                return count;
+            }
+
+            EXPECT_EQ((ssize_t)length, packed);
+        }
+
+        ADD_FAILURE() << "the socket did not fill up";
+        return MAX_SENDS;
+    }
+
+    entity *m_peer    = NULL;
+    size_t m_am_count = 0;
+};
+
+UCS_TEST_P(test_uct_tcp_duplex, peer_fin_while_send_pending)
+{
+    size_t sent = fill_socket(*m_ent);
+    ASSERT_GT(sent, 0u);
+
+    /* The endpoint keeps receiving, and its CONN_FIN waits for the rest of
+     * the last message, so the endpoint waits for the socket to be writable */
+    m_ent->destroy_ep(0);
+
+    /* The peer receives the complete messages, which frees the send buffer,
+     * and then destroys its endpoint, which sends CONN_FIN at once */
+    wait_for_cond([this, sent]() { return m_am_count >= (sent - 1); },
+                  [this]() { m_peer->progress(); });
+    ASSERT_GE(m_am_count, sent - 1);
+    m_peer->destroy_ep(0);
+
+    /* One event reports both CONN_FIN, which closes the endpoint, and the
+     * writable socket, so the write event runs on the closed endpoint */
+    short_progress_loop(DEFAULT_DELAY_MS, m_ent);
+
+    /* The write event sent the rest of the last message */
+    wait_for_cond([this, sent]() { return m_am_count >= sent; },
+                  [this]() { m_peer->progress(); });
+    EXPECT_EQ(sent, m_am_count);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_duplex, tcp)
+
+
 class test_uct_tcp_conn_nb : public test_uct_tcp {
 public:
     void init() {
