@@ -206,6 +206,7 @@ protected:
         const uint64_t tag            = 0xdeadbeef;
         ucp_worker_h recv_worker      = receiver().worker(worker_index);
         uint64_t recv_data            = 0;
+        int poll_ret                  = 1;
         void *rreq, *sreq;
         ucs_status_t status;
         int efd;
@@ -230,19 +231,12 @@ protected:
 
         if (wakeup) {
             ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &efd));
-            EXPECT_EQ(1, poll_efd(efd, 10000 * ucs::test_time_multiplier()))
-                    << "worker " << worker_index << " was not woken up";
+            poll_ret = poll_efd(efd, 10000 * ucs::test_time_multiplier());
         }
 
-        if (sreq != NULL) {
-            ASSERT_UCS_OK(request_progress(sreq, {&sender(), &receiver()},
-                                           10.0, worker_index));
-            ucp_request_release(sreq);
-        }
-
-        ASSERT_UCS_OK(request_progress(rreq, {&sender(), &receiver()}, 10.0,
-                                       worker_index));
-        ucp_request_release(rreq);
+        ASSERT_UCS_OK(requests_wait({sreq, rreq}, worker_index));
+        ASSERT_EQ(1, poll_ret) << "worker " << worker_index
+                               << " was not woken up";
         EXPECT_EQ(send_data, recv_data);
     }
 };
@@ -254,9 +248,9 @@ UCS_TEST_P(test_ucp_wakeup_shared_context, efd_every_worker)
     for (int i = 0; i < receiver().get_num_workers(); ++i) {
         /* poll() does not progress the sender, so complete the wireup and
          * flush the sender before waiting for the event */
-        send_recv(i, i, false);
+        ASSERT_NO_FATAL_FAILURE(send_recv(i, i, false));
         flush_worker(sender(), i);
-        send_recv(i, i + 1, true);
+        ASSERT_NO_FATAL_FAILURE(send_recv(i, i + 1, true));
     }
 }
 
