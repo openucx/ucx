@@ -42,6 +42,23 @@ protected:
         ASSERT_EQ(UCS_OK, status);
     }
 
+    int poll_efd(int efd, int timeout)
+    {
+        struct pollfd pollfd;
+        int ret;
+
+        pollfd.events = POLLIN;
+        pollfd.fd     = efd;
+        do {
+            ret = poll(&pollfd, 1, timeout);
+        } while ((ret < 0) && (errno == EINTR));
+        if (ret < 0) {
+            UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
+        }
+
+        return ret;
+    }
+
     static size_t comp_cntr;
 };
 
@@ -87,17 +104,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
         }
         ASSERT_UCS_OK(status);
 
-        int ret;
-        do {
-            struct pollfd pollfd;
-            pollfd.events = POLLIN;
-            pollfd.fd     = recv_efd;
-            ret = poll(&pollfd, 1, -1);
-        } while ((ret < 0) && (errno == EINTR));
-        if (ret < 0) {
-            UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
-        }
-        ASSERT_EQ(1, ret);
+        ASSERT_EQ(1, poll_efd(recv_efd, -1));
         EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(recv_worker));
     }
 
@@ -188,8 +195,8 @@ class test_ucp_wakeup_shared_context : public test_ucp_wakeup {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_with_value(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP,
-                               0, "", MULTI_THREAD_CONTEXT);
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP,
+                    MULTI_THREAD_CONTEXT);
     }
 
 protected:
@@ -199,9 +206,9 @@ protected:
         const uint64_t tag            = 0xdeadbeef;
         ucp_worker_h recv_worker      = receiver().worker(worker_index);
         uint64_t recv_data            = 0;
-        struct pollfd pollfd;
         void *rreq, *sreq;
         ucs_status_t status;
+        int efd;
 
         rreq = ucp_tag_recv_nb(recv_worker, &recv_data, sizeof(recv_data),
                                datatype, tag, (ucp_tag_t)-1, recv_completion);
@@ -222,9 +229,8 @@ protected:
         ASSERT_UCS_PTR_OK(sreq);
 
         if (wakeup) {
-            pollfd.events = POLLIN;
-            ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &pollfd.fd));
-            EXPECT_EQ(1, poll(&pollfd, 1, 10000))
+            ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &efd));
+            EXPECT_EQ(1, poll_efd(efd, 10000))
                     << "worker " << worker_index << " was not woken up";
         }
 
