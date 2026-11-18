@@ -138,6 +138,7 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     uct_ze_copy_translate_handle_func_t translate;
     void *driver_handle, *import, *release, *get_base, *base;
     ze_result_t ret;
+    char probe;
 
     /* The extension bypasses the loader, so it needs the driver's own handle.
        The translation exists since loader 1.7 and is resolved at runtime to
@@ -168,7 +169,7 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     }
 
     /* The driver may provide the entry points with the feature disabled */
-    ret = ((uct_ze_copy_get_base_func_t)get_base)(driver_handle, &base, &base);
+    ret = ((uct_ze_copy_get_base_func_t)get_base)(driver_handle, &probe, &base);
     if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
         ucs_debug("level zero driver does not support host pointer import");
         return;
@@ -318,7 +319,8 @@ static void uct_ze_copy_import_release(void *address)
 
     pthread_mutex_lock(&registry->lock);
     iter = kh_get(ze_copy_import, &registry->hash, (uintptr_t)address);
-    ucs_assert(iter != kh_end(&registry->hash));
+    ucs_assertv_always(iter != kh_end(&registry->hash),
+                       "ze_copy memh %p is not a registered import", address);
     ucs_assert(kh_val(&registry->hash, iter) > 0);
     if (--kh_val(&registry->hash, iter) > 0) {
         pthread_mutex_unlock(&registry->lock);
