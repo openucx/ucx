@@ -75,15 +75,17 @@ void* test_md::alloc_thread(void *arg)
 }
 
 ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
-                              uct_mem_h *memh_p)
+                              uct_mem_h *memh_p, ucs_memory_type_t mem_type)
 {
     /* Register memory respecting MD reg_alignment */
     ucs_align_ptr_range(&address, &length, md_attr().reg_alignment);
 
     uct_md_mem_reg_params_t reg_params;
 
-    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                            UCT_MD_MEM_REG_FIELD_MEM_TYPE;
     reg_params.flags      = flags;
+    reg_params.mem_type   = mem_type;
 
     return uct_md_mem_reg_v2(md(), address, length, &reg_params, memh_p);
 }
@@ -398,7 +400,8 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
             // allocate memory using system allocator and register it
             alloc_memory(&ptr, size, nullptr, mem_type);
             rva = static_cast<unsigned *>(ptr);
-            ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh));
+            ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh,
+                                  mem_type));
         }
 
         // pack
@@ -711,7 +714,8 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
             alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
-            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh,
+                             mem_type);
 
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
@@ -749,7 +753,8 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
             unsigned n = 0;
             while (n < count) {
                 uct_mem_h memh;
-                status = reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh);
+                status = reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh,
+                                 mem_type);
                 ASSERT_UCS_OK(status);
                 ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
