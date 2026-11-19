@@ -298,6 +298,30 @@ void mem_buffer::set_device(int device)
 #endif
 }
 
+int mem_buffer::get_active_primary_ctx_count()
+{
+    int count = 0;
+#if HAVE_CUDA
+    int num_devices, active;
+    unsigned flags;
+    CUdevice device;
+
+    if (cuDeviceGetCount(&num_devices) != CUDA_SUCCESS) {
+        return 0;
+    }
+
+    for (int i = 0; i < num_devices; ++i) {
+        if ((cuDeviceGet(&device, i) == CUDA_SUCCESS) &&
+            (cuDevicePrimaryCtxGetState(device, &flags, &active) ==
+             CUDA_SUCCESS) &&
+            active) {
+            ++count;
+        }
+    }
+#endif
+    return count;
+}
+
 void mem_buffer::check_and_restore_device_context()
 {
 #if HAVE_CUDA

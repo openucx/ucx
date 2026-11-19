@@ -174,6 +174,7 @@ protected:
     unsigned                        m_num_log_handlers_before;
 
     static std::set<int>            m_prev_open_fds;
+    static int                      m_prev_cuda_ctx_count;
     static size_t                   m_total_fd_increases;
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
@@ -185,6 +186,7 @@ protected:
 private:
     void check_fd_leaks();
     bool is_open_file_whitelisted(const std::string &path) const;
+    bool is_cuda_ctx_file(const std::string &path) const;
     void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();
