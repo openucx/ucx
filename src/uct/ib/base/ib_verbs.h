@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term “Broadcom”
 * refers to Broadcom Inc. and/or its subsidiaries.
@@ -21,6 +21,9 @@
 
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler_def.h>
+#include <ucs/sys/lib.h>
+#include <ucs/sys/preprocessor.h>
 
 /* Read device properties */
 #if HAVE_DECL_IBV_QUERY_DEVICE_EX
@@ -195,5 +198,30 @@ uct_ib_query_qp_peer_info(struct ibv_qp *qp, struct ibv_ah_attr *ah_attr,
 
     return UCS_OK;
 }
+
+
+/* Pointer to an rdma-core function, written only by the module constructor */
+#define UCT_IB_OPTIONAL_FUNC(_func) \
+    UCS_SYS_LIB_FUNC_PTR(uct_ib_optional_, _func)
+
+#define UCT_IB_OPTIONAL_FUNC_DECLARE(_func) \
+    UCS_SYS_LIB_FUNC_PTR_DECLARE(uct_ib_optional_, _func);
+
+#define UCT_IB_OPTIONAL_FUNC_DEFINE(_func) \
+    UCS_SYS_LIB_FUNC_PTR_DEFINE(uct_ib_optional_, _func);
+
+/* _lib_func: a function of the same library which the module links */
+#define UCT_IB_OPTIONAL_FUNC_LOAD(_func, _lib_func) \
+    UCS_SYS_LIB_FUNC_LOAD_OPTIONAL(uct_ib_optional_, _func, _lib_func);
+
+/* libibverbs functions added after rdma-core 50 */
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+#  define UCT_IB_VERBS_OPTIONAL_FUNCS(_macro, ...) \
+      _macro(ibv_query_port_speed, ##__VA_ARGS__)
+#else
+#  define UCT_IB_VERBS_OPTIONAL_FUNCS(_macro, ...)
+#endif
+
+UCT_IB_VERBS_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_DECLARE)
 
 #endif /* UCT_IB_VERBS_H */
