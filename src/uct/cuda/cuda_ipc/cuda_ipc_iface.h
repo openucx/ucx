@@ -38,9 +38,10 @@ typedef struct {
 } UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
 
 
-/* Multi-node NVLINK device address extended with the IMEX channel, which is
- * valid if FLAG_FABRIC is set. Older peers may send only
- * uct_cuda_ipc_mnnvl_device_addr_t, so check the address length first. */
+/* Multi-node NVLINK device address extended with the IMEX channel, sent if
+ * FLAG_MNNVL is set. The channel is valid if FLAG_FABRIC is also set. Older
+ * peers may send only uct_cuda_ipc_mnnvl_device_addr_t, so check the address
+ * length first. */
 typedef struct {
     uct_cuda_ipc_mnnvl_device_addr_t super;
     uint32_t                         imex_channel;

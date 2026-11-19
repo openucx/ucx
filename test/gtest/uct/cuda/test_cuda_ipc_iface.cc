@@ -115,9 +115,24 @@ protected:
         dev_addr.resize(sizeof(uct_cuda_ipc_mnnvl_device_addr_t));
     }
 
-    bool is_reachable(entity &sender, entity &receiver,
-                      const std::string &dev_addr, std::string &info,
-                      bool other_pid_ns = false)
+    static std::string get_iface_address(entity &e)
+    {
+        std::string iface_addr(e.iface_attr().iface_addr_len, '\0');
+
+        ASSERT_UCS_OK(uct_iface_get_address(
+                e.iface(), (uct_iface_addr_t*)&iface_addr[0]));
+        return iface_addr;
+    }
+
+    /* Same peer, but in another PID namespace */
+    static void set_other_pid_ns(std::string &iface_addr)
+    {
+        EXPECT_EQ(sizeof(uct_cuda_ipc_iface_address_t), iface_addr.size());
+        ((uct_cuda_ipc_iface_address_t*)&iface_addr[0])->pid_ns ^= 1;
+    }
+
+    bool is_reachable(entity &sender, const std::string &dev_addr,
+                      const std::string &iface_addr, std::string &info)
     {
         const uint64_t field_mask =
                 UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
@@ -126,29 +141,27 @@ protected:
                 UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH |
                 UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
-        std::string iface_addr(receiver.iface_attr().iface_addr_len, '\0');
         uct_iface_is_reachable_params_t params;
         char info_str[256] = {};
-
-        ASSERT_UCS_OK(uct_iface_get_address(
-                receiver.iface(), (uct_iface_addr_t*)&iface_addr[0]));
-        if (other_pid_ns) {
-            /* Same peer, but in another PID namespace */
-            EXPECT_EQ(sizeof(uct_cuda_ipc_iface_address_t), iface_addr.size());
-            ((uct_cuda_ipc_iface_address_t*)&iface_addr[0])->pid_ns ^= 1;
-        }
 
         params.field_mask         = field_mask;
         params.info_string        = info_str;
         params.info_string_length = sizeof(info_str);
         params.device_addr        = (const uct_device_addr_t*)dev_addr.data();
         params.device_addr_length = dev_addr.size();
-        params.iface_addr         = (uct_iface_addr_t*)&iface_addr[0];
+        params.iface_addr         = (const uct_iface_addr_t*)iface_addr.data();
         params.iface_addr_length  = iface_addr.size();
 
         bool result = uct_iface_is_reachable_v2(sender.iface(), &params);
         info        = info_str;
         return result;
+    }
+
+    bool is_reachable(entity &sender, entity &receiver,
+                      const std::string &dev_addr, std::string &info)
+    {
+        return is_reachable(sender, dev_addr, get_iface_address(receiver),
+                            info);
     }
 };
 
@@ -211,7 +224,6 @@ UCS_TEST_P(test_cuda_ipc_iface_reachability, v1_23_peer)
     std::string info;
 
     set_remote_host(dev_addr);
-    set_other_imex_channel(dev_addr);
     set_v1_23_peer(dev_addr);
     EXPECT_EQ(17u, dev_addr.size());
     EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
@@ -263,20 +275,27 @@ UCS_TEST_P(test_cuda_ipc_iface_reachability, remote_host_imex)
  * so they are reachable only if both have access to the same IMEX channel */
 UCS_TEST_P(test_cuda_ipc_iface_reachability, other_pid_ns_imex)
 {
-    entity *e1           = create_mnnvl_entity();
-    entity *e2           = create_mnnvl_entity();
-    std::string dev_addr = get_device_address(*e2);
+    entity *e1             = create_mnnvl_entity();
+    entity *e2             = create_mnnvl_entity();
+    std::string dev_addr   = get_device_address(*e2);
+    std::string iface_addr = get_iface_address(*e2);
     std::string info;
 
-    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info, true)) << info;
+    set_other_pid_ns(iface_addr);
+    EXPECT_TRUE(is_reachable(*e1, dev_addr, iface_addr, info)) << info;
 
     set_other_imex_channel(dev_addr);
-    EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info, true));
+    EXPECT_FALSE(is_reachable(*e1, dev_addr, iface_addr, info));
     EXPECT_EQ(0u, info.find("different PID namespace and different IMEX "
                             "channel")) << info;
 
     /* The channel is not checked in the same PID namespace */
     EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
+
+    /* A peer without MNNVL does not send the channel, so it does not compare
+     * the channel either, keeping the check symmetric */
+    ucs_derived_of(e1->md(), uct_cuda_ipc_md_t)->enable_mnnvl = 0;
+    EXPECT_TRUE(is_reachable(*e1, dev_addr, iface_addr, info)) << info;
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_iface_reachability, cuda_ipc)

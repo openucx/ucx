@@ -144,7 +144,9 @@ uct_cuda_ipc_iface_dev_addr_ext(const uct_device_addr_t *addr,
 }
 
 /* Whether fabric IPC handles exported by the peer can be imported: both peers
- * must support them, and use the same IMEX channel if the peer sent it */
+ * must support them, and use the same IMEX channel. The channel is sent only
+ * with MNNVL, so it is compared only if both peers sent it, to keep the check
+ * symmetric. */
 static int uct_cuda_ipc_iface_fabric_reachable(
         const uct_cuda_ipc_md_t *md,
         const uct_iface_is_reachable_params_t *params,
@@ -167,7 +169,8 @@ static int uct_cuda_ipc_iface_fabric_reachable(
     imex_addr = uct_cuda_ipc_iface_dev_addr_ext(params->device_addr,
                                                 dev_addr_len,
                                                 sizeof(*imex_addr));
-    if ((imex_addr != NULL) && (imex_addr->imex_channel != md->imex_channel)) {
+    if (md->enable_mnnvl && (imex_addr != NULL) &&
+        (imex_addr->imex_channel != md->imex_channel)) {
         uct_iface_fill_info_str_buf(
                 params, "%s and different IMEX channel local %u vs %u", reason,
                 md->imex_channel, imex_addr->imex_channel);

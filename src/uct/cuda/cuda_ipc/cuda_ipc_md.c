@@ -139,13 +139,13 @@ uct_cuda_ipc_md_lowest_imex_channel_cb(const struct dirent *entry, void *arg)
     channel_str = entry->d_name + sizeof(channel_prefix) - 1;
     channel     = strtoul(channel_str, &end, 10);
     if ((*channel_str == '\0') || (*end != '\0') ||
-        (channel >= UCT_CUDA_IPC_IMEX_CHANNEL_INVALID)) {
+        (channel >= *lowest_channel)) {
         return UCS_OK;
     }
 
     ucs_snprintf_safe(path, sizeof(path), "%s/%s",
                       UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
-    if ((access(path, R_OK | W_OK) == 0) && (channel < *lowest_channel)) {
+    if (access(path, R_OK | W_OK) == 0) {
         *lowest_channel = channel;
     }
 
