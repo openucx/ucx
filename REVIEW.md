@@ -8,9 +8,10 @@ project docs linked from the root guide.
 
 ## Review Philosophy
 
-Good reviews are direct, specific, and short. The team's comments are almost always 1–3 lines.
-Reviewers commonly ask a question rather than making a demand — "can we ...?", "why not ...?" —
-which signals a soft suggestion versus a hard requirement.
+Good reviews are direct, specific, and short. The team's comments are almost
+always 1–2 sentences. Reviewers commonly ask a question rather than making a
+demand — "can we ...?", "why not ...?" — which signals a soft suggestion
+versus a hard requirement.
 
 - **Match title and description to the code** — the description should follow
   `.github/PULL_REQUEST_TEMPLATE.md`, the "Why?" should explain the value for
@@ -22,9 +23,10 @@ which signals a soft suggestion versus a hard requirement.
   abstraction level, and philosophy
 - **Optimize the hot path** — prioritize performance comments when the changed
   code runs frequently
-- **Don't pile on** — if the same issue is already raised in an unresolved
-  thread, do not raise it again; support the existing thread instead. If the
-  author replied with a good explanation, move on
+- **Don't pile on** — if the same issue is already raised in the PR
+  discussion, do not raise it again; support the existing thread instead. If
+  the author replied with a good explanation, move on unless the current code
+  or CI contradicts it
 
 ---
 
@@ -68,10 +70,9 @@ cover incidental implementation details without a plausible regression risk.
 ## Review Checklist
 
 Apply the `AGENTS.md` discovery rule from the root guide for changed paths, and
-read any style docs relevant to the diff before posting findings.
-Check whether changed folders need `AGENTS.md` updates: add guidance for new
-recurring patterns, remove stale local guidance, and do not leave ownership
-gaps.
+read any style docs relevant to the diff before commenting.
+Flag missing or stale `AGENTS.md` guidance only when the PR introduces or
+changes a durable recurring pattern, ownership boundary, or convention.
 
 Review by risk, in order:
 
@@ -84,7 +85,7 @@ Review by risk, in order:
 Focused checks:
 
 - For resource lifetime changes, verify ownership and cleanup scope before
-  posting a finding. For keyed or cached resources, trace the key/value scope
+  reporting a finding. For keyed or cached resources, trace the key/value scope
   end to end and check whether cleanup affects only the intended key, all
   matching keys, or unrelated live users.
 - When a change marks, initializes, validates, or reclassifies an object/state,
@@ -132,15 +133,20 @@ severity is needed, use only the inline prefixes from the table: `blocker:` or
 `minor:`.
 
 **Blocker bar is high.** Config naming debates, default value choices, and documentation gaps are
-never blockers — they go in the no-prefix or `minor:` bucket.
+never blockers — they go in the no-prefix or `minor:` bucket. An uncertain
+concern is never a blocker.
 
 **Length**: 1–2 sentences per comment. Use a longer comment only when the
 issue is complicated and non-obvious.
 
 **Language:** Use simple English — many contributors are non-native speakers.
 
-**Comment order:** Start with the requested change, then briefly explain why it
-is needed when the reason is not obvious. Example:
+**Actionability:** Omit observations that identify neither a concrete impact
+nor a specific question or requested action.
+
+**Comment order:** For change requests, start with the requested action, then
+briefly explain why it is needed when the reason is not obvious. For uncertainty
+or intent, ask a direct question. Example:
 `pls add $(UCX_LT_RELEASE) here as well; otherwise libucs_signal stays outside
 the suffix scheme.`
 
@@ -152,8 +158,7 @@ comment only for PR-level concerns.
 
 **Review body:** Avoid generic review-summary comments such as `Code Review`,
 finding counts, severity counts, or `N findings posted inline`. Leave the
-review body empty when inline comments are self-contained. Use a top-level PR
-comment only for a real PR-level concern.
+review body empty unless there is a real PR-level concern.
 
 **Code suggestions:** Prefer a GitHub `suggestion` block
 (` ```suggestion ... ``` `) when the requested change is obvious and

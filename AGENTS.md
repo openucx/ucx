@@ -21,8 +21,8 @@ them.
 
 ## Universal Work Rules
 
-- For any file you touch, read the nearest `AGENTS.md` and each parent guide up
-  to this root guide before editing.
+- Before editing or reviewing a file, read the nearest `AGENTS.md` and each
+  parent guide up to this root guide.
 - Keep changes scoped to the requested behavior; use `REVIEW.md` for PR split
   expectations.
 - Prefer existing local patterns before adding new abstractions.
