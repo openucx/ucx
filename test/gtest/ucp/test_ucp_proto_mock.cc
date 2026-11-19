@@ -4204,6 +4204,7 @@ public:
         modify_config("ZCOPY_THRESH", "0");
         modify_config("MIN_RMA_CHUNK_SIZE", "1k");
         const size_t max_zcopy = this->max_zcopy();
+        const double get_ratio = this->get_path_ratio();
         for (unsigned i = 0; i < 2; ++i) {
             const unsigned num_paths = this->num_paths(i);
             add_mock_iface("mock_" + std::to_string(i) + ":1",
@@ -4212,13 +4213,19 @@ public:
                         attr.latency           = {500e-9, 0};
                         attr.dev_num_paths     = num_paths;
                         attr.cap.put.max_zcopy = max_zcopy;
+                        attr.cap.get.max_zcopy = max_zcopy;
                     },
-                    [num_paths](uct_perf_attr_t &perf_attr) {
-                        /* The paths share the device, as on RoCE LAG */
+                    [num_paths, get_ratio](uct_perf_attr_t &perf_attr) {
+                        /* The paths share the device, as on RoCE LAG, and
+                         * the read path can limit get */
+                        bool get = (perf_attr.field_mask &
+                                    UCT_PERF_ATTR_FIELD_OPERATION) &&
+                                   uct_ep_op_is_get(perf_attr.operation);
                         if (perf_attr.field_mask &
                             UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
                             perf_attr.path_bandwidth = {
-                                0, 32.0 * UCS_GBYTE / num_paths};
+                                0, (get ? get_ratio : 1.0) * 32.0 *
+                                           UCS_GBYTE / num_paths};
                         }
                     });
         }
@@ -4244,6 +4251,12 @@ protected:
         return UCS_MBYTE;
     }
 
+    /* Share of the path estimate which get has */
+    virtual double get_path_ratio() const
+    {
+        return 1.0;
+    }
+
     void install_hooks(ucp_ep_h ep)
     {
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -4262,6 +4275,7 @@ protected:
             }
 
             m_hooks.setup(&tl_ep->iface->ops.ep_put_zcopy, count_put_zcopy);
+            m_hooks.setup(&tl_ep->iface->ops.ep_get_zcopy, count_get_zcopy);
         }
     }
 
@@ -4361,13 +4375,25 @@ protected:
         m_fragments[0] = m_fragments[1] = 0;
     }
 
+    void check_rma(ucp_operation_id_t op_id, ucp_ep_h ep, double first,
+                   double second, size_t size, double tolerance)
+    {
+        reset_counters();
+        send_recv_rma(size, op_id, UCS_MEMORY_TYPE_HOST, ep);
+        EXPECT_EQ(size, m_bytes[0] + m_bytes[1]);
+        EXPECT_NEAR(size * first / (first + second), m_bytes[0], tolerance);
+    }
+
     void check_put(ucp_ep_h ep, double first, double second,
                    size_t size = 40 * UCS_KBYTE, double tolerance = 2)
     {
-        reset_counters();
-        send_recv_rma(size, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST, ep);
-        EXPECT_EQ(size, m_bytes[0] + m_bytes[1]);
-        EXPECT_NEAR(size * first / (first + second), m_bytes[0], tolerance);
+        check_rma(UCP_OP_ID_PUT, ep, first, second, size, tolerance);
+    }
+
+    void check_get(ucp_ep_h ep, double first, double second,
+                   size_t size = 40 * UCS_KBYTE, double tolerance = 2)
+    {
+        check_rma(UCP_OP_ID_GET, ep, first, second, size, tolerance);
     }
 
     void put_sgl(ucp_ep_h ep, size_t num_elems, size_t elem_size)
@@ -4446,9 +4472,25 @@ private:
                                         size_t count, uint64_t remote_addr,
                                         uct_rkey_t rkey, uct_completion_t *comp)
     {
-        auto status = m_self->m_hooks.orig_func(&ep->iface->ops.ep_put_zcopy,
-                                               ep, iov, count, remote_addr,
-                                               rkey, comp);
+        return count_zcopy(ep, iov, count,
+                           m_self->m_hooks.orig_func(
+                                   &ep->iface->ops.ep_put_zcopy, ep, iov,
+                                   count, remote_addr, rkey, comp));
+    }
+
+    static ucs_status_t count_get_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                        size_t count, uint64_t remote_addr,
+                                        uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        return count_zcopy(ep, iov, count,
+                           m_self->m_hooks.orig_func(
+                                   &ep->iface->ops.ep_get_zcopy, ep, iov,
+                                   count, remote_addr, rkey, comp));
+    }
+
+    static ucs_status_t count_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                    size_t count, ucs_status_t status)
+    {
         size_t length = 0;
 
         if (!UCS_STATUS_IS_ERR(status)) {
@@ -4694,8 +4736,66 @@ UCS_TEST_P(test_ucp_proto_mock_path_bw, put_sgl)
     EXPECT_EQ(0u, m_bytes[0]);
 }
 
+UCS_TEST_P(test_ucp_proto_mock_path_bw, get_split_and_recovery)
+{
+    auto ep = sender().ep();
+
+    check_get(ep, 1, 1);
+
+    /* Get is split by the samples of put, as put */
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_TRUE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
+    check_put(ep, 1, 4);
+    check_get(ep, 1, 4);
+    check_get(ep, 1, 4, 10 * UCS_MBYTE + 100 * UCS_KBYTE, UCS_MBYTE / 4);
+
+    set_samples(ep, 32.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    EXPECT_FALSE(ep->flags & UCP_EP_FLAG_PATH_DEGRADED);
+    check_get(ep, 1, 1);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw, get_zero_sample_skips_lane)
+{
+    auto ep = sender().ep();
+
+    set_samples(ep, 0, 32.0 * UCS_GBYTE);
+    check_get(ep, 0, 1, 40 * UCS_KBYTE, 0);
+    check_get(ep, 0, 1, 10 * UCS_MBYTE, 0);
+    EXPECT_EQ(0u, m_fragments[0]);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw, mm_cma, "posix,cma")
+
+
+/* Get has half of the path estimate, as on ports which limit reads */
+class test_ucp_proto_mock_path_bw_read_limited :
+        public test_ucp_proto_mock_path_bw {
+protected:
+    double get_path_ratio() const override
+    {
+        return 0.5;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_bw_read_limited, get_split)
+{
+    auto ep = sender().ep();
+
+    /* Get compares the samples with its own lower path estimate */
+    set_samples(ep, 24.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    check_put(ep, 3, 4);
+    check_get(ep, 1, 1);
+
+    set_samples(ep, 8.0 * UCS_GBYTE, 32.0 * UCS_GBYTE);
+    check_put(ep, 1, 4);
+    check_get(ep, 1, 2);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_read_limited, rcx,
+                              "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_read_limited, mm_cma,
+                              "posix,cma")
 
 
 /* Send and progress of a single-thread worker do not hold the async lock */
