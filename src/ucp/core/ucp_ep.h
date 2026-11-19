@@ -868,7 +868,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep);
 int ucp_ep_failover_in_wireup(ucp_ep_h ucp_ep, ucp_lane_index_t lane);
 
 ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status);
+                               ucs_status_t status);
 
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                              ucs_status_t status);

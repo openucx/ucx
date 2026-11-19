@@ -475,10 +475,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     }
 
     if (ucp_ep_failover_in_wireup(ucp_ep, lane)) {
-        /* No connected lane to rebuild yet. Discard every lane, including
-         * requests queued on the wireup endpoint. */
-        ucp_ep_set_failed(ucp_ep, lane, status);
-        return UCS_OK;
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        /* Aux error after the peer address keeps the discard path below.
+         * Any other failure during the initial handshake fails the ep. */
+        if (!ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep)) {
+            ucp_ep_set_failed(ucp_ep, lane, status);
+            return UCS_OK;
+        }
     }
 
     /* The lane slot may already be the replacement. This error belongs

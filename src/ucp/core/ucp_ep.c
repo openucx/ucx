@@ -2535,8 +2535,8 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
      *       is the completed p2p handshake. */
     if ((ucp_ep_config(ep)->p2p_lanes != 0) &&
         !(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        ucs_diag("ep %p: recovery in the middle of p2p wireup is not recoverable, "
-                "setting lanes failed", ep);
+        ucs_diag("ep %p: recovery in the middle of p2p wireup is not "
+                 "recoverable, setting lanes failed", ep);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
         ret = 1;
         goto done;
