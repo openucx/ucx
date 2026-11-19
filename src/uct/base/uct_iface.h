@@ -393,19 +393,6 @@ typedef struct uct_base_iface {
     void                     *ep_event_arg;
 } uct_base_iface_t;
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ep_put_short_comp(uct_ep_h ep, const void *buffer, unsigned length,
-                      uint64_t remote_addr, uct_rkey_t rkey,
-                      uct_completion_t *comp)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
-
-    ucs_assert(iface->internal_ops->ep_put_short_comp != NULL);
-    return iface->internal_ops->ep_put_short_comp(ep, buffer, length,
-                                                  remote_addr, rkey, comp);
-}
-
-
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_iface_config_t *UCS_STATS_ARG(ucs_stats_node_t*)

@@ -16,8 +16,7 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
-#include <ucp/wireup/wireup_ep.h>
-#include <uct/base/uct_iface.h>
+#include <uct/uct_private.h>
 
 
 extern ucp_proto_t ucp_put_am_bcopy_proto;
@@ -71,7 +70,7 @@ ucp_proto_put_offload_short_progress_common(uct_pending_req_t *self,
     tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
     uct_ep  = tracked ? ucp_ep_get_lane(ep, lane) :
                         ucp_ep_get_fast_lane(ep, lane);
-    if (tracked && !ucp_wireup_ep_test(uct_ep) && !ucp_is_uct_ep_failed(uct_ep)) {
+    if (tracked) {
         status = uct_ep_put_short_comp(uct_ep, buffer, length,
                                        req->send.rma.remote_addr, tl_rkey,
                                        &req->send.state.uct_comp);
@@ -106,7 +105,9 @@ ucp_proto_put_offload_short_token_progress(uct_pending_req_t *self)
 }
 
 static void ucp_proto_put_offload_short_probe_common(
-        const ucp_proto_init_params_t *init_params, int tracked)
+        const ucp_proto_init_params_t *init_params, unsigned extra_flags,
+        ucp_lane_type_t lane_type, uint64_t tl_v2_cap_flags,
+        ucp_lane_map_t exclude_map)
 {
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
@@ -127,19 +128,14 @@ static void ucp_proto_put_offload_short_probe_common(
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               extra_flags,
+        .super.exclude_map   = exclude_map,
         .super.reg_mem_info  = ucp_mem_info_unknown,
-        .lane_type           = UCP_LANE_TYPE_RMA,
-        .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
+        .lane_type           = lane_type,
+        .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT,
+        .tl_v2_cap_flags     = tl_v2_cap_flags
     };
-
-    if (tracked) {
-        params.super.flags      |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
-        params.super.exclude_map = 0;
-        params.lane_type         = UCP_LANE_TYPE_RMA_BW;
-        params.tl_v2_cap_flags    = UCT_IFACE_FLAG_V2_PUT_SHORT_COMP;
-    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         !ucp_proto_is_short_supported(init_params->select_param)) {
@@ -157,20 +153,41 @@ static void ucp_proto_put_offload_short_probe_common(
 static void
 ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_put_offload_short_probe_common(init_params, 0);
+    ucp_proto_put_offload_short_probe_common(
+            init_params, 0, UCP_LANE_TYPE_RMA, 0, ~UCP_MAX_FAST_PATH_LANES_MASK);
 }
 
 static void ucp_proto_put_offload_short_token_probe(
         const ucp_proto_init_params_t *init_params)
 {
-    if ((init_params->ep_config_key->err_mode !=
-         UCP_ERR_HANDLING_MODE_FAILOVER) ||
-        (init_params->worker->context->config.ext.failover_mode !=
-         UCP_FAILOVER_MODE_TOKEN)) {
+    const ucp_ep_config_key_t *key = init_params->ep_config_key;
+    ucp_worker_h worker           = init_params->worker;
+    ucp_lane_map_t exclude_map    = 0;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+
+    if ((key->err_mode != UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        (worker->context->config.ext.failover_mode != UCP_FAILOVER_MODE_TOKEN)) {
         return;
     }
 
-    ucp_proto_put_offload_short_probe_common(init_params, 1);
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if ((rsc_index == UCP_NULL_RESOURCE) ||
+            !(key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA_BW))) {
+            continue;
+        }
+
+        wiface = ucp_worker_iface(worker, rsc_index);
+        if (!uct_iface_has_put_short_comp(wiface->iface)) {
+            exclude_map |= UCS_BIT(lane);
+        }
+    }
+
+    ucp_proto_put_offload_short_probe_common(
+            init_params, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+            UCP_LANE_TYPE_RMA_BW, UCT_IFACE_FLAG_V2_QUERY_TOKEN, exclude_map);
 }
 
 ucp_proto_t ucp_put_offload_short_proto = {

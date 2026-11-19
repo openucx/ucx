@@ -16,6 +16,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/uct_private.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
@@ -1158,6 +1159,28 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
 
+int uct_iface_has_put_short_comp(uct_iface_h iface)
+{
+    const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
+
+    return base_iface->internal_ops->ep_put_short_comp != NULL;
+}
+
+ucs_status_t
+uct_ep_put_short_comp(uct_ep_h ep, const void *buffer, unsigned length,
+                      uint64_t remote_addr, uct_rkey_t rkey,
+                      uct_completion_t *comp)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+    uct_ep_put_short_comp_func_t put_short = iface->internal_ops->ep_put_short_comp;
+
+    if (ucs_unlikely(put_short == NULL)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return put_short(ep, buffer, length, remote_addr, rkey, comp);
+}
+
 ucs_status_t
 uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                      const size_t *lengths, uct_mem_h const *memhs,
@@ -1220,6 +1243,7 @@ static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
     .ep_get_sgl_zcopy      = (uct_ep_get_sgl_zcopy_func_t)uct_stub_ep_return_status,
     .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)uct_stub_ep_return_status,
+    .ep_put_short_comp     = (uct_ep_put_short_comp_func_t)uct_stub_ep_return_status,
 };
 
 ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)

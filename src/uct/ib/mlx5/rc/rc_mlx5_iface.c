@@ -1207,8 +1207,7 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN |
-                                     UCT_IFACE_FLAG_V2_PUT_SHORT_COMP;
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         }
 
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {

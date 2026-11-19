@@ -25,6 +25,7 @@ nobase_dist_libuct_la_HEADERS = \
 	api/device/uct_device_types.h
 
 noinst_HEADERS = \
+	uct_private.h \
 	base/uct_md.h \
 	base/uct_component.h \
 	base/uct_iface.h \
