@@ -16,7 +16,7 @@
 # pr/main.yml.
 services:
   rapidsai-ci-conda:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-conda:${RAPIDS_VER}-${IMAGE_REV}
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-conda:${RAPIDS_VER:?}-${IMAGE_REV:?}
     build:
       context: .
       dockerfile: rapidsai-ci-conda.Dockerfile
@@ -24,7 +24,7 @@ services:
         BASE_IMAGE: rapidsai/ci-conda:${RAPIDS_VER}-latest
 
   rapidsai-ci-wheel-cuda13:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-${IMAGE_REV}
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER:?}-cuda13-${IMAGE_REV:?}
     build:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile
@@ -32,7 +32,7 @@ services:
         BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda13.4.3-rockylinux8-py3.12
 
   rapidsai-ci-wheel-cuda12:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-${IMAGE_REV}
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER:?}-cuda12-${IMAGE_REV:?}
     build:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile

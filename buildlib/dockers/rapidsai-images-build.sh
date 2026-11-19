@@ -59,8 +59,8 @@ esac
 # destination preflight and the final verify both iterate this list.
 images=()
 while read -r t; do
-  t="${t//\$\{RAPIDS_VER\}/$RAPIDS_VER}"
-  t="${t//\$\{IMAGE_REV\}/$IMAGE_REV}"
+  t="${t//\$\{RAPIDS_VER:\?\}/$RAPIDS_VER}"
+  t="${t//\$\{IMAGE_REV:\?\}/$IMAGE_REV}"
   images+=("$REGISTRY/${t#*/}")
 done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
 # An empty list would skip the destination preflight and the final verify.
