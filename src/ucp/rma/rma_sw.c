@@ -52,8 +52,8 @@ ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
         return status;
     }
 
-    ucs_diag("ep %p: failed to send software RMA/AMO reply on lane %d: %s", ep,
-             req->send.lane, ucs_status_string(status));
+    ucs_diag("ep %p: failed to send software RMA/AMO reply %p on lane %d: %s",
+             ep, req, req->send.lane, ucs_status_string(status));
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         goto out_drop;
@@ -82,6 +82,7 @@ ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
     return UCS_OK;
 
 out_drop:
+    ucs_debug("ep %p: dropping software RMA/AMO reply %p", ep, req);
     ucp_request_put(req);
     return UCS_OK;
 }
