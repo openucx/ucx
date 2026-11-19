@@ -53,8 +53,11 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
     {"HOST_IMPORT", "try",
      "Import host memory into the Level Zero driver when it is registered, so\n"
      "that copies to and from it reuse one driver allocation instead of\n"
-     "mapping the range again for every copy. With 'y', opening the memory\n"
-     "domain fails if the driver cannot import host memory.",
+     "mapping the range again for every copy. A range inside an imported\n"
+     "range shares its import. A range which only partly overlaps an\n"
+     "imported range is registered without creating a new import, and its\n"
+     "copies may be slower. With 'y', opening the memory domain fails if the\n"
+     "driver cannot import host memory.",
      ucs_offsetof(uct_ze_copy_md_config_t, host_import),
      UCS_CONFIG_TYPE_TERNARY},
 
@@ -131,6 +134,42 @@ static ucs_status_t uct_ze_copy_import_get_func(ze_driver_handle_t driver,
     return UCS_OK;
 }
 
+/*
+ * The translation exists since loader 1.7 and is resolved at runtime to keep
+ * older loaders working without the import. It is looked up in the loader
+ * which provides zeDriverGet, so the result does not depend on how the C
+ * library resolves RTLD_DEFAULT for a module loaded with RTLD_LOCAL.
+ */
+static uct_ze_copy_translate_handle_func_t
+uct_ze_copy_import_find_translate(void)
+{
+    uct_ze_copy_translate_handle_func_t translate;
+    Dl_info lib_info;
+    const char *error;
+    void *dl_handle;
+
+    if (dladdr(zeDriverGet, &lib_info) == 0) {
+        ucs_debug("could not identify the level zero loader providing "
+                  "zeDriverGet");
+        return NULL;
+    }
+
+    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+    if (dl_handle == NULL) {
+        error = dlerror();
+        ucs_debug("could not open loaded level zero loader %s: %s",
+                  lib_info.dli_fname,
+                  (error != NULL) ? error : "unknown error");
+        return NULL;
+    }
+
+    translate = (uct_ze_copy_translate_handle_func_t)
+            dlsym(dl_handle, "zelLoaderTranslateHandle");
+    /* The loader stays loaded as a dependency of this module */
+    dlclose(dl_handle);
+    return translate;
+}
+
 static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
@@ -140,11 +179,8 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     ze_result_t ret;
     char probe;
 
-    /* The extension bypasses the loader, so it needs the driver's own handle.
-       The translation exists since loader 1.7 and is resolved at runtime to
-       keep older loaders working without the import. */
-    translate = (uct_ze_copy_translate_handle_func_t)
-            dlsym(RTLD_DEFAULT, "zelLoaderTranslateHandle");
+    /* The extension bypasses the loader, so it needs the driver's own handle */
+    translate = uct_ze_copy_import_find_translate();
     if (translate == NULL) {
         ucs_debug("zelLoaderTranslateHandle not found, host memory import is "
                   "disabled");
@@ -286,6 +322,8 @@ static void uct_ze_copy_import_acquire(void *address, size_t length,
     }
 
     if ((base_start == NULL) && (base_end == NULL)) {
+        /* Neither end is imported. Imports strictly inside the range are
+           possible; the driver accepts the range as a separate import */
         status = uct_ze_copy_import_create(address, length, log_level);
         if (status == UCS_OK) {
             *memh_p = address;
@@ -301,8 +339,8 @@ static void uct_ze_copy_import_acquire(void *address, size_t length,
                       address, length, base_start);
         }
     } else {
-        ucs_debug("host memory %p length %zu partially overlaps the imports "
-                  "at %p and %p, left unimported",
+        ucs_debug("host memory %p length %zu overlaps an existing import "
+                  "(start base %p, end base %p), left unimported",
                   address, length, base_start, base_end);
     }
 
