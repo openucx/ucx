@@ -13,7 +13,8 @@ and `rapidsai-ci-wheel.Dockerfile`.
 
 `<VER>` is the RAPIDS CalVer, e.g. `26.08`. `<REV>` is the wrapper revision
 (`azp-1`, `azp-2`, ...), new for every rebuild so a pushed tag is never
-overwritten under running CI. The wrappers only add a `chmod` so the
+overwritten under running CI. The script builds all three images with the same
+`<REV>`, so it has to be one that none of them has used. The wrappers only add a `chmod` so the
 non-root UID Azure runs steps as can write (`/opt/conda`, `/pyenv`) and `gdb` for
 stack capture. Each image is a multi-arch manifest (`linux/amd64` + `linux/arm64`);
 Azure picks the right arch per agent automatically.
@@ -73,10 +74,13 @@ the environment:
 
 ```sh
 RAPIDS_VER=<VER> IMAGE_REV=<REV> \
-ARM_NODE=ssh://<user>@<arm-builder> \   # when running on an x86 host
+ARM_NODE=ssh://<user>@<arm-builder> \
 HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 ./rapidsai-images-build.sh
 ```
+
+`ARM_NODE` is for an x86 host; on an arm host pass `X86_NODE` with the x86
+builder's ssh endpoint instead.
 
 The script preflights the base tags, refuses to overwrite an existing destination
 tag (pick a new `<REV>`), creates a 2-node buildx builder (each node

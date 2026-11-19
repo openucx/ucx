@@ -9,10 +9,12 @@
 # builder and the harbor push credentials in the environment:
 #
 #   RAPIDS_VER=<ver> IMAGE_REV=<rev> \
-#   ARM_NODE=ssh://<user>@<arm-builder>   # required when running on an x86 host
-#   X86_NODE=ssh://<user>@<x86-builder>   # required when running on an arm host
+#   ARM_NODE=ssh://<user>@<arm-builder> \
 #   HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 #   ./rapidsai-images-build.sh
+#
+# ARM_NODE is for an x86 host; on an arm host pass
+# X86_NODE=ssh://<user>@<x86-builder> instead.
 #
 # The running host must key-auth (non-interactive) ssh to the other node; the
 # remote buildkit runs over that ssh context. Do not leave credentials at rest
@@ -90,6 +92,13 @@ if docker context inspect "$REMOTE_CTX" >/dev/null 2>&1; then
   docker context update "$REMOTE_CTX" --docker "host=$REMOTE_NODE"
 else
   docker context create "$REMOTE_CTX" --docker "host=$REMOTE_NODE"
+fi
+# A builder left without its remote node (a run interrupted between the two
+# creates below) has no native node for the foreign arch; drop it, so it is
+# created again with both nodes.
+if nodes=$(docker buildx inspect "$BUILDER" 2>/dev/null) \
+   && ! grep -qE "^Name:[[:space:]]+${BUILDER}-remote\$" <<< "$nodes"; then
+  docker buildx rm "$BUILDER"
 fi
 if ! docker buildx inspect "$BUILDER" >/dev/null 2>&1; then
   docker buildx create --name "$BUILDER" --driver docker-container \
