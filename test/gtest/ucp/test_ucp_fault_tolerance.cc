@@ -663,13 +663,17 @@ protected:
             EXPECT_NE(UCS_INPROGRESS, status) <<
                     "operation timed out during wireup";
 
+            /* Both sender endpoints see the dead worker. Count only the
+             * injected one. */
             deadline = ucs::get_deadline();
-            while ((m_total_err_count == 0) && (ucs_get_time() < deadline)) {
+            while ((m_initiator_err_count == 0) &&
+                   (ucs_get_time() < deadline)) {
                 short_progress_loop();
             }
 
-            EXPECT_NE(0u, m_total_err_count)
-                    << "Error callback was not invoked";
+            ASSERT_EQ(1, m_initiator_err_count)
+                    << "Error callback invoked " << m_initiator_err_count
+                    << " times";
         }
 
         /* Peer is gone, so cleanup must force-close instead of flushing. */
