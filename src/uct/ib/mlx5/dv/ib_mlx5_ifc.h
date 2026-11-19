@@ -132,7 +132,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_f0[0x4];
     uint8_t    cmd_on_behalf[0x1];
     uint8_t    device_emulation_manager[0x1];
-    uint8_t    reserved_at_f6[0x6];
+    uint8_t    reserved_at_f6[0x2];
+    uint8_t    dump_fill_mkey[0x1];
+    uint8_t    reserved_at_f9[0x3];
     uint8_t    log_max_eq[0x4];
 
     uint8_t    max_indirection[0x8];

@@ -10,6 +10,7 @@
 #include <string>
 
 extern "C" {
+#include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
@@ -717,8 +718,7 @@ protected:
         mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
         sbuf.pattern_fill(m_seed, size);
 
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        ucp_request_param_t param = {};
 
         ucs_status_ptr_t sptr = ucp_am_send_nbx(ep, AM_ID, NULL, 0, sbuf.ptr(),
                                                 size, &param);
@@ -762,8 +762,7 @@ protected:
 
     ucs_status_t do_get_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
                                  ucp_rkey_h rkey, size_t size, bool flush) {
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        ucp_request_param_t param = {};
 
         lbuf.memset(0);
         ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
@@ -1308,3 +1307,207 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
+
+/* A send on a FAILOVER endpoint is canceled locally when the user closes the
+ * endpoint or destroys the worker while the send is still pending or in flight.
+ * The send must complete once, without a restart on the endpoint which is going
+ * away. */
+class test_ucp_fault_tolerance_teardown : public test_ucp_fault_tolerance {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, 256, "small");
+        add_variant_with_value(variants, UCP_FEATURE_AM, UCS_MBYTE, "large");
+    }
+
+protected:
+    enum teardown_t {
+        TEARDOWN_WORKER_DESTROY, /* Destroy the worker, do not close the ep */
+        TEARDOWN_CLOSE,          /* Close the ep gracefully, destroy the worker
+                                    before the close completes */
+        TEARDOWN_FORCE_CLOSE     /* Close the ep by force, then destroy the
+                                    worker */
+    };
+
+    void init() override
+    {
+        ucp_am_handler_param_t param;
+
+        ucp_test::init();
+
+        /* The receiver does not connect back, so only the sender starts
+         * the wireup */
+        sender().connect(&receiver(), get_ep_params());
+
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
+        param.id         = AM_ID;
+        param.cb         = am_count_cb;
+        param.arg        = this;
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(receiver().worker(),
+                                                     &param));
+
+        m_sbuf.resize(get_variant_value());
+    }
+
+    static ucs_status_t
+    am_count_cb(void *arg, const void *header, size_t header_length,
+                void *data, size_t length, const ucp_am_recv_param_t *param)
+    {
+        ++static_cast<test_ucp_fault_tolerance_teardown*>(arg)->m_am_recv_count;
+        return UCS_OK;
+    }
+
+    static void am_send_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        test_ucp_fault_tolerance_teardown *self =
+                static_cast<test_ucp_fault_tolerance_teardown*>(user_data);
+        ucp_request_t *req = static_cast<ucp_request_t*>(request) - 1;
+
+        ++self->m_am_send_count;
+        self->m_am_send_status = status;
+        /* A restart of the AM marks it as resent */
+        self->m_am_restarted   = req->send.msg_proto.am.flags &
+                                 UCP_AM_HDR_FLAG_RESEND;
+        ucp_request_free(request);
+    }
+
+    static bool has_wireup_lane(ucp_ep_h ep)
+    {
+        ucp_lane_index_t lane;
+
+        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void test_teardown(bool connected, teardown_t teardown)
+    {
+        ucp_ep_h ep = sender().ep();
+        ucp_request_param_t param;
+        ucs_status_ptr_t sptr;
+        ucp_request_t *req;
+
+        if (connected) {
+            /* The receiver gets an AM once the wireup is complete */
+            sptr = ucp_am_send_nbx(ep, AM_ID, NULL, 0, m_sbuf.data(),
+                                   m_sbuf.size(), &m_req_empty_param);
+            ASSERT_UCS_OK(request_wait(sptr));
+            wait_for_value(&m_am_recv_count, 1u);
+            ASSERT_EQ(1u, m_am_recv_count);
+            wait_for_cond([ep]() { return !has_wireup_lane(ep); },
+                          [this]() { short_progress_loop(); });
+            ASSERT_FALSE(has_wireup_lane(ep));
+        }
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                             UCP_OP_ATTR_FIELD_USER_DATA;
+        param.cb.send      = am_send_cb;
+        param.user_data    = this;
+        sptr               = ucp_am_send_nbx(ep, AM_ID, NULL, 0, m_sbuf.data(),
+                                             m_sbuf.size(), &param);
+        ASSERT_FALSE(UCS_PTR_IS_ERR(sptr))
+                << ucs_status_string(UCS_PTR_STATUS(sptr));
+        if (sptr == NULL) {
+            UCS_TEST_SKIP_R("the AM send completed at once");
+        }
+
+        req = static_cast<ucp_request_t*>(sptr) - 1;
+        if (!connected) {
+            /* The receiver does not progress, so the wireup cannot complete */
+            ASSERT_TRUE(ucp_wireup_ep_test(ucp_ep_get_lane(ep, req->send.lane)))
+                    << "the AM send does not wait for the wireup";
+        }
+
+        /* The worker or the close destroys the endpoint */
+        sender().revoke_ep();
+
+        if (teardown != TEARDOWN_WORKER_DESTROY) {
+            /* Release the close request at once, as applications do */
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
+            param.flags        = (teardown == TEARDOWN_FORCE_CLOSE) ?
+                                 UCP_EP_CLOSE_FLAG_FORCE : 0;
+            sptr               = ucp_ep_close_nbx(ep, &param);
+            ASSERT_FALSE(UCS_PTR_IS_ERR(sptr))
+                    << ucs_status_string(UCS_PTR_STATUS(sptr));
+            if (sptr != NULL) {
+                ucp_request_free(sptr);
+            }
+        }
+
+        if (teardown == TEARDOWN_FORCE_CLOSE) {
+            /* Let the force close discard the lanes; an in-flight send may
+             * complete only when the worker destroys them */
+            wait_for_cond([this]() { return m_am_send_count != 0; },
+                          [this]() { sender().progress(); }, 1.0);
+        }
+
+        {
+            /* Both peers go away; the transports may warn about the
+             * operations which they release */
+            scoped_log_handler slh_warn(wrap_warns_logger);
+            scoped_log_handler slh_err(wrap_errors_logger);
+
+            sender().destroy_worker();
+            receiver().destroy_worker();
+        }
+
+        EXPECT_EQ(1u, m_am_send_count)
+                << "the AM send completed " << m_am_send_count << " times";
+        if (connected) {
+            EXPECT_TRUE((m_am_send_status == UCS_OK) ||
+                        (m_am_send_status == UCS_ERR_CANCELED))
+                    << ucs_status_string(m_am_send_status);
+        } else {
+            EXPECT_EQ(UCS_ERR_CANCELED, m_am_send_status)
+                    << ucs_status_string(m_am_send_status);
+        }
+
+        EXPECT_FALSE(m_am_restarted) << "the canceled AM send was restarted";
+    }
+
+    std::vector<char> m_sbuf;
+    volatile unsigned m_am_recv_count = 0;
+    unsigned          m_am_send_count = 0;
+    ucs_status_t      m_am_send_status = UCS_INPROGRESS;
+    bool              m_am_restarted   = false;
+};
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, pending_am_worker_destroy)
+{
+    test_teardown(false, TEARDOWN_WORKER_DESTROY);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, pending_am_close)
+{
+    test_teardown(false, TEARDOWN_CLOSE);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, pending_am_force_close)
+{
+    test_teardown(false, TEARDOWN_FORCE_CLOSE);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_worker_destroy)
+{
+    test_teardown(true, TEARDOWN_WORKER_DESTROY);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_close)
+{
+    test_teardown(true, TEARDOWN_CLOSE);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_force_close)
+{
+    test_teardown(true, TEARDOWN_FORCE_CLOSE);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rc, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rcx, "rc_x")

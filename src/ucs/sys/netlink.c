@@ -15,15 +15,31 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/sys.h>
 #include <ucs/type/status.h>
 #include <ucs/type/init_once.h>
 
 #include <errno.h>
+#include <limits.h>
 #include <linux/rtnetlink.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+
+/* Supported by Linux 4.13 and later */
+#ifndef RTM_F_FIB_MATCH
+#define RTM_F_FIB_MATCH 0x2000
+#endif
+
+/* Supported by Linux 4.3 and later */
+#ifndef RTNH_F_LINKDOWN
+#define RTNH_F_LINKDOWN 16
+#endif
+
+/* 198.51.100.1, a TEST-NET-2 address which is not assigned to any host */
+#define UCS_NETLINK_TEST_NET_2_ADDR 0xc6336401
 
 
 typedef struct {
@@ -39,6 +55,49 @@ typedef struct {
     uint8_t                 route_type;
 } ucs_netlink_route_entry_t;
 
+
+typedef struct {
+    struct rtmsg rtm;
+    /* Space for RTA_DST, RTA_SRC and RTA_OIF attributes */
+    char         attrs[(2 * RTA_SPACE(sizeof(struct in6_addr))) +
+                       RTA_SPACE(sizeof(int))];
+} ucs_netlink_route_req_t;
+
+
+typedef struct {
+    int      if_index;
+    int      family;
+    uint64_t dst[2]; /* IPv4 or IPv6 address */
+    uint64_t src[2]; /* IPv4 or IPv6 address */
+} ucs_netlink_route_key_t;
+
+
+typedef struct {
+    ucs_status_t        status;
+    ucs_netlink_route_t route;
+} ucs_netlink_route_result_t;
+
+
+static UCS_F_ALWAYS_INLINE khint32_t
+ucs_netlink_route_key_hash(ucs_netlink_route_key_t key)
+{
+    return kh_int64_hash_func(key.dst[0] ^ key.dst[1] ^ key.if_index);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucs_netlink_route_key_equal(ucs_netlink_route_key_t key1,
+                            ucs_netlink_route_key_t key2)
+{
+    return !memcmp(&key1, &key2, sizeof(key1));
+}
+
+/* Results of kernel route lookups */
+KHASH_INIT(ucs_netlink_route_cache, ucs_netlink_route_key_t,
+           ucs_netlink_route_result_t, 1, ucs_netlink_route_key_hash,
+           ucs_netlink_route_key_equal);
+static khash_t(ucs_netlink_route_cache) ucs_netlink_route_cache;
+static pthread_mutex_t ucs_netlink_route_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
 UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned,
                        ucs_netlink_route_entry_t);
 
@@ -50,6 +109,13 @@ static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 KHASH_INIT(ucs_netlink_vrf_cache, khint32_t, int, 1, kh_int_hash_func,
            kh_int_hash_equal);
 static khash_t(ucs_netlink_vrf_cache) ucs_netlink_vrf_master_cache;
+
+UCS_ARRAY_DECLARE_TYPE(ucs_netlink_host_addrs_t, unsigned,
+                       struct sockaddr_storage);
+
+/* Addresses of all network interfaces, in all routing domains */
+static ucs_netlink_host_addrs_t ucs_netlink_host_addrs =
+        UCS_ARRAY_DYNAMIC_INITIALIZER;
 
 /* Look up an initialized VRF cache */
 static int ucs_netlink_vrf_master_lookup(int if_index)
@@ -138,7 +204,10 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
 err:
     ucs_log(err_log_level, "received error response from netlink err %d: %s",
             err, strerror(-err));
-    return UCS_ERR_IO_ERROR;
+    /* Route lookups fail with these errors when the kernel has no route */
+    return ((err == -ENETUNREACH) || (err == -EHOSTUNREACH)) ?
+                   UCS_ERR_UNREACHABLE :
+                   UCS_ERR_IO_ERROR;
 }
 
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
@@ -480,6 +549,397 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
     return (ucs_netlink_max_netmask_len(if_index, sa_remote) == netmask_len);
+}
+
+static void ucs_netlink_route_req_add_attr(ucs_netlink_route_req_t *req,
+                                           size_t *len_p, unsigned short type,
+                                           const void *data, size_t data_len)
+{
+    struct rtattr *rta = UCS_PTR_BYTE_OFFSET(req, *len_p);
+
+    ucs_assert((*len_p + RTA_SPACE(data_len)) <= sizeof(*req));
+
+    rta->rta_type = type;
+    rta->rta_len  = RTA_LENGTH(data_len);
+    memcpy(RTA_DATA(rta), data, data_len);
+    *len_p += RTA_SPACE(data_len);
+}
+
+static ucs_status_t
+ucs_netlink_route_req_add_addr(ucs_netlink_route_req_t *req, size_t *len_p,
+                               unsigned short type, const struct sockaddr *sa,
+                               unsigned char *prefix_len_p)
+{
+    size_t addr_size;
+    ucs_status_t status;
+
+    status = ucs_sockaddr_inet_addr_sizeof(sa, &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_netlink_route_req_add_attr(req, len_p, type,
+                                   ucs_sockaddr_get_inet_addr(sa), addr_size);
+    *prefix_len_p = addr_size * CHAR_BIT;
+    return UCS_OK;
+}
+
+static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
+{
+    if (route->num_oifs >= UCS_NETLINK_ROUTE_MAX_OIFS) {
+        ucs_debug("route has more than %d output interfaces, ignoring %d",
+                  UCS_NETLINK_ROUTE_MAX_OIFS, if_index);
+        route->is_oifs_truncated = 1;
+        return;
+    }
+
+    route->oifs[route->num_oifs++] = if_index;
+}
+
+/* Check whether a route can be through an interface. When the output
+ * interfaces are not reported, or some of them were not stored, the interface
+ * can be one of them. */
+static int ucs_netlink_route_has_oif(const ucs_netlink_route_t *route,
+                                     int if_index)
+{
+    unsigned i;
+
+    if (!route->is_oifs_reported || route->is_oifs_truncated) {
+        return 1;
+    }
+
+    for (i = 0; i < route->num_oifs; ++i) {
+        if (route->oifs[i] == if_index) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/* Check whether a route is not through an interface, but through another
+ * interface of the routing domain of a VRF device, or out of any VRF if -1 */
+static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
+                                              int if_index, int vrf_index)
+{
+    unsigned i;
+
+    if (ucs_netlink_route_has_oif(route, if_index)) {
+        return 0;
+    }
+
+    for (i = 0; i < route->num_oifs; ++i) {
+        if (ucs_netlink_get_vrf_master_index(route->oifs[i]) == vrf_index) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static ucs_status_t
+ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    ucs_netlink_route_t *route = arg;
+    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    int len                    = RTM_PAYLOAD(nlh);
+    const struct rtnexthop *nh;
+    const struct rtattr *rta;
+    int nh_len;
+
+    if (nlh->nlmsg_type != RTM_NEWROUTE) {
+        return UCS_INPROGRESS;
+    }
+
+    route->type              = rt_msg->rtm_type;
+    route->prefix_len        = rt_msg->rtm_dst_len;
+    route->num_oifs          = 0;
+    route->is_oifs_reported  = 0;
+    route->is_oifs_truncated = 0;
+
+    for (rta = RTM_RTA(rt_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if (rta->rta_type == RTA_OIF) {
+            route->is_oifs_reported = 1;
+            ucs_netlink_route_add_oif(route, *(const int*)RTA_DATA(rta));
+        } else if (rta->rta_type == RTA_MULTIPATH) {
+            /* A fib match reply lists all the nexthops of the route, including
+             * the ones the kernel does not use. RTNH_OK() reads the nexthop
+             * length before checking the remaining length. */
+            route->is_oifs_reported = 1;
+            nh_len                  = RTA_PAYLOAD(rta);
+            for (nh = RTA_DATA(rta);
+                 (nh_len >= (int)sizeof(*nh)) && RTNH_OK(nh, nh_len);
+                 nh_len -= RTNH_ALIGN(nh->rtnh_len), nh = RTNH_NEXT(nh)) {
+                if (!(nh->rtnh_flags & (RTNH_F_DEAD | RTNH_F_LINKDOWN))) {
+                    ucs_netlink_route_add_oif(route, nh->rtnh_ifindex);
+                }
+            }
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
+                                             const struct sockaddr *sa_local,
+                                             int if_index,
+                                             ucs_netlink_route_t *route_p)
+{
+    ucs_netlink_route_req_t req = {{0}};
+    ucs_netlink_route_t route   = {.type = RTN_UNSPEC};
+    size_t req_len              = NLMSG_ALIGN(sizeof(req.rtm));
+    ucs_status_t status;
+
+    req.rtm.rtm_family = sa_remote->sa_family;
+    req.rtm.rtm_flags  = RTM_F_FIB_MATCH;
+
+    status = ucs_netlink_route_req_add_addr(&req, &req_len, RTA_DST, sa_remote,
+                                            &req.rtm.rtm_dst_len);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (sa_local != NULL) {
+        status = ucs_netlink_route_req_add_addr(&req, &req_len, RTA_SRC,
+                                                sa_local, &req.rtm.rtm_src_len);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (if_index != 0) {
+        ucs_netlink_route_req_add_attr(&req, &req_len, RTA_OIF, &if_index,
+                                       sizeof(if_index));
+    }
+
+    status = ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, 0, &req,
+                                      req_len, ucs_netlink_parse_route_cb,
+                                      &route, UCS_LOG_LEVEL_TRACE);
+    if (status == UCS_ERR_UNREACHABLE) {
+        /* No route is a valid reply, which the callers report if needed */
+        return status;
+    } else if (status != UCS_OK) {
+        ucs_debug("netlink route request failed: %s",
+                  ucs_status_string(status));
+        return status;
+    }
+
+    if (route.type == RTN_UNSPEC) {
+        ucs_debug("netlink reply to a route request has no route");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *route_p = route;
+    return UCS_OK;
+}
+
+static int ucs_netlink_probe_fib_match(void)
+{
+    struct sockaddr_in sin = {.sin_family = AF_INET};
+    ucs_netlink_route_t route;
+    unsigned lo_index;
+
+    /* The loopback address has a local route, unless the kernel does not
+     * understand the request */
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if ((ucs_get_loopback_ndev_index(&lo_index) != UCS_OK) ||
+        (ucs_netlink_route_lookup((const struct sockaddr*)&sin, NULL, 0,
+                                  &route) != UCS_OK) ||
+        (route.type != RTN_LOCAL)) {
+        return 0;
+    }
+
+    /* A kernel which ignores the fib match flag replies with an on-link route
+     * through the requested interface instead of an error */
+    sin.sin_addr.s_addr = htonl(UCS_NETLINK_TEST_NET_2_ADDR);
+    return ucs_netlink_route_lookup((const struct sockaddr*)&sin, NULL,
+                                    lo_index, &route) == UCS_ERR_UNREACHABLE;
+}
+
+static int ucs_netlink_is_fib_match_supported(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static int supported;
+
+    UCS_INIT_ONCE(&init_once) {
+        supported = ucs_netlink_probe_fib_match();
+        ucs_debug("netlink route lookup by fib match is %ssupported",
+                  supported ? "" : "not ");
+    }
+
+    return supported;
+}
+
+ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
+                                   const struct sockaddr *sa_local,
+                                   int if_index, ucs_netlink_route_t *route_p)
+{
+    ucs_netlink_route_result_t *result;
+    ucs_netlink_route_key_t key;
+    ucs_status_t status;
+    size_t addr_size;
+    khiter_t iter;
+    int khret;
+
+    ucs_assert((sa_local == NULL) ||
+               (sa_local->sa_family == sa_remote->sa_family));
+
+    if (!ucs_netlink_is_fib_match_supported()) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = ucs_sockaddr_inet_addr_sizeof(sa_remote, &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memset(&key, 0, sizeof(key));
+    memcpy(key.dst, ucs_sockaddr_get_inet_addr(sa_remote), addr_size);
+    if (sa_local != NULL) {
+        memcpy(key.src, ucs_sockaddr_get_inet_addr(sa_local), addr_size);
+    }
+    key.if_index = if_index;
+    key.family   = sa_remote->sa_family;
+
+    pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+    iter = kh_put(ucs_netlink_route_cache, &ucs_netlink_route_cache, key,
+                  &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to put route lookup in the cache");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_unlock;
+    }
+
+    result = &kh_val(&ucs_netlink_route_cache, iter);
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        result->status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
+                                                  &result->route);
+    }
+
+    status = result->status;
+    if (status == UCS_OK) {
+        *route_p = result->route;
+    } else if (status != UCS_ERR_UNREACHABLE) {
+        /* Other errors can be transient */
+        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
+    }
+
+out_unlock:
+    pthread_mutex_unlock(&ucs_netlink_route_cache_lock);
+    return status;
+}
+
+ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
+                                              const struct sockaddr *sa_remote,
+                                              const struct sockaddr *sa_local,
+                                              uint8_t *best_prefix_len_p)
+{
+    int vrf_index = ucs_netlink_get_vrf_master_index(if_index);
+    ucs_netlink_route_t route, best_route;
+    ucs_status_t status;
+
+    *best_prefix_len_p = 0;
+
+    status = ucs_netlink_route_get(sa_remote, sa_local, if_index, &route);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* An IPv6 lookup with a source address can select a route through another
+     * interface */
+    if (!ucs_netlink_route_has_oif(&route, if_index)) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    if (route.prefix_len > 0) {
+        return UCS_OK;
+    }
+
+    /* The lookup is done without the source address, because per-source
+     * routing tables can have a default route to any destination. A VRF
+     * lookup falls through to the main table when the VRF table has no
+     * route, so routes through other domains are ignored. */
+    status = ucs_netlink_route_get(sa_remote, NULL, ucs_max(vrf_index, 0),
+                                   &best_route);
+    if ((status == UCS_OK) && (best_route.prefix_len > 0) &&
+        ucs_netlink_route_is_via_other_oif(&best_route, if_index, vrf_index)) {
+        *best_prefix_len_p = best_route.prefix_len;
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_netlink_parse_host_addr_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    const struct ifaddrmsg *ifa_msg = NLMSG_DATA(nlh);
+    const void *in_addr             = NULL;
+    struct sockaddr_storage *addr;
+    const struct rtattr *rta;
+    int len;
+
+    if ((nlh->nlmsg_type != RTM_NEWADDR) ||
+        ((ifa_msg->ifa_family != AF_INET) &&
+         (ifa_msg->ifa_family != AF_INET6))) {
+        return UCS_INPROGRESS;
+    }
+
+    /* IFA_ADDRESS is the peer address of a point-to-point interface, and
+     * IFA_LOCAL is its local address */
+    len = IFA_PAYLOAD(nlh);
+    for (rta = IFA_RTA(ifa_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if ((rta->rta_type == IFA_LOCAL) ||
+            ((rta->rta_type == IFA_ADDRESS) && (in_addr == NULL))) {
+            in_addr = RTA_DATA(rta);
+        }
+    }
+
+    if (in_addr == NULL) {
+        return UCS_INPROGRESS;
+    }
+
+    addr = ucs_array_append(&ucs_netlink_host_addrs,
+                            ucs_error("could not allocate host address");
+                            return UCS_ERR_NO_MEMORY);
+
+    memset(addr, 0, sizeof(*addr));
+    addr->ss_family = ifa_msg->ifa_family;
+    if (ucs_sockaddr_set_inet_addr((struct sockaddr*)addr, in_addr) != UCS_OK) {
+        ucs_array_pop_back(&ucs_netlink_host_addrs);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_INPROGRESS;
+}
+
+static void ucs_netlink_init_host_addrs(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    struct ifaddrmsg ifa_msg         = {.ifa_family = AF_UNSPEC};
+
+    UCS_INIT_ONCE(&init_once) {
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETADDR, NLM_F_DUMP,
+                                 &ifa_msg, sizeof(ifa_msg),
+                                 ucs_netlink_parse_host_addr_cb, NULL,
+                                 UCS_LOG_LEVEL_ERROR);
+    }
+}
+
+int ucs_netlink_is_host_addr(const struct sockaddr *sa)
+{
+    const struct sockaddr_storage *addr;
+
+    ucs_netlink_init_host_addrs();
+
+    ucs_array_for_each(addr, &ucs_netlink_host_addrs) {
+        if ((addr->ss_family == sa->sa_family) &&
+            !ucs_sockaddr_ip_cmp((const struct sockaddr*)addr, sa)) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int ucs_netlink_is_vrf_kind(const struct rtattr *rta)

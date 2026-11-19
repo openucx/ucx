@@ -41,15 +41,6 @@ protected:
         return uct_iface_is_reachable_v2(tl_iface, &params);
     }
 
-    void cleanup_entities() {
-        m_e1->destroy_eps();
-        m_e2->destroy_eps();
-        m_entities.remove(m_e1);
-        m_entities.remove(m_e2);
-        m_e1 = NULL;
-        m_e2 = NULL;
-    }
-
     void send_recv_short() {
         create_connected_entities();
         check_pkeys();

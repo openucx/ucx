@@ -10,6 +10,7 @@
 #include "cuda_ipc.inl"
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_vmm_multi.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
@@ -761,6 +762,11 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     memh->pid     = getpid();
     memh->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
     ucs_list_head_init(&memh->list);
+#if HAVE_CUDA_FABRIC
+    memh->reg_address = (CUdeviceptr)address;
+    memh->reg_length  = length;
+    memh->vmm_multi   = NULL;
+#endif
 
     *memh_p = memh;
     return UCS_OK;
@@ -773,6 +779,10 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     uct_cuda_ipc_lkey_t *key, *tmp;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+#if HAVE_CUDA_FABRIC
+    uct_cuda_ipc_vmm_multi_meta_destroy(memh);
+#endif
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
@@ -957,6 +967,14 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component  = &uct_cuda_ipc_component.super;
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* Peers import POSIX FD handles with pidfd_getfd(), which requires them to
+     * pass the ptrace access check against this process. Export the handles
+     * even if peers are not allowed: the same process, its descendants and
+     * peers with CAP_SYS_PTRACE still pass the check, and other peers fall
+     * back when the import fails. */
+    ucs_sys_ptrace_enable_peers();
+#endif
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);

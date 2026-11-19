@@ -35,4 +35,6 @@ typedef struct uct_rocm_ipc_iface_config {
 
 int uct_rocm_ipc_signal_invalidate_enabled(void);
 
+int uct_rocm_ipc_cache_enabled(void);
+
 #endif
