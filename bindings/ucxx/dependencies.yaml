@@ -23,10 +23,8 @@ files:
       - test_cpp
       - test_python_common
       - test_python_ucxx
-      - depends_on_cudf
       - depends_on_cupy
       - depends_on_numba_cuda
-      - depends_on_rmm
       - depends_on_ucx_run
   test_cpp:
     output: none
@@ -44,7 +42,6 @@ files:
       - test_python_common
       - test_python_ucxx
       - depends_on_cupy
-      - depends_on_cudf
       - depends_on_libucxx
       - depends_on_numba_cuda
       - depends_on_ucxx
@@ -82,7 +79,6 @@ files:
       key: requires
     includes:
       - build_cpp
-      - depends_on_librmm
       - depends_on_ucx_build
   py_run_libucxx:
     output: pyproject
@@ -93,7 +89,6 @@ files:
     extras:
       table: project
     includes:
-      - depends_on_librmm
       - depends_on_ucx_run
   py_build_ucxx:
     output: pyproject
@@ -116,9 +111,7 @@ files:
       key: requires
     includes:
       - build_python_ucxx
-      - depends_on_librmm
       - depends_on_libucxx
-      - depends_on_rmm
   py_run_ucxx:
     output: pyproject
     matrix:
@@ -130,7 +123,6 @@ files:
     includes:
       - run_python_ucxx
       - depends_on_libucxx
-      - depends_on_rmm
   py_test_ucxx:
     output: pyproject
     matrix:
@@ -142,7 +134,6 @@ files:
       key: test
     includes:
       - depends_on_cupy
-      - depends_on_cudf
       - depends_on_numba_cuda
       - test_python_common
       - test_python_ucxx
@@ -158,7 +149,6 @@ dependencies:
           - c-compiler
           - cxx-compiler
           - &cmake_ver cmake>=4.0,<4.5
-          - librmm==26.12.*,>=0.0.0a0
           - ninja
       - output_types: [requirements, constraints, pyproject]
         packages:
@@ -311,8 +301,6 @@ dependencies:
           # These packages are useful for development but not otherwise required to build/run
           # RAPIDS
           - pip
-          - dask-cuda==26.12.*,>=0.0.0a0
-          - dask-cudf==26.12.*,>=0.0.0a0
           # UCX Build
           - libtool
           - automake
@@ -376,10 +364,10 @@ dependencies:
         packages:
           - pytest
           - pytest-rerunfailures!=16.0.0  # See https://github.com/pytest-dev/pytest-rerunfailures/issues/302
+          - *psutil  # Used for timeout_with_stack.py
       - output_types: [conda]
         packages:
           - *gdb  # Used for timeout_with_stack.py
-          - *psutil  # Used for timeout_with_stack.py
     specific:
       - output_types: [conda, requirements, constraints, pyproject]
         matrices:
@@ -397,7 +385,6 @@ dependencies:
         packages:
           - cloudpickle
           - pytest-asyncio>=1.0.0
-          - rapids-dask-dependency==26.12.*,>=0.0.0a0
           - pytest-xdist
   depends_on_cupy:
     common:
@@ -459,72 +446,6 @@ dependencies:
           - matrix:
             packages:
               - *numba_cuda
-  depends_on_librmm:
-    common:
-      - output_types: conda
-        packages:
-          - &librmm_unsuffixed librmm==26.12.*,>=0.0.0a0
-    specific:
-      - output_types: [requirements, constraints, pyproject]
-        matrices:
-          - matrix:
-              cuda: "12.*"
-              cuda_suffixed: "true"
-            packages:
-              - librmm-cu12==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda: "13.*"
-              cuda_suffixed: "true"
-            packages:
-              - librmm-cu13==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda_suffixed: "false"
-            packages:
-              - *librmm_unsuffixed
-  depends_on_rmm:
-    common:
-      - output_types: conda
-        packages:
-          - &rmm_unsuffixed rmm==26.12.*,>=0.0.0a0
-    specific:
-      - output_types: [requirements, constraints, pyproject]
-        matrices:
-          - matrix:
-              cuda: "12.*"
-              cuda_suffixed: "true"
-            packages:
-              - rmm-cu12==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda: "13.*"
-              cuda_suffixed: "true"
-            packages:
-              - rmm-cu13==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda_suffixed: "false"
-            packages:
-              - *rmm_unsuffixed
-  depends_on_cudf:
-    common:
-      - output_types: [conda]
-        packages:
-          - &cudf_unsuffixed cudf==26.12.*,>=0.0.0a0
-    specific:
-      - output_types: [requirements, constraints, pyproject]
-        matrices:
-          - matrix:
-              cuda: "12.*"
-              cuda_suffixed: "true"
-            packages:
-              - cudf-cu12==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda: "13.*"
-              cuda_suffixed: "true"
-            packages:
-              - cudf-cu13==26.12.*,>=0.0.0a0
-          - matrix:
-              cuda_suffixed: "false"
-            packages:
-              - *cudf_unsuffixed
   depends_on_libucxx:
     common:
       - output_types: conda

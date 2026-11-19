@@ -272,7 +272,6 @@ outputs:
         by_name:
           - cuda-cudart
           - cuda-version
-          - librmm
           - python_abi
           - ucx
     about:

@@ -64,7 +64,7 @@ run_py_benchmark() {
     ASYNCIO_WAIT=""
   fi
 
-  CMD_LINE="UCXPY_ENABLE_DELAYED_SUBMISSION=${ENABLE_DELAYED_SUBMISSION} UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} python ${TIMEOUT_TOOL_PATH} --enable-python $((2*60)) python -m ucxx.benchmarks.send_recv --backend ${BACKEND} -o cupy --reuse-alloc -n 8MiB --n-buffers $N_BUFFERS --progress-mode ${PROGRESS_MODE} ${ASYNCIO_WAIT}"
+  CMD_LINE="UCXPY_ENABLE_DELAYED_SUBMISSION=${ENABLE_DELAYED_SUBMISSION} UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} python ${TIMEOUT_TOOL_PATH} --enable-python $((2*60)) python -m ucxx.benchmarks.send_recv --backend ${BACKEND} -o cupy --reuse-alloc -n 8388608 --n-buffers $N_BUFFERS --progress-mode ${PROGRESS_MODE} ${ASYNCIO_WAIT}"
 
   # Workaround for https://github.com/rapidsai/ucxx/issues/15
   CMD_LINE="UCX_KEEPALIVE_INTERVAL=1ms ${CMD_LINE}"
@@ -86,7 +86,7 @@ run_py_benchmark() {
     UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} \
     python "${TIMEOUT_TOOL_PATH}" --enable-python $((2*60)) \
     python -m ucxx.benchmarks.send_recv --backend "${BACKEND}" \
-    -o cupy --reuse-alloc -n 8MiB --n-buffers "$N_BUFFERS" --progress-mode "${PROGRESS_MODE}" ${ASYNCIO_WAIT}
+    -o cupy --reuse-alloc -n 8388608 --n-buffers "$N_BUFFERS" --progress-mode "${PROGRESS_MODE}" ${ASYNCIO_WAIT}
 
     LAST_STATUS=$?
     if [ "${LAST_STATUS}" -eq 0 ]; then

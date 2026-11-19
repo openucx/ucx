@@ -9,7 +9,6 @@ context:
   cuda_major: '${{ (env.get("RAPIDS_CUDA_VERSION") | split("."))[0] }}'
   datetime_string: '${{ env.get("RAPIDS_DATETIME_STRING") }}'
   head_rev: '${{ git.head_rev(".")[:8] }}'
-  rapids_version: '${{ env.get("RAPIDS_PACKAGE_DEPENDENCY") }}'
   # Set UCXX_NO_LIBUCX=true to build against a UCX installation not managed by conda.
   # For testing only, with significant limitations (e.g., UCX must not be installed with
   # prefix /usr; use ucx_ROOT to locate it); see ci/README.md.
@@ -87,7 +86,6 @@ outputs:
         - ${{ stdlib("c") }}
       host:
         - cuda-version =${{ cuda_version }}
-        - librmm ${{ rapids_version }}
         - rapids-build-backend >=0.4.0,<0.5.0
         - if: not no_libucx
           then:
@@ -250,7 +248,6 @@ outputs:
         by_name:
           - cuda-cudart
           - cuda-version
-          - librmm
           - libucxx
           - ucx
     about:

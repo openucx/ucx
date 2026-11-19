@@ -18,8 +18,6 @@ sccache --stop-server 2>/dev/null || true
 
 UCXX_PACKAGE_VERSION=$(rapids-generate-version)
 export UCXX_PACKAGE_VERSION
-RAPIDS_PACKAGE_DEPENDENCY=$(sed -E -e 's/^([0-9]+\.)0?([1-9][0-9]?)\.[0-9]+$/\1\2.*/' RAPIDS_VERSION)
-export RAPIDS_PACKAGE_DEPENDENCY
 
 # populates `RATTLER_CHANNELS` array and `RATTLER_ARGS` array
 source rapids-rattler-channel-string
