@@ -538,6 +538,14 @@ ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class);
 int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class);
 
 /**
+ * Check whether the host is Vera Rubin: a Vera CPU and at least one GPU, all
+ * of them Rubin GPUs.
+ *
+ * @return Nonzero if the host is Vera Rubin, or zero otherwise.
+ */
+int ucs_topo_is_vera_rubin(void);
+
+/**
  * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
  * among all unique BDFs of the same class.
  *

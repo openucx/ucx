@@ -14,6 +14,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <ucs/sys/topo/base/topo_groups.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/array.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -41,6 +42,9 @@
 #define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
 #define UCT_GDAKI_DEV_EP_SIZE          64
 #define UCT_GDAKI_DEV_QP_SIZE          128
+
+#define UCT_GDAKI_VR_NUM_BOARDS     2
+#define UCT_GDAKI_VR_NICS_PER_BOARD 2
 
 #define UCT_GDAKI_CUDA_REG_FLAGS \
     (CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP | \
@@ -1372,6 +1376,7 @@ typedef struct {
     int                    usecount;
     int                    reachable;
     unsigned               plane; /* Plane rank, or UCT_GDAKI_PLANE_NONE */
+    unsigned               order; /* Tie-break before the IB device index */
 } uct_gdaki_dev_score_t;
 
 typedef struct {
@@ -1422,9 +1427,10 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
         return result;
     }
 
-    /* Break the remaining ties by IB device index, so that equally close and
-     * equally used devices are picked in a deterministic order, which keeps the
-     * devices of one NIC together */
+    if (a->order != b->order) {
+        return ucs_signum((int64_t)a->order - b->order);
+    }
+
     return ucs_signum((int64_t)a->ibdev_index - b->ibdev_index);
 }
 
@@ -1468,6 +1474,9 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
     nvmlPciInfo_t nvml_pci;
     ucs_sys_device_t sys_dev;
     ucs_status_t status;
+
+    /* ucs_topo_is_vera_rubin() needs all the GPUs, with their flags */
+    uct_cuda_init_devices();
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_dev_count));
     if (status != UCS_OK) {
@@ -1823,6 +1832,93 @@ out:
     return num_planes;
 }
 
+static int uct_gdaki_dev_is_cx9(ucs_sys_device_t sys_dev)
+{
+    static const ucs_sys_pci_id_t cx9_pci_id = UCT_IB_DEVICE_PCI_ID_CX9;
+    ucs_sys_pci_id_t pci_id;
+
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    return ucs_topo_pci_id_equal(&pci_id, &cx9_pci_id);
+}
+
+static void
+uct_gdaki_board_set_plane(const uct_gdaki_dev_matrix_elem_t *dmat,
+                          uct_gdaki_dev_score_t *scores, unsigned num_scores,
+                          ucs_sys_device_t sys_dev, unsigned plane,
+                          unsigned order)
+{
+    unsigned i;
+
+    for (i = 0; i < num_scores; ++i) {
+        if (dmat[scores[i].ibdev_index].sys_dev == sys_dev) {
+            scores[i].plane = plane;
+            scores[i].order = order;
+        }
+    }
+}
+
+static unsigned
+uct_gdaki_board_detect(const uct_gdaki_dev_matrix_elem_t *dmat,
+                       uct_gdaki_dev_score_t *scores, unsigned num_scores,
+                       unsigned long *auto_k_p)
+{
+    ucs_sys_device_bitmap_t filter = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    unsigned num_planes            = 0;
+    const ucs_topo_group_element_t *nic;
+    const ucs_topo_group_t *group;
+    ucs_topo_groups_t groups;
+    size_t nic_idx, pf;
+    unsigned plane, i;
+
+    if (!ucs_topo_is_vera_rubin()) {
+        return 0;
+    }
+
+    for (i = 0; i < num_scores; ++i) {
+        if (!uct_gdaki_dev_is_cx9(dmat[scores[i].ibdev_index].sys_dev)) {
+            continue;
+        }
+
+        if (dmat[scores[i].ibdev_index].direct_nic) {
+            ucs_debug("ib device %u is a direct nic", scores[i].ibdev_index);
+            return 0;
+        }
+
+        UCS_STATIC_BITMAP_SET(&filter, dmat[scores[i].ibdev_index].sys_dev);
+    }
+
+    if (UCS_STATIC_BITMAP_IS_ZERO(filter)) {
+        return 0;
+    }
+
+    if (ucs_topo_build_groups(&filter, UCS_TOPO_GROUP_BY_NUMA, &groups) !=
+        UCS_OK) {
+        return 0;
+    }
+
+    for (i = 0; i < num_scores; ++i) {
+        scores[i].plane = UCT_GDAKI_PLANE_NONE;
+    }
+
+    ucs_array_for_each(group, &groups) {
+        ucs_array_for_each_index(nic, nic_idx, &group->nics) {
+            for (pf = 0; pf < nic->num_sys_devs; ++pf) {
+                plane      = (pf * UCT_GDAKI_VR_NUM_BOARDS) +
+                             (nic_idx / UCT_GDAKI_VR_NICS_PER_BOARD);
+                num_planes = ucs_max(num_planes, plane + 1);
+                uct_gdaki_board_set_plane(dmat, scores, num_scores,
+                                          nic->sys_devs[pf], plane, nic_idx);
+            }
+        }
+    }
+
+    *auto_k_p = num_planes;
+    ucs_debug("detected %u board planes", num_planes);
+
+    ucs_topo_release_groups(&groups);
+    return num_planes;
+}
+
 static uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
@@ -1938,6 +2034,12 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         num_planes = uct_gdaki_fabric_detect(ndev_indexes,
                                              num_sys_active_ibdevs, gpu_count,
                                              scores, &fabric_ib_per_cuda);
+    }
+
+    if ((num_planes == 0) && ib_md->config.gda_board_assign) {
+        num_planes = uct_gdaki_board_detect(dmat, scores,
+                                            num_sys_active_ibdevs,
+                                            &fabric_ib_per_cuda);
     }
 
     if (ib_per_cuda == UCS_ULUNITS_AUTO) {
