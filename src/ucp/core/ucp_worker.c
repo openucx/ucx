@@ -477,8 +477,10 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     if (ucp_ep_failover_in_wireup(ucp_ep, lane)) {
         wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
         /* Aux error after the peer address keeps the discard path below.
-         * Any other failure during the initial handshake fails the ep. */
-        if (!ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep)) {
+         * Any other failure during the initial handshake, including an aux
+         * error before the peer address, fails the ep. */
+        if (!ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
+            !ucp_ep_is_local_connected(ucp_ep)) {
             ucp_ep_set_failed(ucp_ep, lane, status);
             return UCS_OK;
         }
@@ -3721,8 +3723,8 @@ static void
 ucp_worker_keepalive_uct_ep(ucp_ep_h ep, ucp_lane_index_t *lane_p,
                             uct_ep_h *uct_ep_p)
 {
-    ucp_lane_index_t lane      = ucp_ep_config(ep)->key.keepalive_lane;
-    uct_ep_h uct_ep            = ucp_ep_get_lane(ep, lane);
+    ucp_lane_index_t lane = ucp_ep_config(ep)->key.keepalive_lane;
+    uct_ep_h uct_ep       = ucp_ep_get_lane(ep, lane);
     ucp_wireup_ep_t *wireup_ep;
     ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_uct_ep;
@@ -3749,10 +3751,12 @@ ucp_worker_keepalive_uct_ep(ucp_ep_h ep, ucp_lane_index_t *lane_p,
     }
 
     wireup_ep = ucp_wireup_ep(wireup_uct_ep);
-    if ((wireup_ep != NULL) && (wireup_ep->aux_ep != NULL)) {
-        lane   = wireup_lane;
-        uct_ep = wireup_uct_ep;
+    if ((wireup_ep == NULL) || (wireup_ep->aux_ep == NULL)) {
+        goto out;
     }
+
+    lane   = wireup_lane;
+    uct_ep = wireup_uct_ep;
 
 out:
     *lane_p   = lane;
