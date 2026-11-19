@@ -808,6 +808,14 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         }
     }
 
+    /* A lower-starting allocation can overlap a stale mapping missed by the
+     * point lookup. Remove it before the first legacy IPC import. */
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        uct_cuda_ipc_cache_invalidate_regions(
+                cache, (void*)key->d_bptr,
+                UCS_PTR_BYTE_OFFSET(key->d_bptr, key->b_len));
+    }
+
     status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
                                          (CUdeviceptr*)mapped_addr, log_level);
     if (ucs_unlikely(status != UCS_OK)) {
