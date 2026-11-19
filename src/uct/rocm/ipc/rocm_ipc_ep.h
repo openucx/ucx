@@ -11,8 +11,6 @@
 #include <ucs/type/class.h>
 #include <uct/api/device/uct_device_types.h>
 
-#include "rocm_ipc_cache.h"
-
 typedef struct uct_rocm_ipc_ep {
     uct_base_ep_t   super;
     pid_t           remote_pid;

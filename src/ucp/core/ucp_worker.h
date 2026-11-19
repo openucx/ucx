@@ -231,15 +231,21 @@ typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t
 #define UCP_EP_PATH_BW_INVALID (-1.0)
 
 
+/* Sources of path bandwidth samples */
+typedef enum {
+    UCP_EP_PATH_BW_OP_PUT,
+    UCP_EP_PATH_BW_OP_LAST
+} ucp_ep_path_bw_op_t;
+
+
 /* Path samples of one configuration and set of lanes of an endpoint,
  * allocated for endpoints on interfaces which report path events. */
 typedef struct {
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
     uint32_t               lane_generation; /* Lanes of the samples */
-    double                 bandwidth[];     /* Lane bandwidth below the path
-                                               estimate, or
-                                               UCP_EP_PATH_BW_INVALID if the
-                                               path is not degraded */
+    /* Lane bandwidth of each source below the path estimate, or
+     * UCP_EP_PATH_BW_INVALID if the path is not degraded */
+    double                 bandwidth[][UCP_EP_PATH_BW_OP_LAST];
 } ucp_ep_path_bw_t;
 
 
@@ -522,7 +528,8 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 /* must be called with async lock held */
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
-/* must be called with async lock held */
+/* must be called with async lock held; @a discarded_cb is called only if
+ * UCS_INPROGRESS is returned, maybe before the function returns */
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,

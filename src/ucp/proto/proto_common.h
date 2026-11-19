@@ -168,6 +168,9 @@ typedef struct {
     /* Single path ratio of the full bandwidth */
     double path_ratio;
 
+    /* Single path bandwidth, without the limits of the system distances */
+    double path_bandwidth;
+
     /* Network latency */
     double latency;
 
