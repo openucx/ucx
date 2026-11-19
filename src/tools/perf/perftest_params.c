@@ -175,7 +175,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -I             create context with wakeup feature enabled\n");
-    printf("     -e <mode>      create endpoints with error handling mode:\n");
+    printf("     -e <mode>      create endpoints with error handling mode "
+           "(none):\n");
     printf("                        none     - no error handling\n");
     printf("                        peer     - peer failure error handling\n");
     printf("                        failover - lane failover error handling\n");
