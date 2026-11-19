@@ -1047,6 +1047,11 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
         }
     }
 
+    if ((status == UCS_ERR_NO_MEMORY) && (mem_type == UCS_MEMORY_TYPE_RDMA)) {
+        /* Other processes on the host may hold all device memory */
+        UCS_TEST_SKIP_R("not enough device memory");
+    }
+
     ASSERT_UCS_OK(status);
 
     ucs_assert(mem->mem_type == mem_type);
