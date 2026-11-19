@@ -175,7 +175,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -I             create context with wakeup feature enabled\n");
-    printf("     -e [<mode>]    create endpoints with error handling mode (peer):\n");
+    printf("     -e <mode>      create endpoints with error handling mode:\n");
     printf("                        none     - no error handling\n");
     printf("                        peer     - peer failure error handling\n");
     printf("                        failover - lane failover error handling\n");
@@ -461,12 +461,6 @@ static ucs_status_t parse_device_level(const char *opt_arg,
 static ucs_status_t
 parse_ucp_err_handling_params(perftest_params_t *params, const char *opt_arg)
 {
-    if (opt_arg == NULL) {
-        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
-        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
-        return UCS_OK;
-    }
-
     if (!strcmp(opt_arg, "peer")) {
         params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
         params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
