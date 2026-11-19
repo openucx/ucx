@@ -100,10 +100,15 @@ case "$phase" in
     # UCX libraries from UCX_PR_PREFIX via LD_LIBRARY_PATH.
     # The wheel test installs from both the libucxx and ucxx wheelhouses via
     # the download helpers; stage both wheels in one dir and point the helpers
-    # there so the libucxx_*.whl / ucxx_*.whl globs resolve.
+    # there so the libucxx_*.whl / ucxx_*.whl globs resolve. A rerun of the
+    # stage adds its wheel to the artifact next to the wheel of the earlier
+    # attempt, and each glob has to match exactly one: stage the newest. The
+    # names differ only in the build timestamp, so they sort by age.
     wheelhouse=/tmp/ucxx-wheelhouse
     mkdir -p "$wheelhouse"
-    cp "$LIBUCXX_WHL_DIR"/*.whl "$UCXX_WHL_DIR"/*.whl "$wheelhouse"/
+    for dir in "$LIBUCXX_WHL_DIR" "$UCXX_WHL_DIR"; do
+      cp "$(printf '%s\n' "$dir"/*.whl | LC_ALL=C sort | tail -n 1)" "$wheelhouse"/
+    done
     shim_download_helper "$wheelhouse"
     export_host_driver_override
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$UCX_PR_PREFIX/lib"

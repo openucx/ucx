@@ -109,10 +109,16 @@ EOF
   chmod +x "$HOME/.local/bin/rapids-download-from-github"
 fi
 
-# Point the download helper at the staged libucxx wheelhouse so the
-# wheel_ucxx build resolves it.
+# Point the download helper at the libucxx wheel so the wheel_ucxx build
+# resolves it. A rerun of the stage adds its wheel to the artifact next to the
+# wheel of the earlier attempt, and ci/build_wheel_ucxx.sh takes exactly one:
+# stage the newest. The names differ only in the build timestamp, so they
+# sort by age.
 if [ -n "${WHEEL_INPUT_DIR:-}" ]; then
-  printf '#!/bin/bash\necho "%s"\n' "$WHEEL_INPUT_DIR" \
+  libucxx_wheelhouse=$(mktemp -d)
+  cp "$(printf '%s\n' "$WHEEL_INPUT_DIR"/*.whl | LC_ALL=C sort | tail -n 1)" \
+    "$libucxx_wheelhouse"/
+  printf '#!/bin/bash\necho "%s"\n' "$libucxx_wheelhouse" \
     > "$HOME/.local/bin/rapids-download-from-github"
   chmod +x "$HOME/.local/bin/rapids-download-from-github"
 fi
