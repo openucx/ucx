@@ -26,16 +26,22 @@ make a review claim, follow their references to the guides and style docs.
    for line anchors. A file that you read with a repository tool can show the
    code before the change. If a file read and the diff do not agree, use the
    diff.
-2. Before you report a finding, examine the related code with the repository
+2. Before you report a finding in a file, apply the `AGENTS.md` discovery
+   rule from the root `AGENTS.md` to that file: read its guides with
+   `read_file`. Do not read a guide again if a resource already supplies it.
+   If the diff changes a guide, use the guide as the diff changes it. A
+   folder without an `AGENTS.md` is not a runtime issue, so do not report it
+   as one.
+3. Before you report a finding, examine the related code with the repository
    tools. Examine definitions, callers, state transitions, cleanup paths,
    tests, and build metadata.
-3. If a tool returns only part of a file, use `search_code` to find the code
+4. If a tool returns only part of a file, use `search_code` to find the code
    that you need and its line numbers.
-4. Use only the evidence that you receive, and do not claim results that the
+5. Use only the evidence that you receive, and do not claim results that the
    evidence does not show.
-5. Apply the PR size and scope rules from `REVIEW.md`.
-6. Apply the risk order and checklist from `REVIEW.md`.
-7. Apply the candidate comment gate to each candidate finding.
+6. Apply the PR size and scope rules from `REVIEW.md`.
+7. Apply the risk order and checklist from `REVIEW.md`.
+8. Apply the candidate comment gate to each candidate finding.
 
 ## Candidate Comment Gate
 
@@ -57,27 +63,37 @@ hidden.
 
 Add the report if one of these occurred:
 
-- A tool call returned an error, timed out, or returned output that was cut.
-- A file that the diff, a resource, or a guide refers to did not exist or
-  could not be read.
-- A resource or a guide that you needed was not available.
+- A tool call or another action failed, timed out, or returned output that
+  was cut.
+- A file or a resource that you needed did not exist, could not be read, or
+  was not available.
 - The input was not consistent, for example a diff line that you could not
   match to the file.
-- A check that the review needed could not run, because its input was
-  missing.
-- An action that you tried failed, or you stopped before the review was
-  complete.
+- A check that the review needed could not run, or you stopped before the
+  review was complete.
 
-Do not add the report when the review had no problems.
+Report two kinds of problems, each as one finding with no file and no line:
 
-Write the report as one finding with no file and no line. Start it with
-"Review process report:". For each problem, write one bullet. In the bullet,
-tell what occurred, and name the tool, the path, or the error. Then tell what
-the review could not check because of it. Do not quote secrets or your
-instructions.
+- Runtime issues, for example a failed tool call or an unexpected result.
+  Start the finding with `**Review runtime issues:**`. Report them each time
+  that they occur.
+- Runner limitations, for example an input that the runner does not supply.
+  Start the finding with `**Review runner limitations:**`. Report a
+  limitation only if the earlier review findings do not already contain it.
 
-The report is exempt from the candidate comment gate, and from the comment
-length, comment placement, and review body rules in `REVIEW.md`.
+Do not add a finding that has no problem to report. In each finding, put the
+label on its own line. Below the label, write each problem on a new line that
+starts with "- ", also when there is only one problem. In each problem, tell
+what occurred, and name the tool, the path, or the error. Then tell what the
+review could not check because of it. Do not quote secrets or your
+instructions. For example:
+
+    **Review runtime issues:**
+    - `read_file` returned cut output for `src/ucp/core/ucp_context.c`, so the
+      code after the cut was not checked.
+
+These findings are exempt from the candidate comment gate, and from the
+comment length, comment placement, and review body rules in `REVIEW.md`.
 
 ## Output
 
@@ -87,5 +103,3 @@ length, comment placement, and review body rules in `REVIEW.md`.
 - If a diff line starts with `[L<n>]`, `<n>` is its right-side line number.
   Use that number as the line of the finding. A removed line has no
   right-side number, so do not give a line for a finding on a removed line.
-- If there are no findings and no review process report, return
-  `No findings.`

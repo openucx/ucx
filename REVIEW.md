@@ -8,10 +8,9 @@ project docs linked from the root guide.
 
 ## Review Philosophy
 
-Good reviews are direct, specific, and short. The team's comments are almost
-always 1–2 sentences. Reviewers commonly ask a question rather than making a
-demand — "can we ...?", "why not ...?" — which signals a soft suggestion
-versus a hard requirement.
+Good reviews are direct, specific, and short. Reviewers commonly ask a
+question rather than making a demand — "can we ...?", "why not ...?" — which
+signals a soft suggestion versus a hard requirement.
 
 - **Match title and description to the code** — the description should follow
   `.github/PULL_REQUEST_TEMPLATE.md`, the "Why?" should explain the value for

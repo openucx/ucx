@@ -20,7 +20,8 @@ the canonical location and add tool-specific adapters only when a tool requires
 them.
 
 The `ucx-pr-review` skill is for the automated review runner. It lists
-repository files in `metadata.resources`, and the runner loads these files as additional instructions.
+repository files in `metadata.resources`, and the runner loads these files as
+additional instructions.
 
 ## Universal Work Rules
 
