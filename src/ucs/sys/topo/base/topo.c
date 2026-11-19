@@ -1687,8 +1687,8 @@ typedef struct {
     uint16_t   tlp_overhead;  /* PHY + data link layer + header + CRC */
     uint16_t   ctrl_ratio;    /* Number of TLC before ACK */
     uint16_t   ctrl_overhead; /* Length of control TLP */
-    uint16_t   encoding;      /* Number of encoded symbol bits */
-    uint16_t   decoding;      /* Number of decoded symbol bits */
+    uint16_t   encoding;      /* Data bits per symbol, or TLP bytes per flit */
+    uint16_t   decoding;      /* Total bits per symbol, or bytes per flit */
     const char *name;         /* Name of PCI generation */
 } ucs_topo_pci_info_t;
 
