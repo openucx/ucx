@@ -97,9 +97,10 @@ comment length, comment placement, and review body rules in `REVIEW.md`.
 
 ## Output
 
-- For each finding, give the repository path, the right-side diff line when one
-  applies, and the exact comment text.
-- Write each comment as the Comment Style section of `REVIEW.md` describes.
+- For each finding, give the exact comment text. For a finding on a file, also
+  give the repository path, and the right-side diff line when one applies.
+  PR-level findings have no path and no line.
+- Write comments as the Comment Style section of `REVIEW.md` describes.
 - If a diff line starts with `[L<n>]`, `<n>` is its right-side line number.
   Use that number as the line of the finding. A removed line has no
   right-side number, so do not give a line for a finding on a removed line.
