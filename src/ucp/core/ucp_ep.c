@@ -2788,8 +2788,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     ucp_worker_iface_t *wiface;
     size_t tx_len;
 
-    if ((ep->worker->context->config.ext.failover_mode ==
-         UCP_FAILOVER_MODE_SW) ||
+    if (!ucp_context_is_token_failover(ep->worker->context) ||
         (ep->flags & UCP_EP_FLAG_FAILED) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         ucp_ep_has_cm_lane(ep) ||

@@ -803,6 +803,16 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
 }
 
+/* AUTO is rewritten to SW when indirect atomics are enabled. */
+static UCS_F_ALWAYS_INLINE int
+ucp_context_is_token_failover(ucp_context_h context)
+{
+    ucp_failover_mode_t failover_mode = context->config.ext.failover_mode;
+
+    return (failover_mode == UCP_FAILOVER_MODE_TOKEN) ||
+           (failover_mode == UCP_FAILOVER_MODE_AUTO);
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_context_print_transport_tables_enabled(ucp_context_h context)
 {

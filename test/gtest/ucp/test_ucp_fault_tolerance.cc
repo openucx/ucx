@@ -154,9 +154,8 @@ protected:
 
         /* Rendezvous passes a descriptor, not the payload. Inline and
          * persistent receives both point at the payload for this callback. */
-        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) <<
-                "RNDV is not covered yet";
         if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
+            ADD_FAILURE() << "RNDV is not covered yet";
             return UCS_OK;
         }
 
@@ -1183,7 +1182,7 @@ void test_ucp_fault_tolerance::run_probe_gated_recovery()
     /* Target invalidate shows up on the sender later. Lanes that are not
      * failed yet are not a finished recovery, so wait until the aux probe
      * has been armed and the failed lanes are clear. */
-    wait_for_cond([this, ep]() {
+    wait_for_cond([ep]() {
         return (m_probe_count != 0) && (ucp_ep_get_failed_lanes(ep) == 0);
     }, [this]() {
         short_progress_loop();

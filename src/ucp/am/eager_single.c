@@ -29,20 +29,14 @@ static size_t ucp_am_eager_single_hdr_size(ucp_operation_id_t op_id)
            ((op_id == UCP_OP_ID_AM_SEND) ? 0 : sizeof(ucp_am_reply_ftr_t));
 }
 
-/* AUTO keeps transport selection unchanged and is rewritten to SW only when
- * indirect atomics are enabled. Otherwise token replay is used on lanes that
- * can query a token. */
 static int
 ucp_am_eager_enable_token_failover(ucp_proto_single_init_params_t *params)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
-    ucp_failover_mode_t failover_mode          =
-            init_params->worker->context->config.ext.failover_mode;
 
     if ((init_params->ep_config_key->err_mode !=
          UCP_ERR_HANDLING_MODE_FAILOVER) ||
-        ((failover_mode != UCP_FAILOVER_MODE_TOKEN) &&
-         (failover_mode != UCP_FAILOVER_MODE_AUTO))) {
+        !ucp_context_is_token_failover(init_params->worker->context)) {
         return 0;
     }
 
@@ -114,6 +108,8 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
                                 ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
+    ucp_lane_index_t am_lane                     =
+            init_params->ep_config_key->am_lane;
     ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -141,8 +137,6 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
     /* Token purge copies the inline payload and reposts it. The short
      * fast path posts on am_lane, so this protocol has to use that lane. */
     if (ucp_am_eager_enable_token_failover(&params)) {
-        ucp_lane_index_t am_lane = init_params->ep_config_key->am_lane;
-
         if (am_lane != UCP_NULL_LANE) {
             params.super.exclude_map |= ~(ucp_lane_map_t)UCS_BIT(am_lane);
         }
