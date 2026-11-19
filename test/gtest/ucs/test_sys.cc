@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/sys/lib.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/module_int.h>
 #include <ucs/sys/sys.h>
@@ -194,6 +195,34 @@ UCS_TEST_F(test_sys, memory) {
     size_t phys_size = ucs_get_phys_mem_size();
     UCS_TEST_MESSAGE << "Physical memory size: " << ucs::size_value(phys_size);
     EXPECT_GT(phys_size, 1ul * 1024 * 1024);
+}
+
+UCS_TEST_F(test_sys, get_lib_sym) {
+    /* Function addresses taken here may point to the executable's PLT */
+    const uintptr_t base_addr = ucs_sys_get_lib_base_addr();
+    const void *lib_addr      = reinterpret_cast<const void*>(base_addr);
+    const int stack_var       = 0;
+    Dl_info sym_info;
+
+    void *sym = ucs_sys_get_lib_sym(lib_addr, "ucs_sys_get_lib_path");
+    ASSERT_NE(nullptr, sym);
+    ASSERT_NE(0, dladdr(sym, &sym_info));
+    EXPECT_EQ(base_addr, reinterpret_cast<uintptr_t>(sym_info.dli_fbase));
+    EXPECT_EQ(nullptr, ucs_sys_get_lib_sym(lib_addr, "ucs_no_such_symbol"));
+    /* Defined only in a dependency of libucs */
+    EXPECT_EQ(nullptr, ucs_sys_get_lib_sym(lib_addr, "dlopen"));
+    EXPECT_EQ(nullptr,
+              ucs_sys_get_lib_sym(&stack_var, "ucs_sys_get_lib_path"));
+}
+
+UCS_TEST_F(test_sys, dlsym) {
+    void *dl = dlopen(ucs_sys_get_lib_path(), RTLD_LAZY | RTLD_NOLOAD);
+
+    ASSERT_NE(nullptr, dl);
+    EXPECT_EQ(dlsym(dl, "ucs_sys_get_lib_path"),
+              ucs_sys_dlsym(dl, "ucs_sys_get_lib_path"));
+    EXPECT_EQ(nullptr, ucs_sys_dlsym(dl, "ucs_no_such_symbol"));
+    dlclose(dl);
 }
 
 extern "C" {

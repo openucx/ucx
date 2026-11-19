@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -22,12 +22,12 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
-#include <link.h>
 #include <libgen.h>
 #include <dirent.h>
 
@@ -37,9 +37,10 @@
 #define UCS_MODULE_PATH_MEMTRACK_NAME   "module_path"
 #define UCS_MODULE_SRCH_PATH_MAX        2
 
+#define UCS_MODULE_DEBUG_LEVEL \
+    ucs_min(UCS_LOG_LEVEL_DEBUG, ucs_global_opts.module_log_level)
 #define ucs_module_debug(_fmt, ...) \
-    ucs_log(ucs_min(UCS_LOG_LEVEL_DEBUG, ucs_global_opts.module_log_level), \
-            _fmt, ##  __VA_ARGS__)
+    ucs_log(UCS_MODULE_DEBUG_LEVEL, _fmt, ##  __VA_ARGS__)
 #define ucs_module_trace(_fmt, ...) \
     ucs_log(ucs_min(UCS_LOG_LEVEL_TRACE, ucs_global_opts.module_log_level), \
             _fmt, ##  __VA_ARGS__)
@@ -133,48 +134,6 @@ static void ucs_module_loader_init_paths()
     }
 }
 
-/* Perform shallow search for a symbol */
-static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
-                                      const char *symbol)
-{
-    struct link_map *lm_entry;
-    Dl_info dl_info;
-    void *addr;
-    int ret;
-
-    addr = dlsym(dl, symbol);
-    if (addr == NULL) {
-        return NULL;
-    }
-
-    (void)dlerror();
-    ret = dladdr(addr, &dl_info);
-    if (ret == 0) {
-        ucs_module_debug("dladdr(%p) [%s] failed: %s", addr, symbol, dlerror());
-        return NULL;
-    }
-
-    (void)dlerror();
-    ret = dlinfo(dl, RTLD_DI_LINKMAP, &lm_entry);
-    if (ret) {
-        ucs_module_debug("dlinfo(%p) [%s] failed: %s", dl, module_path, dlerror());
-        return NULL;
-    }
-
-    /* return the symbol only if it was found in the requested library, and not,
-     * for example, in one of its dependencies.
-     */
-    if (lm_entry->l_addr != (uintptr_t)dl_info.dli_fbase) {
-        ucs_module_debug("ignoring '%s' (%p) from %s (%p), expected in %s (%lx)",
-                         symbol, addr, ucs_basename(dl_info.dli_fname),
-                         dl_info.dli_fbase, ucs_basename(module_path),
-                         lm_entry->l_addr);
-        return NULL;
-    }
-
-    return addr;
-}
-
 static void ucs_module_init(const char *module_path, void *dl)
 {
     typedef ucs_status_t (*init_func_t)();
@@ -197,8 +156,9 @@ static void ucs_module_init(const char *module_path, void *dl)
 
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
-    init_func = (init_func_t)ucs_module_dlsym_shallow(module_path, dl,
-                                                      module_init_name);
+    init_func = (init_func_t)ucs_sys_dlsym_shallow(module_path, dl,
+                                                   module_init_name,
+                                                   UCS_MODULE_DEBUG_LEVEL);
     if (init_func == NULL) {
         goto out_free_buffer;
     }
