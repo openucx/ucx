@@ -50,7 +50,7 @@ public:
 
     void test_iface_ops(int cq_len);
 
-    void test_sgl_reserve(bool add_pending);
+    void test_sgl_reserve(bool get, bool cq_limited, bool add_pending);
 
     static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
                                          unsigned flags) {
