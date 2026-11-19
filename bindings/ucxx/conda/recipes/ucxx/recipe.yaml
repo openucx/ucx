@@ -1,0 +1,280 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
+context:
+  version: ${{ env.get("UCXX_PACKAGE_VERSION") }}
+  cuda_version: ${{ (env.get("RAPIDS_CUDA_VERSION") | split("."))[:2] | join(".") }}
+  cuda_major: '${{ (env.get("RAPIDS_CUDA_VERSION") | split("."))[0] }}'
+  datetime_string: '${{ env.get("RAPIDS_DATETIME_STRING") }}'
+  head_rev: '${{ git.head_rev(".")[:8] }}'
+  # Set UCXX_NO_LIBUCX=true to build against a UCX installation not managed by conda.
+  # For testing only, with significant limitations (e.g., UCX must not be installed with
+  # prefix /usr; use ucx_ROOT to locate it); see ci/README.md.
+  no_libucx: ${{ env.get("UCXX_NO_LIBUCX", default="false") == "true" }}
+  py_abi_min: ${{ env.get("RAPIDS_PY_VERSION") }}
+  py_buildstring: ${{ py_abi_min | version_to_buildstring }}
+  py_runtime_latest: "3.14"
+
+recipe:
+  name: ucxx-split
+
+source:
+  path: ../../..
+
+outputs:
+  - package:
+      name: ucxx
+      version: ${{ version }}
+    build:
+      python:
+        version_independent: true
+      string: cuda${{ cuda_major }}_cp${{ py_buildstring }}_abi3_${{ datetime_string }}_${{ head_rev }}
+      dynamic_linking:
+        overlinking_behavior: "error"
+        missing_dso_allowlist:
+          - lib/libpython*.so.*
+          # UCX is provided outside of conda (e.g., a system installation)
+          - if: no_libucx
+            then:
+              - "**/libucp.so*"
+              - "**/libucs.so*"
+              - "**/libuct.so*"
+              - "**/libucm.so*"
+      prefix_detection:
+        ignore:
+          - lib/libucxx_python.so
+      script:
+        content: |
+          # Remove `-fdebug-prefix-map` line from CFLAGS and CXXFLAGS so the
+          # incrementing version number in the compile line doesn't break the
+          # cache
+          set -x
+          export CFLAGS=$(echo $CFLAGS | sed -E 's@\-fdebug\-prefix\-map[^ ]*@@g')
+          export CXXFLAGS=$(echo $CXXFLAGS | sed -E 's@\-fdebug\-prefix\-map[^ ]*@@g')
+          set +x
+
+          # With UCXX_NO_LIBUCX=true, importing ucxx (e.g., scikit-build-core loads its
+          # 'cmake.prefix' entry point when building ucxx-tests) requires the UCX libraries,
+          # but LD_LIBRARY_PATH is not forwarded to this isolated environment. Make UCX
+          # loadable from ucx_ROOT/UCX_ROOT, the same precedence CMake uses to locate it.
+          ucx_prefix="${ucx_ROOT:-${UCX_ROOT:-}}"
+          if [[ -n "${ucx_prefix}" ]]; then
+            export LD_LIBRARY_PATH="${ucx_prefix}/lib:${ucx_prefix}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+          fi
+
+          # We rebuild libucxx_python here so we can link against the correct `libpython`
+          sccache --stop-server || :
+          ./build.sh libucxx_python ucxx
+        secrets:
+          - AWS_ACCESS_KEY_ID
+          - AWS_SECRET_ACCESS_KEY
+          - AWS_SESSION_TOKEN
+          - SCCACHE_DIST_AUTH_TOKEN
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ${{ env.get("CMAKE_C_COMPILER_LAUNCHER") }}
+          CMAKE_CUDA_COMPILER_LAUNCHER: ${{ env.get("CMAKE_CUDA_COMPILER_LAUNCHER") }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ env.get("CMAKE_CXX_COMPILER_LAUNCHER") }}
+          CMAKE_GENERATOR: ${{ env.get("CMAKE_GENERATOR") }}
+          NVCC_APPEND_FLAGS: ${{ env.get("NVCC_APPEND_FLAGS", default="") }}
+          PARALLEL_LEVEL: ${{ env.get("PARALLEL_LEVEL", default="8") }}
+          RAPIDS_ARTIFACTS_DIR: ${{ env.get("RAPIDS_ARTIFACTS_DIR", default="") }}
+          RAPIDS_CUDA_VERSION: ${{ env.get("RAPIDS_CUDA_VERSION") }}
+          # Location of a UCX installation not managed by conda, see ci/README.md
+          ucx_ROOT: ${{ env.get("ucx_ROOT", default="") }}
+          UCX_ROOT: ${{ env.get("UCX_ROOT", default="") }}
+          RAPIDS_PY_VERSION: ${{ py_abi_min }}
+          SCCACHE_BUCKET: ${{ env.get("SCCACHE_BUCKET", default="") }}
+          SCCACHE_CONF: ${{ env.get("SCCACHE_CONF", default="") }}
+          SCCACHE_DIST_AUTH_TYPE: ${{ env.get("SCCACHE_DIST_AUTH_TYPE", default="token") }}
+          SCCACHE_DIST_FALLBACK_TO_LOCAL_COMPILE: ${{ env.get("SCCACHE_DIST_FALLBACK_TO_LOCAL_COMPILE", default="false") }}
+          SCCACHE_DIST_MAX_RETRIES: ${{ env.get("SCCACHE_DIST_MAX_RETRIES", default="inf") }}
+          SCCACHE_DIST_REQUEST_TIMEOUT: ${{ env.get("SCCACHE_DIST_REQUEST_TIMEOUT", default="7140") }}
+          SCCACHE_DIST_SCHEDULER_URL: ${{ env.get("SCCACHE_DIST_SCHEDULER_URL", default="") }}
+          SCCACHE_ERROR_LOG: ${{ env.get("SCCACHE_ERROR_LOG", default="/tmp/sccache.log") }}
+          SCCACHE_IDLE_TIMEOUT: ${{ env.get("SCCACHE_IDLE_TIMEOUT", default="0") }}
+          SCCACHE_NO_CACHE: ${{ env.get("SCCACHE_NO_CACHE", default="") }}
+          SCCACHE_RECACHE: ${{ env.get("SCCACHE_RECACHE", default="") }}
+          SCCACHE_REGION: ${{ env.get("SCCACHE_REGION", default="") }}
+          SCCACHE_S3_KEY_PREFIX: ucxx/${{ env.get("RAPIDS_CONDA_ARCH") }}/cuda${{ cuda_major }}
+          SCCACHE_S3_NO_CREDENTIALS: ${{ env.get("SCCACHE_S3_NO_CREDENTIALS", default="false") }}
+          SCCACHE_S3_PREPROCESSOR_CACHE_KEY_PREFIX: ucxx/${{ env.get("RAPIDS_CONDA_ARCH") }}/cuda${{ cuda_major }}/conda/preprocessor-cache
+          SCCACHE_S3_USE_PREPROCESSOR_CACHE_MODE: ${{ env.get("SCCACHE_S3_USE_PREPROCESSOR_CACHE_MODE", default="true") }}
+          SCCACHE_S3_USE_SSL: ${{ env.get("SCCACHE_S3_USE_SSL", default="true") }}
+          SCCACHE_SERVER_LOG: ${{ env.get("SCCACHE_SERVER_LOG", default="sccache=debug") }}
+    requirements:
+      build:
+        - cmake
+        - ninja
+        - ${{ compiler("c") }}
+        - ${{ compiler("cxx") }}
+        - ${{ compiler("cuda") }}
+        - cuda-version =${{ cuda_version }}
+        - ${{ stdlib("c") }}
+      host:
+        - cuda-version =${{ cuda_version }}
+        - cython >=3.2.2
+        # 'nvidia-ml-py' provides the 'pynvml' module
+        - nvidia-ml-py>=12
+        - pip
+        - python =${{ py_abi_min }}
+        - python-abi3 ${{ py_abi_min }}.*
+        - rapids-build-backend >=0.4.0,<0.5.0
+        - scikit-build-core>=0.11.0
+        - if: not no_libucx
+          then:
+            - ucx =${{ ucx_min }}
+        - libucxx =${{ version }}
+        - cuda-cudart-dev
+      run:
+        - cuda-core >=1.0,<2
+        - numpy >=2.0,<3.0
+        # 'nvidia-ml-py' provides the 'pynvml' module
+        - nvidia-ml-py>=12
+        - python
+        - if: not no_libucx
+          then:
+            - ucx >=${{ ucx_min }},<${{ ucx_max }},!=1.22.0
+        - ${{ pin_compatible("cuda-version", upper_bound="x", lower_bound="x") }}
+        - libucxx =${{ version }}
+      run_constraints:
+        - cupy >=14.0.1,!=14.1.0
+      ignore_run_exports:
+        by_name:
+          - cuda-cudart
+          - cuda-version
+          - libucxx
+          - python_abi
+          - ucx
+    tests:
+      - script:
+          - test -f $PREFIX/lib/libucxx_python.so
+          - test -f $PREFIX/include/ucxx/python/exception.h
+          - test -f $PREFIX/include/ucxx/python/future.h
+          - test -f $PREFIX/include/ucxx/python/api.h
+          - test -f $PREFIX/include/ucxx/python/constructors.h
+          - test -f $PREFIX/include/ucxx/python/notifier.h
+          - test -f $PREFIX/include/ucxx/python/python_future.h
+          - test -f $PREFIX/include/ucxx/python/worker.h
+      # With UCXX_NO_LIBUCX=true, UCX is outside the isolated test environment, which does not
+      # inherit LD_LIBRARY_PATH; imports are covered by the ci/test_python*.sh jobs instead.
+      - if: not no_libucx
+        then:
+          - python:
+              imports:
+                - ucxx
+              python_version: ${{ py_runtime_latest }}.*
+              pip_check: false
+    about:
+      homepage: ${{ load_from_file("python/ucxx/pyproject.toml").project.urls.Homepage }}
+      license: ${{ load_from_file("python/ucxx/pyproject.toml").project.license }}
+      summary: ${{ load_from_file("python/ucxx/pyproject.toml").project.description }}
+
+  - package:
+      name: ucxx-tests
+      version: ${{ version }}
+    build:
+      python:
+        version_independent: true
+      string: cuda${{ cuda_major }}_cp${{ py_buildstring }}_abi3_${{ datetime_string }}_${{ head_rev }}
+      dynamic_linking:
+        overlinking_behavior: "error"
+        missing_dso_allowlist:
+          - lib/libpython*.so.*
+          # UCX is provided outside of conda (e.g., a system installation)
+          - if: no_libucx
+            then:
+              - "**/libucp.so*"
+              - "**/libucs.so*"
+              - "**/libuct.so*"
+              - "**/libucm.so*"
+      script:
+        content: |
+          # Remove `-fdebug-prefix-map` line from CFLAGS and CXXFLAGS so the
+          # incrementing version number in the compile line doesn't break the
+          # cache
+          set -x
+          export CFLAGS=$(echo $CFLAGS | sed -E 's@\-fdebug\-prefix\-map[^ ]*@@g')
+          export CXXFLAGS=$(echo $CXXFLAGS | sed -E 's@\-fdebug\-prefix\-map[^ ]*@@g')
+          set +x
+
+          # With UCXX_NO_LIBUCX=true, importing ucxx (e.g., scikit-build-core loads its
+          # 'cmake.prefix' entry point when building ucxx-tests) requires the UCX libraries,
+          # but LD_LIBRARY_PATH is not forwarded to this isolated environment. Make UCX
+          # loadable from ucx_ROOT/UCX_ROOT, the same precedence CMake uses to locate it.
+          ucx_prefix="${ucx_ROOT:-${UCX_ROOT:-}}"
+          if [[ -n "${ucx_prefix}" ]]; then
+            export LD_LIBRARY_PATH="${ucx_prefix}/lib:${ucx_prefix}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+          fi
+
+          # We rebuild libucxx_python here so we can link against the correct `libpython`
+          sccache --stop-server || :
+          ./build.sh libucxx_python ucxx ucxx_tests
+        secrets:
+          - AWS_ACCESS_KEY_ID
+          - AWS_SECRET_ACCESS_KEY
+          - AWS_SESSION_TOKEN
+          - SCCACHE_DIST_AUTH_TOKEN
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ${{ env.get("CMAKE_C_COMPILER_LAUNCHER") }}
+          CMAKE_CUDA_COMPILER_LAUNCHER: ${{ env.get("CMAKE_CUDA_COMPILER_LAUNCHER") }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ env.get("CMAKE_CXX_COMPILER_LAUNCHER") }}
+          CMAKE_GENERATOR: ${{ env.get("CMAKE_GENERATOR") }}
+          NVCC_APPEND_FLAGS: ${{ env.get("NVCC_APPEND_FLAGS", default="") }}
+          PARALLEL_LEVEL: ${{ env.get("PARALLEL_LEVEL", default="8") }}
+          RAPIDS_ARTIFACTS_DIR: ${{ env.get("RAPIDS_ARTIFACTS_DIR", default="") }}
+          RAPIDS_CUDA_VERSION: ${{ env.get("RAPIDS_CUDA_VERSION") }}
+          # Location of a UCX installation not managed by conda, see ci/README.md
+          ucx_ROOT: ${{ env.get("ucx_ROOT", default="") }}
+          UCX_ROOT: ${{ env.get("UCX_ROOT", default="") }}
+          RAPIDS_PY_VERSION: ${{ py_abi_min }}
+          SCCACHE_BUCKET: ${{ env.get("SCCACHE_BUCKET", default="") }}
+          SCCACHE_CONF: ${{ env.get("SCCACHE_CONF", default="") }}
+          SCCACHE_DIST_AUTH_TYPE: ${{ env.get("SCCACHE_DIST_AUTH_TYPE", default="token") }}
+          SCCACHE_DIST_FALLBACK_TO_LOCAL_COMPILE: ${{ env.get("SCCACHE_DIST_FALLBACK_TO_LOCAL_COMPILE", default="false") }}
+          SCCACHE_DIST_MAX_RETRIES: ${{ env.get("SCCACHE_DIST_MAX_RETRIES", default="inf") }}
+          SCCACHE_DIST_REQUEST_TIMEOUT: ${{ env.get("SCCACHE_DIST_REQUEST_TIMEOUT", default="7140") }}
+          SCCACHE_DIST_SCHEDULER_URL: ${{ env.get("SCCACHE_DIST_SCHEDULER_URL", default="") }}
+          SCCACHE_ERROR_LOG: ${{ env.get("SCCACHE_ERROR_LOG", default="/tmp/sccache.log") }}
+          SCCACHE_IDLE_TIMEOUT: ${{ env.get("SCCACHE_IDLE_TIMEOUT", default="0") }}
+          SCCACHE_NO_CACHE: ${{ env.get("SCCACHE_NO_CACHE", default="") }}
+          SCCACHE_RECACHE: ${{ env.get("SCCACHE_RECACHE", default="") }}
+          SCCACHE_REGION: ${{ env.get("SCCACHE_REGION", default="") }}
+          SCCACHE_S3_KEY_PREFIX: ucxx-tests/${{ env.get("RAPIDS_CONDA_ARCH") }}/cuda${{ cuda_major }}
+          SCCACHE_S3_NO_CREDENTIALS: ${{ env.get("SCCACHE_S3_NO_CREDENTIALS", default="false") }}
+          SCCACHE_S3_PREPROCESSOR_CACHE_KEY_PREFIX: ucxx-tests/${{ env.get("RAPIDS_CONDA_ARCH") }}/cuda${{ cuda_major }}/conda/preprocessor-cache
+          SCCACHE_S3_USE_PREPROCESSOR_CACHE_MODE: ${{ env.get("SCCACHE_S3_USE_PREPROCESSOR_CACHE_MODE", default="true") }}
+          SCCACHE_S3_USE_SSL: ${{ env.get("SCCACHE_S3_USE_SSL", default="true") }}
+          SCCACHE_SERVER_LOG: ${{ env.get("SCCACHE_SERVER_LOG", default="sccache=debug") }}
+    requirements:
+      build:
+        - cmake
+        - ninja
+        - ${{ compiler("c") }}
+        - ${{ compiler("cxx") }}
+        - ${{ compiler("cuda") }}
+        - cuda-version =${{ cuda_version }}
+        - ${{ stdlib("c") }}
+      host:
+        - ${{ pin_subpackage("ucxx", exact=True) }}
+        - cuda-version =${{ cuda_version }}
+        - cython >=3.2.2
+        - pip
+        - python =${{ py_abi_min }}
+        - python-abi3 ${{ py_abi_min }}.*
+        - rapids-build-backend >=0.4.0,<0.5.0
+        - scikit-build-core>=0.11.0
+      run:
+        - ${{ pin_compatible("cuda-version", upper_bound="x", lower_bound="x") }}
+        - python
+        - ${{ pin_subpackage("ucxx", exact=True) }}
+        - cuda-cudart
+      ignore_run_exports:
+        by_name:
+          - cuda-cudart
+          - cuda-version
+          - python_abi
+          - ucx
+    about:
+      homepage: ${{ load_from_file("python/ucxx/pyproject.toml").project.urls.Homepage }}
+      license: ${{ load_from_file("python/ucxx/pyproject.toml").project.license }}
+      summary: UCXX Cython tests

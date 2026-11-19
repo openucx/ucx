@@ -37,9 +37,6 @@ jobs:
           path: ucx
           fetchDepth: 100
           retryCountOnTaskFailure: 5
-        - checkout: ucxx
-          path: ucxx
-          retryCountOnTaskFailure: 5
         - template: ucxx_ucx_fetch.yml
         - task: DownloadBuildArtifacts@1
           displayName: Fetch conda-python artifact
