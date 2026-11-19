@@ -118,15 +118,15 @@ static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
     return supported;
 }
 
-/* Find the lowest IMEX channel accessible by the process. The GPU driver uses
- * the lowest accessible channel for all fabric handle operations, see
+/* The GPU driver uses the lowest IMEX channel accessible by the process for all
+ * fabric handle operations, see
  * https://docs.nvidia.com/multi-node-nvlink-systems/imex-guide/imexchannels.html */
 static ucs_status_t
-uct_cuda_ipc_md_find_imex_channel_cb(const struct dirent *entry, void *arg)
+uct_cuda_ipc_md_lowest_imex_channel_cb(const struct dirent *entry, void *arg)
 {
     static const char channel_prefix[] = "channel";
-    uint32_t *imex_channel_p           = arg;
-    const char *number;
+    uint32_t *lowest_channel           = arg;
+    const char *channel_str;
     unsigned long channel;
     char path[PATH_MAX];
     char *end;
@@ -136,17 +136,17 @@ uct_cuda_ipc_md_find_imex_channel_cb(const struct dirent *entry, void *arg)
         return UCS_OK;
     }
 
-    number  = entry->d_name + sizeof(channel_prefix) - 1;
-    channel = strtoul(number, &end, 10);
-    if ((*number == '\0') || (*end != '\0') ||
+    channel_str = entry->d_name + sizeof(channel_prefix) - 1;
+    channel     = strtoul(channel_str, &end, 10);
+    if ((*channel_str == '\0') || (*end != '\0') ||
         (channel >= UCT_CUDA_IPC_IMEX_CHANNEL_INVALID)) {
         return UCS_OK;
     }
 
     ucs_snprintf_safe(path, sizeof(path), "%s/%s",
                       UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
-    if ((access(path, R_OK | W_OK) == 0) && (channel < *imex_channel_p)) {
-        *imex_channel_p = channel;
+    if ((access(path, R_OK | W_OK) == 0) && (channel < *lowest_channel)) {
+        *lowest_channel = channel;
     }
 
     return UCS_OK;
@@ -169,7 +169,7 @@ static uint32_t uct_cuda_ipc_md_get_imex_channel(void)
     }
 
     if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
-                        uct_cuda_ipc_md_find_imex_channel_cb,
+                        uct_cuda_ipc_md_lowest_imex_channel_cb,
                         &imex_channel) != UCS_OK) {
         return UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     }

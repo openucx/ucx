@@ -79,9 +79,9 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
             (uct_cuda_ipc_imex_device_addr_t*)addr;
     uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr = &imex_addr->super;
     uct_cuda_ipc_device_addr_t *dev_addr         = &mnnvl_addr->super;
-    uct_cuda_ipc_iface_t *iface                  =
+    const uct_cuda_ipc_iface_t *iface            =
             ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_md_t *md                        =
+    const uct_cuda_ipc_md_t *md                  =
             ucs_derived_of(iface->super.super.md, uct_cuda_ipc_md_t);
 
     if (md->enable_mnnvl || uct_cuda_ipc_md_fabric_supported(md)) {

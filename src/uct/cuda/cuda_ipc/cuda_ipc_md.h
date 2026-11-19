@@ -74,8 +74,7 @@ typedef struct uct_cuda_ipc_md_handle {
 } uct_cuda_ipc_md_handle_t;
 
 
-/* IMEX channel value meaning CUDA fabric is not supported. Channels are
- * character devices numbered by their minor, which is below 2^20. */
+/* Channels are character devices numbered by their minor, which is below 2^20 */
 #define UCT_CUDA_IPC_IMEX_CHANNEL_INVALID UINT32_MAX
 
 
@@ -85,10 +84,9 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
-    /** IMEX channel used to export and import fabric handles, or
-     *  UCT_CUDA_IPC_IMEX_CHANNEL_INVALID if CUDA fabric is not supported.
-     *  Fabric handles can be imported only by a process which has access to
-     *  the same IMEX channel. */
+    /** IMEX channel used to export and import fabric handles. Fabric handles
+     *  can be imported only by a process which has access to the same
+     *  channel. */
     uint32_t                 imex_channel;
     /** NVLink domain of the GPU fabric, valid if enable_mnnvl. GPUs on
      *  different nodes can reach each other over multi-node NVLINK only if
