@@ -1192,6 +1192,9 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     ucs_status_t status;
 
     uct_iface_query_v2_init(tl_iface, iface_attr);
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SHORT_COMP;
+    }
 
     if (ucs_test_flags(iface_attr->field_mask,
                        UCT_IFACE_ATTR_FIELD_TX_TOKEN |
@@ -1288,7 +1291,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
             .ep_get_sgl_zcopy       = uct_rc_mlx5_ep_get_sgl_zcopy,
             .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge,
-            .ep_put_short_comp     = uct_rc_mlx5_base_ep_put_short_comp,
+            .ep_put_short_v2        = uct_rc_mlx5_base_ep_put_short_v2,
             .iface_set_ep_event_handler = uct_base_iface_set_ep_event_handler
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,

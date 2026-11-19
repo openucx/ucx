@@ -241,7 +241,7 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                                 remote_addr, rkey, NULL);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_put_short_comp(
+ucs_status_t uct_rc_mlx5_base_ep_put_short_v2(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
         uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
 {

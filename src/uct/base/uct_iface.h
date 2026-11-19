@@ -328,7 +328,7 @@ typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
 
 
 /* Short put with a completion for the outstanding transport operation. */
-typedef ucs_status_t (*uct_ep_put_short_comp_func_t)(
+typedef ucs_status_t (*uct_ep_put_short_v2_func_t)(
         uct_ep_h ep, const void *buffer, unsigned length, uint64_t remote_addr,
         uct_rkey_t rkey, uct_completion_t *comp);
 
@@ -358,7 +358,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_get_sgl_zcopy_func_t      ep_get_sgl_zcopy;
     uct_ep_outstanding_purge_func_t  ep_outstanding_purge;
     uct_iface_set_ep_event_func_t    iface_set_ep_event_handler;
-    uct_ep_put_short_comp_func_t    ep_put_short_comp;
+    uct_ep_put_short_v2_func_t      ep_put_short_v2;
 } uct_iface_internal_ops_t;
 
 

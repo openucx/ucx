@@ -16,7 +16,7 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
-#include <uct/uct_private.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 extern ucp_proto_t ucp_put_am_bcopy_proto;
@@ -71,9 +71,9 @@ ucp_proto_put_offload_short_progress_common(uct_pending_req_t *self,
     uct_ep  = tracked ? ucp_ep_get_lane(ep, lane) :
                         ucp_ep_get_fast_lane(ep, lane);
     if (tracked) {
-        status = uct_ep_put_short_comp(uct_ep, buffer, length,
-                                       req->send.rma.remote_addr, tl_rkey,
-                                       &req->send.state.uct_comp);
+        status = uct_ep_put_short_v2(uct_ep, buffer, length,
+                                      req->send.rma.remote_addr, tl_rkey,
+                                      &req->send.state.uct_comp);
     } else {
         status = uct_ep_put_short(uct_ep, buffer, length,
                                   req->send.rma.remote_addr, tl_rkey);
@@ -162,32 +162,17 @@ static void ucp_proto_put_offload_short_token_probe(
 {
     const ucp_ep_config_key_t *key = init_params->ep_config_key;
     ucp_worker_h worker           = init_params->worker;
-    ucp_lane_map_t exclude_map    = 0;
-    ucp_lane_index_t lane;
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
 
     if ((key->err_mode != UCP_ERR_HANDLING_MODE_FAILOVER) ||
         (worker->context->config.ext.failover_mode != UCP_FAILOVER_MODE_TOKEN)) {
         return;
     }
 
-    for (lane = 0; lane < key->num_lanes; ++lane) {
-        rsc_index = key->lanes[lane].rsc_index;
-        if ((rsc_index == UCP_NULL_RESOURCE) ||
-            !(key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA_BW))) {
-            continue;
-        }
-
-        wiface = ucp_worker_iface(worker, rsc_index);
-        if (!uct_iface_has_put_short_comp(wiface->iface)) {
-            exclude_map |= UCS_BIT(lane);
-        }
-    }
-
     ucp_proto_put_offload_short_probe_common(
             init_params, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
-            UCP_LANE_TYPE_RMA_BW, UCT_IFACE_FLAG_V2_QUERY_TOKEN, exclude_map);
+            UCP_LANE_TYPE_RMA_BW,
+            UCT_IFACE_FLAG_V2_QUERY_TOKEN | UCT_IFACE_FLAG_V2_PUT_SHORT_COMP,
+            0);
 }
 
 ucp_proto_t ucp_put_offload_short_proto = {
