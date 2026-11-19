@@ -511,7 +511,7 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
 }
 
 /* Resolve the owner GPU's assignment and apply it to the assignable lanes.
- * Set *gpu_nic_filtered_p if the lanes are restricted to the GPU's NICs. */
+ * Set *gpu_nic_filtered_p if a lane on the GPU's NICs was kept. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
@@ -522,6 +522,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_lane_index_t num_lanes                 = *num_lanes_p;
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
+    ucp_lane_index_t num_assigned_lanes_kept   = 0;
     const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
     ucp_lane_index_t i, lane, num_removed_lanes;
     ucs_memory_type_t mem_type;
@@ -591,6 +592,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
                   lane_sys_dev);
         lanes[num_filtered_lanes++] = lane;
         ++num_bulk_lanes_kept;
+        ++num_assigned_lanes_kept;
     }
 
     num_removed_lanes = num_lanes - num_filtered_lanes;
@@ -607,7 +609,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
 
     ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes, num_lanes);
     *num_lanes_p        = num_filtered_lanes;
-    *gpu_nic_filtered_p = 1;
+    *gpu_nic_filtered_p = (num_assigned_lanes_kept > 0);
     return UCS_OK;
 }
 
