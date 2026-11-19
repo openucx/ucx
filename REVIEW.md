@@ -111,10 +111,10 @@ When a finding depends on a code rule, cite the rule from the relevant
 | Situation | Phrasing pattern | Example |
 |-----------|-----------------|---------|
 | Hard requirement | Direct statement | `blocker: this will crash on NULL` |
-| Standard request | `pls` + imperative | `pls define all vars at the top of the func` |
+| Standard request | Plain imperative, or "please" | `please define all variables at the top of the function` |
 | Soft suggestion | `maybe` / `can we` | `maybe we could remove this wrapper?` |
-| Opinion | `IMO` | `IMO it can be uint8_t and we limit to 256 channels` |
-| Nit | `minor:` prefix | `minor: pls add blank line before` |
+| Opinion | `I think` | `I think it can be uint8_t and we limit to 256 channels` |
+| Nit | `minor:` prefix | `minor: add a blank line before` |
 | Question about intent | Direct question | `does it break wire compatibility?` / `why is it needed?` |
 | Alternatives | `why not` / `instead` | `instead of X, can we use Y?` |
 | Code suggestion | Inline block | ` ```suggestion ... ``` ` |
@@ -140,6 +140,7 @@ concern is never a blocker.
 issue is complicated and non-obvious.
 
 **Language:** Use simple English — many contributors are non-native speakers.
+Do not use abbreviations such as "pls", "lgtm", "imo", "idk", etc.
 
 **Actionability:** Omit observations that identify neither a concrete impact
 nor a specific question or requested action.
@@ -147,8 +148,8 @@ nor a specific question or requested action.
 **Comment order:** For change requests, start with the requested action, then
 briefly explain why it is needed when the reason is not obvious. For uncertainty
 or intent, ask a direct question. Example:
-`pls add $(UCX_LT_RELEASE) here as well; otherwise libucs_signal stays outside
-the suffix scheme.`
+`please add $(UCX_LT_RELEASE) here as well. Otherwise, libucs_signal stays
+outside the suffix scheme.`
 
 **Comment scope:** One comment per distinct issue; do not bundle unrelated
 points.
