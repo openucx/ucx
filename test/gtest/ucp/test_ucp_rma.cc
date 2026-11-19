@@ -1852,6 +1852,175 @@ protected:
     }
 };
 
+/* SGL must remain usable when the endpoint requests rail failover. */
+class test_ucp_rma_sgl_failover : public test_ucp_rma_sgl {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        static const char *modes[] = {"peer", "sw", "token"};
+        add_variant_values(variants, test_ucp_rma_sgl::get_test_variants,
+                           UCS_MASK(3), modes);
+    }
+
+    void init() override {
+        configure_peer_failure_settings();
+        modify_config("PROTOS", "put/sgl/offload,reconfig");
+        modify_config("FAILOVER_MODE", (mode() == MODE_SW) ? "sw" : "token");
+        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("KEEPALIVE_INTERVAL", "0.1s");
+        modify_config("RECOVERY_RETRIES", "10");
+        test_ucp_rma_sgl::init();
+        receiver().connect(&sender(), get_ep_params());
+        flush_workers();
+    }
+
+protected:
+    enum {
+        MODE_PEER,
+        MODE_SW,
+        MODE_TOKEN
+    };
+
+    unsigned mode() const {
+        return get_variant_value(3);
+    }
+
+    ucp_ep_params_t get_ep_params() override {
+        ucp_ep_params_t params = test_ucp_rma_sgl::get_ep_params();
+        params.field_mask    |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode       = (mode() == MODE_PEER) ?
+                                UCP_ERR_HANDLING_MODE_PEER :
+                                UCP_ERR_HANDLING_MODE_FAILOVER;
+        params.err_handler.cb = [](void *arg, ucp_ep_h, ucs_status_t status) {
+            auto *self = static_cast<test_ucp_rma_sgl_failover*>(arg);
+            self->m_ep_status = status;
+            ++self->m_errors;
+        };
+        params.err_handler.arg = this;
+        return params;
+    }
+
+    void test_put(bool fail_lane) {
+        constexpr size_t guard = 64;
+        const std::vector<size_t> lengths = {4096, 12288, 8192, 20480};
+        std::vector<ucp_lane_index_t> lanes;
+        ucp_ep_h ep = sender().ep();
+
+        for (ucp_lane_index_t lane : ucp_ep_config(ep)->key.rma_bw_lanes) {
+            if (lane == UCP_NULL_LANE) {
+                continue;
+            }
+            const auto *attr = ucp_worker_iface_get_attr_v2(
+                    ep->worker, ucp_ep_get_rsc_index(ep, lane));
+            if (attr->cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) {
+                lanes.push_back(lane);
+            }
+        }
+        if (lanes.size() < (fail_lane ? 2u : 1u)) {
+            UCS_TEST_SKIP_R("requires native SGL RMA lanes (two for failover)");
+        }
+
+        std::vector<size_t> alloc_lengths;
+        for (size_t length : lengths) {
+            alloc_lengths.push_back(length + 2 * guard);
+        }
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, alloc_lengths);
+        for (size_t i = 0; i < lengths.size(); ++i) {
+            ctx.dst[i].memset(0xa5);
+            ctx.buffers[i]       = UCS_PTR_BYTE_OFFSET(ctx.src[i].ptr(), guard);
+            ctx.remote_addrs[i] += guard;
+        }
+        ctx.lengths        = lengths;
+        ctx.remote_lengths = lengths;
+        auto local  = make_local_sgl(ctx, LOCAL_MASK_DEFAULT |
+                                         UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        auto remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        auto param  = make_sgl_param(&remote, lengths.size());
+        struct completion_state {
+            unsigned count;
+            ucs_status_t status;
+        } cb = {0, UCS_INPROGRESS};
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.cb.send = [](void*, ucs_status_t status, void *arg) {
+            auto *cb = static_cast<completion_state*>(arg);
+            cb->status = status;
+            ++cb->count;
+        };
+        param.user_data = &cb;
+
+        /* Keep the failed QP installed until the first SGL is posted. */
+        if (fail_lane) {
+            ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, lanes[0]), 0));
+        }
+
+        UCS_TEST_MESSAGE << "native SGL lanes=" << lanes.size()
+                         << " inject_failure=" << fail_lane;
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        for (unsigned iteration = 0; iteration < (fail_lane ? 2u : 1u);
+             ++iteration) {
+            cb = {0, UCS_INPROGRESS};
+            auto *sptr = sgl_op_nbx(&local, lengths.size(),
+                                     UCP_REMOTE_ADDR_INVALID,
+                                     UCP_RKEY_INVALID, &param);
+            ASSERT_FALSE(UCS_PTR_IS_ERR(sptr))
+                    << ucs_status_string(UCS_PTR_STATUS(sptr));
+            ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+            auto status = request_progress(sptr, entities());
+            if (status == UCS_INPROGRESS) {
+                /* Drain callbacks before the descriptors and cb leave scope. */
+                request_wait(sender().disconnect_nb(0, 0,
+                                                     UCP_EP_CLOSE_FLAG_FORCE));
+            }
+            ucp_request_release(sptr);
+            ASSERT_NE(UCS_INPROGRESS, status) << "SGL request did not complete";
+            ASSERT_EQ(1u, cb.count);
+            ASSERT_EQ(status, cb.status);
+            if (fail_lane && (mode() == MODE_PEER)) {
+                /* Peer handling reports failure instead of replaying. */
+                ASSERT_NE(UCS_OK, status);
+                ASSERT_NE(0u, m_errors);
+                EXPECT_EQ(m_ep_status, status);
+                UCS_TEST_MESSAGE << "peer request and endpoint error: "
+                                 << ucs_status_string(status);
+                return;
+            }
+            ASSERT_UCS_OK(status);
+            flush_ep(sender());
+            ASSERT_EQ(0u, m_errors);
+            for (size_t i = 0; i < lengths.size(); ++i) {
+                std::vector<uint8_t> data(alloc_lengths[i]);
+                mem_buffer::copy_from(data.data(), ctx.dst[i].ptr(),
+                                      data.size(), dst_mem_type());
+                for (size_t j = 0; j < data.size(); ++j) {
+                    uint8_t expected = ((j < guard) ||
+                                        (j >= guard + lengths[i])) ?
+                                       0xa5 : static_cast<uint8_t>(i + 1);
+                    ASSERT_EQ(expected, data[j])
+                            << "element " << i << " byte " << j;
+                }
+                ctx.dst[i].memset(0xa5);
+            }
+        }
+    }
+
+    unsigned m_errors        = 0;
+    ucs_status_t m_ep_status = UCS_OK;
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_failover, put) {
+    test_put(false);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_failover, put_lane_failure) {
+    test_put(true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_failover, rcx, "rc_x")
+
 /* Tests which verify the transferred data run for every combination of source
  * and destination memory types */
 class test_ucp_rma_sgl_data : public test_ucp_rma_sgl {
