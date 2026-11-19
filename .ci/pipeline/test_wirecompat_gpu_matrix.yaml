@@ -125,7 +125,8 @@ steps:
         cd /ws; bash .ci/scripts/cap_output.sh bash -c '
         source buildlib/az-helpers.sh; failed="";
         export AZP_AGENT_ID=$((${BUILD_NUMBER} % 50));
-        tags=$(buildlib/tools/wire_compat_matrix.sh 6 | grep task.setvariable | grep -oE "v[0-9]+[.][0-9]+[.]x");
+        targets=$(buildlib/tools/wire_compat_matrix.sh 6); echo "$targets";
+        tags=$(echo "$targets" | grep task.setvariable | grep -oE "v[0-9]+[.][0-9]+[.]x");
         if [ -z "$tags" ]; then echo "No UCX releases to test"; exit 1; fi;
         for ucx_tag in $tags; do
         (
