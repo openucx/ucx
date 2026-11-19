@@ -57,6 +57,12 @@ at runtime.
 - DMABUF FD ownership: when `mem_reg`/`mem_advise` accepts a DMABUF FD, the
   caller retains ownership. Register paths must compute the offset from
   the original mapping base, not the registration base.
+- rdma-core functions newer than rdma-core 50 are not linked directly: add
+  them to `UCT_IB_VERBS_OPTIONAL_FUNCS` or `UCT_IB_MLX5_OPTIONAL_FUNCS` and
+  call them through `UCT_IB_OPTIONAL_FUNC()` after a NULL check, or behind a
+  capability that requires them. The CI debug build
+  (`check_ib_symbol_versions` in `buildlib/tools/builds.sh`) fails if a module
+  needs a newer version node.
 - `rdmacm` CM wraps `rdma_cm_event_t` callbacks and has its own state
   machine — keep it self-contained.
 
