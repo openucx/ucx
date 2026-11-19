@@ -244,6 +244,7 @@ stages:
           variables:
             RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
             RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+            RAPIDS_DEPENDENCIES: ${{ coalesce(slice.rapids_dependencies, 'latest') }}
             LIBUCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/libucxx_whl
             UCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/ucxx_whl
           steps:

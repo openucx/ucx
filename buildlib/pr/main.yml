@@ -389,9 +389,11 @@ stages:
     parameters:
       dependsOn: [UCXX_ucx]
       # Wheel GPU tests run on x86 only (no arm64 GPU runner); cuda12 + cuda13.
+      # As in the ucxx matrix, cuda12 runs with the oldest supported
+      # dependencies (the "oldest" matrix of the ucxx dependencies.yaml).
       wheel_tests_ucxx_slices:
         - { name: x86_64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12_gpu, libucxx_slice: x86_64_cuda12_py312, ucxx_slice: x86_64_cuda12_py312,
-            demands: ucx_gpu, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+            demands: ucx_gpu, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12', rapids_dependencies: oldest }
         - { name: x86_64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13_gpu, libucxx_slice: x86_64_cuda13_py312, ucxx_slice: x86_64_cuda13_py312,
             demands: ucx_gpu, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
       conda_cpp_slices:
