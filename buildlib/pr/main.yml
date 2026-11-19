@@ -293,11 +293,7 @@ stages:
   - stage: Codestyle
     jobs:
     - template: codestyle.yml
-    # The ucxx pre-commit checks, on Python 3.12 as in the ucxx CI.
     - template: ucxx_checks.yml
-      parameters:
-        slices:
-          - { name: x86_64_cuda13_py312, demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
 
   - stage: Basic_compile
     dependsOn: []

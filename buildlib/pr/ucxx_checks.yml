@@ -1,35 +1,32 @@
-# Jobs: the ucxx pre-commit checks on the in-tree UCXX copy. They need nothing
+# Job: the ucxx pre-commit checks on the in-tree UCXX copy. They need nothing
 # from the UCX or UCXX builds, so they run in the Codestyle stage, at the start
 # of the pipeline.
-parameters:
-  container: ucxx_rapidsai_ci_conda
-  slices: []
-
 jobs:
-  - ${{ each slice in parameters.slices }}:
-    - job: ucxx_checks_${{ slice.name }}
-      # UCXX results are informational: failures surface as warnings and
-      # never block the UCX PR.
-      continueOnError: true
-      workspace:
-        clean: all
-      pool:
-        name: MLNX
-        demands: ${{ slice.demands }}
-      displayName: 'UCXX checks (${{ slice.name }})'
-      container: ${{ parameters.container }}
-      timeoutInMinutes: 30
-      variables:
-        # No UCX_ prefix on the variables here: they reach every step as
-        # environment, and UCX warns about UCX_* variables it does not know.
-        CI_UCX_DIR: $(Agent.BuildDirectory)/ucx
-        UCXX_DIR: $(Agent.BuildDirectory)/ucx/bindings/ucxx
-        RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
-        RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
-      steps:
-        - checkout: self
-          path: ucx
-          fetchDepth: 100
-          retryCountOnTaskFailure: 5
-        - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh checks
-          displayName: Run UCXX style checks
+  - job: ucxx_checks
+    displayName: UCXX pre-commit check
+    # UCXX results are informational: failures surface as warnings and
+    # never block the UCX PR.
+    continueOnError: true
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: ucxx_rapidsai_ci_conda
+    timeoutInMinutes: 30
+    variables:
+      # No UCX_ prefix on the variables here: they reach every step as
+      # environment, and UCX warns about UCX_* variables it does not know.
+      CI_UCX_DIR: $(Agent.BuildDirectory)/ucx
+      UCXX_DIR: $(Agent.BuildDirectory)/ucx/bindings/ucxx
+      # Python 3.12, as in the ucxx CI.
+      RAPIDS_CUDA_VERSION: '13.4.3'
+      RAPIDS_PY_VERSION: '3.12'
+    steps:
+      - checkout: self
+        path: ucx
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh checks
+        displayName: Run the ucxx pre-commit checks
