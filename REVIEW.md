@@ -41,6 +41,27 @@ Large PRs slow down the entire team. Enforce these hard limits:
 
 ---
 
+## Backports
+
+A backport applies a PR that is already merged to `master` to a release
+branch, such as `v1.23.x`. Review it against the original PR:
+
+- **Name the original PR** — the description should link the original PR,
+  for example "Backport of #12246"; ask the author to add it if it is missing
+- **Same changes** — compare the backport with the original PR file by file;
+  every change of the original should be there, and nothing unrelated should
+  be added
+- **Adaptations** — a difference from the original is allowed only to fit the
+  release branch, for example code that moved or a helper that does not exist
+  there; it must not change behavior compared with the original PR, and the
+  description should explain it
+- **One PR at a time** — a backport should apply exactly one original PR;
+  ask the author to split a backport that combines several PRs
+- **Tests** — tests that the original PR added or changed should come with
+  the backport, adapted if needed
+
+---
+
 ## Test Expectations
 
 Derive required test coverage first from the PR's stated goal, then from the
