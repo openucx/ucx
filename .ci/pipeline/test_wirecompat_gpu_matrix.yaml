@@ -148,6 +148,7 @@ steps:
         );
         [ $? -eq 0 ] || failed="$failed $ucx_tag";
         pkill -9 -f "/ws/ucx_$ucx_tag/examples/";
+        rm -rf /ws/ucx_$ucx_tag;
         done;
         if [ -n "$failed" ]; then echo "Wire compatibility failed with UCX:$failed"; exit 1; fi'
       headNode: "${SLURM_HEAD_NODE}"
