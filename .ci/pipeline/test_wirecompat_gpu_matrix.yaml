@@ -111,7 +111,7 @@ steps:
       containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
       slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
 
-  # Tags run in turn in one allocation to keep funk usage at one node.
+  # Same releases as Azure; they run in turn to keep funk usage at one node.
   - name: Test wire compatibility
     containerSelector: "{name: 'build_helper_ucx'}"
     timeout: 90
@@ -125,7 +125,9 @@ steps:
         cd /ws; bash .ci/scripts/cap_output.sh bash -c '
         source buildlib/az-helpers.sh; failed="";
         export AZP_AGENT_ID=$((${BUILD_NUMBER} % 50));
-        for ucx_tag in v1.15.x v1.16.x v1.17.x v1.18.x; do
+        tags=$(buildlib/tools/wire_compat_matrix.sh 6 | grep task.setvariable | grep -oE "v[0-9]+[.][0-9]+[.]x");
+        if [ -z "$tags" ]; then echo "No UCX releases to test"; exit 1; fi;
+        for ucx_tag in $tags; do
         (
         set -eEx;
         ucx_dir=/ws/ucx_$ucx_tag;
