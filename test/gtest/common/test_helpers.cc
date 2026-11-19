@@ -596,6 +596,13 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
                 continue;
             }
 
+            /* Skip a device which is not visible to the RDMA subsystem, for
+             * example in a container which exposes only some of the devices */
+            std::string ib_device_dir = sysfs_ib_dir + "/" + ib_device;
+            if (access(ib_device_dir.c_str(), F_OK) != 0) {
+                continue;
+            }
+
             std::string ports_dir = infiniband_dir + "/" + ib_device +
                                     "/ports";
             std::string ib_port   = read_dir(ports_dir).front();
