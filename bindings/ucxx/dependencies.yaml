@@ -351,6 +351,23 @@ dependencies:
           # 'nvidia-ml-py' provides the 'pynvml' module
           - nvidia-ml-py>=12
           - cuda-core>=1.0,<2
+    specific:
+      - output_types: pyproject
+        matrices:
+          # 'cuda.core' imports 'cuda.bindings', which the cuda-core wheel does
+          # not require by itself; the conda package does
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - cuda-bindings==12.*
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - cuda-bindings==13.*
+          - matrix:
+            packages:
   test_cpp:
     common:
       - output_types: conda
