@@ -129,9 +129,12 @@ enum {
                                                                is already busy, so need to keep
                                                                checking events for it in the
                                                                main progress loop. */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING   = UCS_BIT(4)  /**< Path bandwidth of the
+                                                               endpoints is to be
+                                                               sampled */
 };
 
 
@@ -222,6 +225,31 @@ typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 /* Hash map of UCT EPs that are being discarded on UCP Worker */
 KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
+
+
+/* Bandwidth of a lane whose path is not degraded */
+#define UCP_EP_PATH_BW_INVALID (-1.0)
+
+
+/* Sources of path bandwidth samples */
+typedef enum {
+    UCP_EP_PATH_BW_OP_PUT,
+    UCP_EP_PATH_BW_OP_LAST
+} ucp_ep_path_bw_op_t;
+
+
+/* Path samples of one configuration and set of lanes of an endpoint,
+ * allocated for endpoints on interfaces which report path events. */
+typedef struct {
+    ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
+    uint32_t               lane_generation; /* Lanes of the samples */
+    /* Lane bandwidth of each source below the path estimate, or
+     * UCP_EP_PATH_BW_INVALID if the path is not degraded */
+    double                 bandwidth[][UCP_EP_PATH_BW_OP_LAST];
+} ucp_ep_path_bw_t;
+
+
+KHASH_TYPE(ucp_worker_ep_path_bw, ucp_ep_h, ucp_ep_path_bw_t*);
 
 
 /**
@@ -405,6 +433,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
     kh_ucp_worker_remote_flush_t     remote_flush_hash;
+    kh_ucp_worker_ep_path_bw_t       ep_path_bw;          /* EP path bandwidth samples */
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
@@ -478,6 +507,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);
 
+void ucp_worker_ep_path_bw_cleanup(ucp_ep_h ep);
+
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
@@ -497,7 +528,8 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 /* must be called with async lock held */
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
-/* must be called with async lock held */
+/* must be called with async lock held; @a discarded_cb is called only if
+ * UCS_INPROGRESS is returned, maybe before the function returns */
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,

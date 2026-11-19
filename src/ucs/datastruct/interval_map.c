@@ -84,6 +84,19 @@ void ucs_interval_map_remove(ucs_interval_map_t *map,
 }
 
 ucs_interval_map_node_t *
+ucs_interval_map_extract_first(ucs_interval_map_t *map)
+{
+    ucs_rbtree_node_t *rb_node = ucs_rbtree_first(&map->rb);
+
+    if (rb_node == NULL) {
+        return NULL;
+    }
+
+    ucs_rbtree_remove(&map->rb, rb_node);
+    return ucs_interval_map_node(rb_node);
+}
+
+ucs_interval_map_node_t *
 ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
                                  uint64_t end)
 {

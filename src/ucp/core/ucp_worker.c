@@ -962,6 +962,213 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_event_common(wiface);
 }
 
+static unsigned ucp_worker_iface_path_bw_progress(void *arg);
+
+static int ucp_worker_iface_path_bw_filter(const ucs_callbackq_elem_t *elem,
+                                           void *arg)
+{
+    return (elem->cb == ucp_worker_iface_path_bw_progress) &&
+           (elem->arg == arg);
+}
+
+void ucp_worker_ep_path_bw_cleanup(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    khiter_t it;
+
+    it = kh_get(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep);
+    if (it != kh_end(&worker->ep_path_bw)) {
+        ucs_free(kh_value(&worker->ep_path_bw, it));
+        kh_del(ucp_worker_ep_path_bw, &worker->ep_path_bw, it);
+    }
+}
+
+static ucp_ep_path_bw_t *ucp_worker_ep_path_bw_get(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_ep_path_bw_t *state;
+    ucp_ep_path_bw_op_t op;
+    ucp_lane_index_t lane;
+    khiter_t it;
+    int ret;
+
+    it = kh_get(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep);
+    if (it != kh_end(&worker->ep_path_bw)) {
+        state = kh_value(&worker->ep_path_bw, it);
+        if (ucp_worker_ep_path_bw_is_current(ep, state)) {
+            return state;
+        }
+
+        ucp_worker_ep_path_bw_cleanup(ep);
+    }
+
+    state = ucs_malloc(sizeof(*state) +
+                       ucp_ep_num_lanes(ep) * sizeof(*state->bandwidth),
+                       "ep_path_bw");
+    if (state == NULL) {
+        ucs_error("ep %p: failed to allocate path bandwidth state", ep);
+        return NULL;
+    }
+
+    state->cfg_index       = ep->cfg_index;
+    state->lane_generation = ep->ext->lane_generation;
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+        }
+    }
+
+    it = kh_put(ucp_worker_ep_path_bw, &worker->ep_path_bw, ep, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("ep %p: failed to add path bandwidth state to hash", ep);
+        ucs_free(state);
+        return NULL;
+    }
+
+    kh_value(&worker->ep_path_bw, it) = state;
+    return state;
+}
+
+/* Keep a sample below the path estimate, other paths are not degraded */
+static void
+ucp_worker_ep_path_bw_set(ucp_ep_path_bw_t *state, ucp_lane_index_t lane,
+                          ucp_ep_path_bw_op_t op, double bandwidth,
+                          double path_bandwidth)
+{
+    if (bandwidth >= path_bandwidth) {
+        state->bandwidth[lane][op] = UCP_EP_PATH_BW_INVALID;
+    } else {
+        /* Below 1 B/s, the path is considered stalled */
+        state->bandwidth[lane][op] = (bandwidth < 1.0) ? 0 : bandwidth;
+    }
+}
+
+/* Mark the endpoint degraded while a lane is below the path estimate */
+static void
+ucp_worker_ep_path_bw_update_flag(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
+{
+    ucp_ep_path_bw_op_t op;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        for (op = 0; op < UCP_EP_PATH_BW_OP_LAST; ++op) {
+            if (state->bandwidth[lane][op] != UCP_EP_PATH_BW_INVALID) {
+                ucp_ep_update_flags(ep, UCP_EP_FLAG_PATH_DEGRADED, 0);
+                return;
+            }
+        }
+    }
+
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+}
+
+/* Sample the lanes of the endpoint on the interface, and mark the endpoint
+ * degraded while a lane is below the path estimate */
+static void
+ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
+                             double path_bandwidth)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_ep_path_bw_t *state        = NULL;
+    uct_ep_attr_t attr;
+    ucp_lane_index_t i, lane;
+    double bandwidth;
+
+    for (i = 0; (i < UCP_MAX_LANES) && (key->rma_bw_lanes[i] != UCP_NULL_LANE);
+         ++i) {
+        lane = key->rma_bw_lanes[i];
+        /* Port speed changed: query the lane after endpoint reconfiguration */
+        if ((key->lanes[lane].rsc_index != wiface->rsc_index) ||
+            (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) ||
+            (key->lanes[lane].port_speed != wiface->port_speed) ||
+            (ucp_ep_get_lane(ep, lane) == NULL)) {
+            continue;
+        }
+
+        if (state == NULL) {
+            state = ucp_worker_ep_path_bw_get(ep);
+            if (state == NULL) {
+                ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+                return;
+            }
+        }
+
+        memset(&attr, 0, sizeof(attr));
+        attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
+        if (uct_ep_query(ucp_ep_get_lane(ep, lane), &attr) != UCS_OK) {
+            /* Without a newer sample, the previous one is still the best */
+            continue;
+        }
+
+        bandwidth = ucp_proto_common_iface_bandwidth(ep->worker->context,
+                                                     &attr.bandwidth);
+        ucs_assertv(bandwidth >= 0, "ep %p lane[%u] bandwidth=%f", ep, lane,
+                    bandwidth);
+        ucs_debug("ep %p lane[%u] path bandwidth %.0f B/s", ep, lane,
+                  bandwidth);
+        ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PUT,
+                                  bandwidth, path_bandwidth);
+    }
+
+    if (state == NULL) {
+        return;
+    }
+
+    ucp_worker_ep_path_bw_update_flag(ep, state);
+}
+
+static unsigned ucp_worker_iface_path_bw_progress(void *arg)
+{
+    ucp_worker_iface_t *wiface = arg;
+    ucp_worker_h worker        = wiface->worker;
+    uct_perf_attr_t perf_attr;
+    ucp_ep_ext_t *ep_ext;
+    double path_bandwidth;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    wiface->flags &= ~UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING;
+
+    /* The estimate which a path without samples reports */
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK) {
+        path_bandwidth = ucp_proto_common_iface_bandwidth(
+                worker->context, &perf_attr.path_bandwidth);
+        ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+            if (!(ep_ext->ep->flags &
+                  (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED))) {
+                ucp_worker_ep_path_bw_update(ep_ext->ep, wiface,
+                                             path_bandwidth);
+            }
+        }
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+static void ucp_worker_iface_ep_event_cb(void *arg, uct_ep_h uct_ep,
+                                         unsigned events)
+{
+    ucp_worker_iface_t *wiface = arg;
+    ucp_worker_h worker        = wiface->worker;
+
+    if (!(events & UCT_EP_EVENT_PATH_SPEED_CHANGE)) {
+        return;
+    }
+
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
+    UCS_ASYNC_BLOCK(&worker->async);
+    /* Many endpoints of the interface can report a change of the same device,
+     * so update all of them once, instead of looking up each endpoint */
+    if (!(wiface->flags & UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING)) {
+        wiface->flags |= UCP_WORKER_IFACE_FLAG_PATH_BW_PENDING;
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, wiface,
+                                  ucp_worker_iface_path_bw_progress, wiface);
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
 static void
 ucp_worker_iface_async_fd_event(int fd, ucs_event_set_types_t events, void *arg)
 {
@@ -1500,9 +1707,15 @@ ucp_worker_iface_query_attr_v2(ucp_worker_iface_t *wiface)
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface_p)
 {
-    ucp_context_h context            = worker->context;
-    ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
-    uct_md_h md                      = context->tl_mds[resource->md_index].md;
+    ucp_context_h context                           = worker->context;
+    ucp_tl_resource_desc_t *resource                = &context->tl_rscs[tl_id];
+    uct_md_h md                                     =
+            context->tl_mds[resource->md_index].md;
+    uct_iface_set_ep_event_params_t ep_event_params = {
+        .field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB |
+                      UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG,
+        .cb         = ucp_worker_iface_ep_event_cb
+    };
     uct_iface_params_t iface_params;
     uct_iface_config_t *iface_config;
     ucp_worker_iface_t *wiface;
@@ -1604,6 +1817,13 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
+
+    ep_event_params.arg = wiface;
+    status              = uct_iface_set_ep_event_handler(wiface->iface,
+                                                         &ep_event_params);
+    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+        goto err_close_iface;
+    }
 
     status = uct_iface_query(wiface->iface, &wiface->attr);
     if (status != UCS_OK) {
@@ -1718,6 +1938,8 @@ err:
 
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 {
+    ucs_callbackq_remove_oneshot(&wiface->worker->uct->progress_q, wiface,
+                                 ucp_worker_iface_path_bw_filter, wiface);
     ucp_worker_iface_activate_arm_unmark_busy(wiface);
     uct_worker_progress_unregister_safe(wiface->worker->uct,
                                         &wiface->check_events_id);
@@ -2754,6 +2976,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_init_inplace(ucp_worker_ep_path_bw, &worker->ep_path_bw);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2974,6 +3197,7 @@ err_destroy_ep_map:
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_ep_path_bw, &worker->ep_path_bw);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
@@ -3157,17 +3381,10 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
                                    const char *ep_type_name)
 {
     ucp_ep_ext_t *ep_ext, *tmp;
-    ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy %s endpoints", worker, ep_type_name);
     ucs_list_for_each_safe(ep_ext, tmp, ep_list, ep_list) {
-        ep = ep_ext->ep;
-        /* Cleanup pending operations on the UCP EP before destroying it, since
-         * ucp_ep_destroy_internal() expects the pending queues of the UCT EPs
-         * will be empty before they are destroyed */
-        ucp_ep_purge_lanes(ep, ucp_ep_err_pending_purge,
-                           UCS_STATUS_PTR(UCS_ERR_CANCELED));
-        ucp_ep_disconnected(ep, 1);
+        ucp_ep_close_force(ep_ext->ep);
     }
 }
 
@@ -3228,6 +3445,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_PTR_MAP_DESTROY(request, &worker->request_map);
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_ep_path_bw, &worker->ep_path_bw);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
@@ -3745,6 +3963,12 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     uct_ep    = ucp_ep_get_lane(ep, lane);
     rsc_index = ucp_ep_get_rsc_index(ep, lane);
 
+    /* When wireup fails to connect the lanes of a new configuration, they
+     * stay unset until the scheduled endpoint failure runs */
+    if (uct_ep == NULL) {
+        goto out_done;
+    }
+
     ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
                 (lane == ucp_ep_get_cm_lane(ep)),
                 "ep=%p cm_lane=%u lane=%u rsc_index=%u",
@@ -3954,8 +4178,9 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     if (worker->flags & UCP_WORKER_FLAG_DISCARD_DISABLED) {
+        /* The callback is called before returning */
         ucp_worker_discard_uct_ep_destroy_progress(req);
-        return UCS_OK;
+        return UCS_INPROGRESS;
     }
 
     ucp_worker_discard_uct_ep_progress(req);
