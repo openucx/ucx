@@ -7,8 +7,9 @@
 #     --builder <multi> -f docker-compose-rapidsai.yml \
 #     --set '*.platform=linux/amd64,linux/arm64' --push
 #
-# The platforms come from that --set, not from this file: bake ignores the
-# compose `build.platforms` key, so listing it here would be inert.
+# The platforms come from that --set, not from this file: buildx 0.21 ignores
+# the compose `build.platforms` key (0.38 honors it), and the --set
+# works with both.
 #
 # Bumping RAPIDS: set RAPIDS_VER. If RAPIDS moves the wheel CUDA/py tag
 # (e.g. a new CUDA patch version, or py3.12 -> py3.13), update the two wheel

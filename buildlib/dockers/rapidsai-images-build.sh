@@ -114,8 +114,9 @@ fi
 docker buildx inspect "$BUILDER" --bootstrap >/dev/null
 
 # 3. login -> bake (builds both arches on their native node, pushes, writes manifest) -> logout.
-# Platforms are forced on the CLI: bake does not honor the compose
-# `build.platforms` key and would otherwise build only the local arch.
+# Platforms are forced on the CLI: buildx 0.21 does not honor the compose
+# `build.platforms` key (0.38 does) and would otherwise build only
+# the local arch.
 printf '%s' "$HARBOR_UCX_PASSWORD" | docker login "$REGISTRY" -u "$HARBOR_UCX_USER" --password-stdin
 trap 'docker logout "$REGISTRY" >/dev/null 2>&1 || true' EXIT
 # A pushed tag is never overwritten: running CI pulls it by name.
