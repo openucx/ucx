@@ -1,11 +1,13 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
 #include <uct/ib/test_ib.h>
 #include <uct/api/v2/uct_v2.h>
+
+#include <dlfcn.h>
 extern "C" {
 #include <uct/ib/base/ib_log.h>
 }
@@ -1670,3 +1672,27 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_log_data, dump_am_zcopy,
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_log_data);
+
+
+class test_uct_ib_optional_func : public ucs::test {
+};
+
+UCS_TEST_F(test_uct_ib_optional_func, resolved) {
+    unsigned num_funcs = 0;
+
+    /* Set exactly when the linked rdma-core library defines the function */
+#define TEST_UCT_IB_OPTIONAL_FUNC(_func) \
+    EXPECT_EQ(dlsym(RTLD_DEFAULT, #_func), \
+              reinterpret_cast<void*>(UCT_IB_OPTIONAL_FUNC(_func))) << #_func; \
+    ++num_funcs;
+
+    UCT_IB_VERBS_OPTIONAL_FUNCS(TEST_UCT_IB_OPTIONAL_FUNC)
+#ifdef HAVE_MLX5_DV
+    UCT_IB_MLX5_OPTIONAL_FUNCS(TEST_UCT_IB_OPTIONAL_FUNC)
+#endif
+#undef TEST_UCT_IB_OPTIONAL_FUNC
+
+    if (num_funcs == 0) {
+        UCS_TEST_SKIP_R("rdma-core headers declare no optional function");
+    }
+}
