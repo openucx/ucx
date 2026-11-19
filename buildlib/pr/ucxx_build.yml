@@ -8,6 +8,7 @@ parameters:
   wheel_tests_ucxx_slices: []
   conda_tests_slices: []
   docs_slices: []
+  checks_slices: []
 
 stages:
   # UCXX results are informational: every job is continueOnError, so failures
@@ -203,6 +204,28 @@ stages:
               inputs:
                 pathToPublish: $(DOCS_OUT_DIR)
                 artifactName: ucxx-docs-${{ slice.name }}
+
+      - ${{ each slice in parameters.checks_slices }}:
+        - job: ucxx_checks_${{ slice.name }}
+          continueOnError: true
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX checks (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 30
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh checks
+              displayName: Run UCXX style checks
 
       - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
         - job: ucxx_wheel_tests_ucxx_${{ slice.name }}

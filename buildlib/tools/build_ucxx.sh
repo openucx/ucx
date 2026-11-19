@@ -4,8 +4,10 @@
 #
 # See file LICENSE for terms.
 #
-# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs>
-# Env: ucx_pr needs RAPIDS_CUDA_VERSION and UCX_PR_TARBALL; every other phase
+# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|
+#                       docs|checks>
+# Env: ucx_pr needs RAPIDS_CUDA_VERSION and UCX_PR_TARBALL; checks needs
+#   UCXX_DIR, RAPIDS_CUDA_VERSION and RAPIDS_PY_VERSION; every other phase
 #   needs UCXX_DIR, RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
 # Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
@@ -41,6 +43,31 @@ fi
 
 : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
+
+if [ "$phase" = "checks" ]; then
+  export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
+  # The ucxx pre-commit checks, including the ones that keep the files
+  # generated from dependencies.yaml in sync. pre-commit works from the root
+  # of a git repository, and the ucxx hooks address their files from the ucxx
+  # root (dependencies.yaml, RAPIDS_VERSION, ^conda/environments/). So the
+  # hooks run in a throwaway repository made of the tracked UCXX files: there
+  # the UCXX tree is the root, and --all-files covers UCXX only. That
+  # repository has one commit, so verify-copyright, which looks at the files
+  # changed against the target branch, finds nothing to check.
+  checks_dir=$(mktemp -d)
+  (cd "$UCXX_DIR" && git ls-files -z | tar --null -T - -cf -) \
+    | tar -xf - -C "$checks_dir"
+  cd "$checks_dir"
+  git init -q
+  git add -A
+  git -c user.name=ucxx-checks -c user.email=ucxx-checks@localhost \
+    -c commit.gpgsign=false commit -q -m "UCXX tree"
+  # CI=true keeps rapids-github-fetch from prompting for an interactive
+  # GitHub login; it downloads anonymously.
+  CI=true bash ci/check_style.sh
+  exit 0
+fi
+
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
 UCX_PR_PREFIX=/tmp/ucx-pr
