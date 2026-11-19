@@ -12,6 +12,7 @@
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/preprocessor.h>
 
 #include <stddef.h>
@@ -32,16 +33,14 @@
     _macro(nvmlDeviceGetGpuFabricInfo, nvmlDevice_t, nvmlGpuFabricInfo_t*)
 #endif
 
-#define UCT_CUDA_NVML_FPTR(_func) UCS_PP_TOKENPASTE(uct_cuda_fptr_, _func)
+#define UCT_CUDA_NVML_FPTR(_func) UCS_SYS_LIB_FUNC_PTR(uct_cuda_fptr_, _func)
 
 #define UCT_CUDA_NVML_FPTR_DECL(_func, ...) \
-    static nvmlReturn_t (*UCT_CUDA_NVML_FPTR(_func))(__VA_ARGS__)
+    static UCS_SYS_LIB_FUNC_PTR_DEFINE(uct_cuda_fptr_, _func)
 
 #define UCT_CUDA_NVML_FPTR_LOAD(_func, _fail_action) \
     do { \
-        UCT_CUDA_NVML_FPTR( \
-                _func) = uct_cuda_nvml_dlsym(lib_handle, \
-                                             UCS_PP_MAKE_STRING(_func)); \
+        UCS_SYS_LIB_FUNC_LOAD(uct_cuda_fptr_, _func, lib_handle); \
         if (UCT_CUDA_NVML_FPTR(_func) == NULL) { \
             _fail_action; \
         } \
@@ -134,21 +133,6 @@ nvmlDeviceGetGpuFabricInfoV_proxy(nvmlDevice_t device,
     return NVML_SUCCESS;
 }
 #endif
-
-static void *uct_cuda_nvml_dlsym(void *handle, const char *name)
-{
-    void *symbol;
-    const char *error;
-
-    symbol = dlsym(handle, name);
-    if (symbol == NULL) {
-        error = dlerror();
-        ucs_debug("dlsym('%s') failed: %s", name,
-                  error ? error : "unknown error");
-    }
-
-    return symbol;
-}
 
 static ucs_status_t uct_cuda_nvml_init()
 {
