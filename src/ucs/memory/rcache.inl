@@ -8,6 +8,7 @@
 #define UCS_RCACHE_INL_
 
 #include "rcache_int.h"
+#include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 
 static UCS_F_ALWAYS_INLINE int
@@ -72,9 +73,10 @@ ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     }
 }
 
+/* Find a region for use, the caller takes the reference */
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
-ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
-                         size_t alignment, int prot)
+ucs_rcache_lookup_noref(ucs_rcache_t *rcache, void *address, size_t length,
+                        size_t alignment, int prot)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -100,9 +102,22 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
         return NULL;
     }
 
-    region->refcount++;
     ucs_rcache_region_lru_get(rcache, region);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
+    return region;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
+ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
+                         size_t alignment, int prot)
+{
+    ucs_rcache_region_t *region;
+
+    region = ucs_rcache_lookup_noref(rcache, address, length, alignment, prot);
+    if (region != NULL) {
+        region->refcount++;
+    }
+
     return region;
 }
 
@@ -113,7 +128,12 @@ ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
     ucs_rcache_region_t *region;
 
     ucs_rw_spinlock_read_lock(&rcache->pgt_lock);
-    region = ucs_rcache_lookup_unsafe(rcache, address, length, alignment, prot);
+    region = ucs_rcache_lookup_noref(rcache, address, length, alignment, prot);
+    if (region != NULL) {
+        /* Other readers may take a reference on the same region */
+        ucs_atomic_add32(&region->refcount, +1);
+    }
+
     ucs_rw_spinlock_read_unlock(&rcache->pgt_lock);
     return region;
 }

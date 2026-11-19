@@ -77,6 +77,8 @@ jobs:
           source buildlib/az-helpers.sh
           ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
           depth=1
+          # Frost test only: release branches with the Blackwell RTX port
+          BUILD_REPOSITORY_URI=https://github.com/Alexey-Rivkin/ucx.git
           git_clone_with_retry "$(ucx_tag)" "${ucx_dir}" "${depth}"
           cd ${ucx_dir}
           ./autogen.sh

@@ -829,7 +829,9 @@ UCS_TEST_P(test_ucp_proto_am_rndv,
 UCS_TEST_P(test_ucp_proto_am_rndv,
            am_explicit_scheme_disables_force_provenance,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
-           "RNDV_SCHEME=get_zcopy")
+           "RNDV_SCHEME=get_zcopy",
+           /* Keep the zero-copy lanes when the NIC is far from the GPU */
+           "MULTI_LANE_MAX_RATIO=inf")
 {
     require_cuda_rndv_support();
 
