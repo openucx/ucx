@@ -2,8 +2,6 @@ parameters:
   demands: []
   name: subtest
   container:
-  # Number of latest releases to test, found at runtime
-  num_releases: 6
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -22,7 +20,7 @@ jobs:
         fetchDepth: 1
         retryCountOnTaskFailure: 5
 
-      - bash: buildlib/tools/wire_compat_matrix.sh ${{ parameters.num_releases }}
+      - bash: buildlib/tools/wire_compat_matrix.sh 6
         name: targets
         displayName: Find UCX releases to test
         retryCountOnTaskFailure: 5

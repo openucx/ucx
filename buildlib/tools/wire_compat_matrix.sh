@@ -11,12 +11,7 @@
 # Env:   BUILD_REPOSITORY_URI - repository to take the release branches from
 #
 
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <num_releases>"
-    exit 1
-fi
-
-num_releases=$1
+num_releases=${1:?Usage: $0 <num_releases>}
 
 major=$(sed -n 's/^define(\[ucx_ver_major\], *\([0-9]*\)).*/\1/p' configure.ac)
 minor=$(sed -n 's/^define(\[ucx_ver_minor\], *\([0-9]*\)).*/\1/p' configure.ac)
@@ -27,29 +22,17 @@ fi
 current="v${major}.${minor}.x"
 
 heads=$(git ls-remote --heads "${BUILD_REPOSITORY_URI}" 'v*.x')
-branches=$(echo "${heads}" | sed 's#.*refs/heads/##' |
-           grep -E '^v[0-9]+\.[0-9]+\.x$' | sort -V)
-
-releases=""
-for branch in ${branches}; do
-    # sort -C succeeds when branch <= current
-    if [ "${branch}" != "${current}" ] &&
-       printf '%s\n%s\n' "${branch}" "${current}" | sort -CV; then
-        releases+="${branch}"$'\n'
-    fi
-done
-
-releases=$(printf '%s' "${releases}" | tail -n "${num_releases}")
-if [ -z "${releases}" ]; then
+legs=$(echo "${heads}" | sed 's#.*refs/heads/##' |
+       grep -E '^v[0-9]+\.[0-9]+\.x$' |
+       awk -F'[v.]' -v major="${major}" -v minor="${minor}" \
+           '$2 < major || ($2 == major && $3 < minor)' |
+       sort -V | tail -n "${num_releases}" |
+       sed 's/^v\([0-9]*\)\.\([0-9]*\)\.x$/"ucx_\1_\2":{"ucx_tag":"&"}/' |
+       paste -sd, -)
+if [ -z "${legs}" ]; then
     echo "No release branch older than ${current} in ${BUILD_REPOSITORY_URI}"
     exit 1
 fi
-
-legs=""
-for ref in ${releases}; do
-    IFS=. read -r major minor _ <<< "${ref#v}"
-    legs+="${legs:+,}\"ucx_${major}_${minor}\":{\"ucx_tag\":\"${ref}\"}"
-done
 
 echo "Wire-compat targets for ${current}: {${legs}}"
 # Split ##vso so a set -x trace is not parsed by the agent
