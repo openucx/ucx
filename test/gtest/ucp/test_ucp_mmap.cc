@@ -1703,11 +1703,12 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered,
     EXPECT_EQ(size, ucp_memh_length(memh2->parent));
     EXPECT_EQ(2, rcache->num_regions);
 
+    memh1->parent->super.flags |= UCS_RCACHE_REGION_FLAG_REGISTERED;
+
     /* Verify registrations by performing zcopy put */
     send_and_verify(memh1, ptr1, size, mem_type);
     send_and_verify(memh2, ptr2, size, mem_type);
 
-    memh1->parent->super.flags |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh1));
     mem_buffer::release(ptr1, mem_type);
