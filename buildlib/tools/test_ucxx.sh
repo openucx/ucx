@@ -11,9 +11,9 @@
 #   test_wheel_ucxx:       also LIBUCXX_WHL_DIR, UCXX_WHL_DIR
 #
 # Everything runs against the UCX built from this checkout (the PR under
-# test): the released ucx/libucx dependencies are stripped from the ucxx tree
-# (see ucxx_ucx_pr.sh), the packages under test were built against
-# UCX_PR_PREFIX by the UCXX_build jobs, and the tests load its libraries.
+# test): the ucxx UCXX_NO_LIBUCX switch drops the released ucx/libucx
+# dependencies, the packages under test were built against UCX_PR_PREFIX by
+# the UCXX_build jobs, and the tests load its libraries.
 
 # The pipeline runs this as `bash <path>`, which ignores the shebang options,
 # so the shell flags have to be set here for the fail-loud guards to bite.
@@ -29,9 +29,7 @@ esac
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${UCXX_DIR:?UCXX_DIR required}"
 
-ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
-export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
-source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+UCX_PR_PREFIX=/tmp/ucx-pr
 
 # The PR's UCX was built once by the UCXX_ucx stage and staged at
 # UCX_PR_PREFIX by the fetch step; every build and test consumes it.
@@ -55,8 +53,9 @@ shim_download_helper() {
 
 cd "$UCXX_DIR"
 
-# Point every ucxx build and test at the PR's UCX instead of released ucx.
-use_pr_ucx
+# ucxx asks for its UCXX_NO_LIBUCX switch in every job (ci/README.md). The
+# tests load the PR's UCX through the overlay and LD_LIBRARY_PATH below.
+export UCXX_NO_LIBUCX=true
 
 # Tolerate missing nvidia-smi on CPU containers. Guard catches upstream rewording.
 sed -i 's#^  nvidia-smi$#  command -v nvidia-smi >/dev/null \&\& nvidia-smi || echo "(no GPU)"#' ci/test_common.sh

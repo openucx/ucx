@@ -63,9 +63,7 @@ esac
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
-ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
-export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
-source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+UCX_PR_PREFIX=/tmp/ucx-pr
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 # upstream test-env matrices select the dependency set via this key
@@ -116,8 +114,14 @@ export PATH="$HOME/.local/bin:$PATH"
 
 cd "$UCXX_DIR"
 
-# Point every ucxx build at the PR's UCX instead of released ucx.
-use_pr_ucx
+# Point every ucxx build at the PR's UCX instead of released ucx, through
+# the ucxx UCXX_NO_LIBUCX switch.
+export UCXX_NO_LIBUCX=true ucx_ROOT="$UCX_PR_PREFIX"
+
+# No sccache-dist here: the ucxx recipes default the dist auth type to
+# "token", and sccache refuses to start with that type and no token. Set but
+# empty overrides the recipe default and leaves dist unconfigured.
+export SCCACHE_DIST_AUTH_TYPE=
 
 # Wheel builds otherwise pick system gcc 8.5 (too old for libucxx's C++20);
 # point CC/CXX at gcc-toolset-14.
