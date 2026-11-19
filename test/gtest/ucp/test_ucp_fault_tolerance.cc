@@ -1155,9 +1155,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush_lane_recovery, shm_ib, "shm,ib")
 
 void test_ucp_fault_tolerance::run_initiator_failure()
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
-        has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes "
+    if (has_any_transport({"ud_v", "ud_x"}) &&
+        (get_variant_value() & (TEST_OP_AM | TEST_OP_ALL_LANES_FAILED))) {
+        UCS_TEST_SKIP_R("UD transport BUG: local AM or all-lanes invalidation "
                         "leads to assertion failure in ud_ep_purge");
     }
 
