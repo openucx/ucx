@@ -119,6 +119,9 @@ Focused checks:
   and CI/build scripts. Check explicit `--with-*`/`--enable-*` failure paths,
   explicit `--without-*`/`--disable-*` paths, default behavior, and whether a
   relevant build job exercises the new behavior.
+- When a PR changes code, documentation, or code comments, check that the
+  documentation matches the behavior and that code comments match the
+  implementation.
 
 When a finding depends on a code rule, cite the rule from the relevant
 `AGENTS.md`, `docs/CodeStyle.md`, `docs/LoggingStyle.md`, or
