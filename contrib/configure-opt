@@ -11,6 +11,6 @@
 #
 
 basedir=$(cd $(dirname $0) && pwd)
-$basedir/configure-release \
+"$basedir/configure-release" \
 	--enable-optimizations \
 	"$@"
