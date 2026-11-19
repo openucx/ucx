@@ -1698,13 +1698,21 @@ typedef struct {
  *     Start   SeqNum   Hdr_64bit   LCRC   End
  *       1   +   2    +   16      +   4  +  1  = 24
  *
- *   Gen3/4:
+ *   Gen3/4/5:
  *     Start   SeqNum   Hdr_64bit   LCRC
  *       4   +   2    +   16      +   4  = 26
+ *
+ *   Gen6 (FLIT mode, sequence number and CRC are per flit):
+ *     Hdr_64bit
+ *       16      = 16
  *
  * - DLLP (Data Link Layer Packet) overhead calculations:
  *    - Control packet 8b ACK + 8b flow control
  *    - ACK/FC ratio: 1 per 4 TLPs
+ *    - Gen6 carries them in the DLP bytes of each flit, so no extra overhead
+ *
+ * - Gen6 flit: 236 TLP bytes + 6 DLP + 8 CRC + 6 FEC = 256 bytes, used as the
+ *   encoding ratio.
  *
  * References:
  * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
@@ -1752,6 +1760,14 @@ static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
      .ctrl_overhead = 16,
      .encoding      = 128,
      .decoding      = 130},
+    {.name          = "gen6",
+     .bw_gbps       = 64,
+     .payload       = 256,
+     .tlp_overhead  = 16,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 0,
+     .encoding      = 236,
+     .decoding      = 256},
 };
 
 double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
