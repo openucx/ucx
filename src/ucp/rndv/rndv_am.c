@@ -36,12 +36,6 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->auto_lanes         = ucp_context_max_rndv_lanes_is_auto(context);
     params->opt_align_offs     = UCP_PROTO_COMMON_OFFSET_INVALID;
 
-    if (params->auto_lanes && !ucp_context_eager_uses_am_bw_lanes(context)) {
-        /* Eager protocols don't use AM_BW lanes, so keep buffers that don't
-         * use their GPU's NICs on the AM lane */
-        params->max_lanes = 1;
-    }
-
     ucp_proto_multi_probe(params);
 }
 

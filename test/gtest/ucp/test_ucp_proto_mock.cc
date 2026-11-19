@@ -3716,6 +3716,31 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
     }
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
+           rndv_am_auto_uses_assigned_nics, "RNDV_THRESH=1",
+           "MAX_RNDV_RAILS=auto", "MAX_RNDV_RAILS_FALLBACK=2")
+{
+    install_assignment(mapped_gpu(), endpoint_nics());
+
+    /* Host memory keeps the rendezvous fallback of 2 */
+    EXPECT_EQ(2u,
+              num_protocol_lanes(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST,
+                                 UCP_DATATYPE_CONTIG, UCS_SYS_DEVICE_ID_UNKNOWN,
+                                 1, "rndv/am/zcopy"));
+
+    /* The assigned GPU uses all its AM_BW lanes */
+    EXPECT_EQ(endpoint_nics().size(),
+              num_protocol_lanes(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_CUDA,
+                                 UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
+                                 "rndv/am/zcopy"));
+
+    /* A GPU without assigned NICs keeps the rendezvous fallback of 2 */
+    EXPECT_EQ(2u,
+              num_protocol_lanes(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_CUDA,
+                                 UCP_DATATYPE_CONTIG, unmapped_gpu(), 1,
+                                 "rndv/am/zcopy"));
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_am_bw, rcx_gpu,
                               "rc_x,cuda,rocm")
 
@@ -3744,158 +3769,6 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_only,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_am_only, rcx_gpu,
                               "rc_x,cuda,rocm")
-
-/* The default eager limit of 1 with an 'auto' rendezvous limit */
-class test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw :
-    public test_ucp_proto_mock_rcx_gpu_nic_am_bw {
-public:
-    test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw()
-    {
-        modify_config("MAX_EAGER_LANES", "1");
-        modify_config("MAX_RNDV_RAILS", "auto");
-    }
-
-protected:
-    virtual bool auto_gpu_lanes() const
-    {
-        return true;
-    }
-
-    virtual void post_ucp_init() override
-    {
-        test_ucp_proto_mock_rcx_gpu_nic_am_bw::post_ucp_init();
-
-        /* The mock installs its assignment after ucp_init(), so the flag that
-         * ucp_init() computed is false. Set it before connect() creates the
-         * endpoints. */
-        sender().ucph()->config.auto_gpu_lanes   = auto_gpu_lanes();
-        receiver().ucph()->config.auto_gpu_lanes = auto_gpu_lanes();
-    }
-
-    unsigned num_am_bw_lanes()
-    {
-        const ucp_ep_config_key_t &key =
-                ucp_worker_ep_config(sender().worker(),
-                                     ep_config_index(sender()))
-                        ->key;
-        unsigned count = 0;
-
-        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
-            if (key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) {
-                ++count;
-            }
-        }
-
-        return count;
-    }
-
-    unsigned num_rndv_am_lanes(ucs_memory_type_t mem_type,
-                               ucs_sys_device_t sys_dev)
-    {
-        return num_protocol_lanes(UCP_OP_ID_RNDV_SEND, mem_type,
-                                  UCP_DATATYPE_CONTIG, sys_dev, 1,
-                                  "rndv/am/zcopy");
-    }
-};
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           rndv_am_uses_assigned_am_bw_lanes, "RNDV_THRESH=1")
-{
-    install_assignment(mapped_gpu(), endpoint_nics());
-
-    /* One AM_BW lane per NIC and path */
-    EXPECT_EQ(endpoint_nics().size(), num_am_bw_lanes());
-    /* More than the rendezvous fallback of 2 */
-    EXPECT_EQ(endpoint_nics().size(),
-              num_rndv_am_lanes(UCS_MEMORY_TYPE_CUDA, mapped_gpu()));
-    expect_protocol_candidates(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_CUDA,
-                               UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
-                               "rndv/am/bcopy", endpoint_nics());
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           eager_uses_only_am_lane, "RNDV_THRESH=1")
-{
-    install_assignment(mapped_gpu(), endpoint_nics());
-
-    for (const auto &proto : gpu_nic_am_bw_protocols) {
-        if (proto.op_id == UCP_OP_ID_RNDV_SEND) {
-            continue;
-        }
-
-        expect_protocol_candidates(proto.op_id, UCS_MEMORY_TYPE_CUDA,
-                                   UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
-                                   proto.name, {am_lane_nic()});
-    }
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           host_memory_uses_only_am_lane, "RNDV_THRESH=1")
-{
-    install_assignment(mapped_gpu(), endpoint_nics());
-
-    expect_protocol_candidates(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST,
-                               UCP_DATATYPE_CONTIG, UCS_SYS_DEVICE_ID_UNKNOWN,
-                               1, "rndv/am/zcopy", {am_lane_nic()});
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           unassigned_gpu_uses_only_am_lane, "RNDV_THRESH=1")
-{
-    install_assignment(mapped_gpu(), endpoint_nics());
-
-    expect_protocol_candidates(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_CUDA,
-                               UCP_DATATYPE_CONTIG, unmapped_gpu(), 1,
-                               "rndv/am/zcopy", {am_lane_nic()});
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           eager_am_bw_lanes_keep_rndv_fallback, "RNDV_THRESH=1",
-           "MAX_EAGER_RAILS=2")
-{
-    install_assignment(mapped_gpu(), endpoint_nics());
-
-    /* Host memory keeps the rendezvous fallback of 2 */
-    EXPECT_EQ(2u, num_rndv_am_lanes(UCS_MEMORY_TYPE_HOST,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN));
-    /* The assigned GPU uses all its AM_BW lanes */
-    EXPECT_EQ(endpoint_nics().size(),
-              num_rndv_am_lanes(UCS_MEMORY_TYPE_CUDA, mapped_gpu()));
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           no_am_bw_lanes_without_rndv_am, "RNDV_SCHEME=get_zcopy")
-{
-    EXPECT_EQ(0u, num_am_bw_lanes());
-}
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-           no_am_bw_lanes_with_explicit_rndv_limit, "MAX_RNDV_RAILS=2")
-{
-    EXPECT_EQ(0u, num_am_bw_lanes());
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw,
-                              rcx_gpu, "rc_x,cuda,rocm")
-
-/* Without a per-GPU limit, wireup creates no AM_BW lanes for the default
- * eager limit of 1 */
-class test_ucp_proto_mock_rcx_gpu_nic_auto_no_am_bw :
-    public test_ucp_proto_mock_rcx_gpu_nic_auto_am_bw {
-protected:
-    virtual bool auto_gpu_lanes() const override
-    {
-        return false;
-    }
-};
-
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_no_am_bw, no_am_bw_lanes)
-{
-    EXPECT_EQ(0u, num_am_bw_lanes());
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_auto_no_am_bw,
-                              rcx_gpu, "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_rcx_single_net_dev :
     protected test_ucp_proto_mock_scoped_acc_devices,

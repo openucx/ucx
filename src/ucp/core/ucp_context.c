@@ -3233,8 +3233,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_res;
     }
 
-    context->config.auto_gpu_lanes = (context->gpu_nic_assignment != NULL);
-
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
     context->next_memh_reg_id = 0;
 
