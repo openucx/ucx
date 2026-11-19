@@ -16,50 +16,98 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
+#include <uct/api/v2/uct_v2.h>
 
 
 extern ucp_proto_t ucp_put_am_bcopy_proto;
 
-static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_put_offload_short_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_request_complete_send(req, status);
+}
+
+static void ucp_proto_put_offload_short_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_put_offload_short_complete(req, self->status);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_offload_short_progress_common(uct_pending_req_t *self,
+                                            int tracked)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
     ucp_ep_t *ep                         = req->send.ep;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    const void *buffer                   = req->send.state.dt_iter.type.contig.buffer;
+    size_t length                        = req->send.state.dt_iter.length;
+    ucp_lane_index_t lane                = spriv->super.lane;
     ucs_status_t status;
     uct_rkey_t tl_rkey;
+    uct_ep_h uct_ep;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(lane));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
+        }
+
+        if (tracked) {
+            ucp_proto_completion_init(&req->send.state.uct_comp,
+                                      ucp_proto_put_offload_short_completion);
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
     tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
-    status  = uct_ep_put_short(ucp_ep_get_fast_lane(ep, spriv->super.lane),
-                               req->send.state.dt_iter.type.contig.buffer,
-                               req->send.state.dt_iter.length,
-                               req->send.rma.remote_addr, tl_rkey);
+    uct_ep  = tracked ? ucp_ep_get_lane(ep, lane) :
+                        ucp_ep_get_fast_lane(ep, lane);
+    if (tracked) {
+        status = uct_ep_put_short_v2(uct_ep, buffer, length,
+                                      req->send.rma.remote_addr, tl_rkey,
+                                      &req->send.state.uct_comp);
+    } else {
+        status = uct_ep_put_short(uct_ep, buffer, length,
+                                  req->send.rma.remote_addr, tl_rkey);
+    }
+
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
-        req->send.lane = spriv->super.lane; /* for pending add */
+        req->send.lane = lane;
         return status;
     }
 
-    /* UCS_INPROGRESS is not expected */
-    ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
+    if (tracked && (status == UCS_INPROGRESS)) {
+        return UCS_OK;
+    }
 
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
-                              UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_request_complete_send(req, status);
+    ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
+    ucp_proto_put_offload_short_complete(req, status);
     return UCS_OK;
 }
 
-static void
-ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
+static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
+{
+    return ucp_proto_put_offload_short_progress_common(self, 0);
+}
+
+static ucs_status_t
+ucp_proto_put_offload_short_token_progress(uct_pending_req_t *self)
+{
+    return ucp_proto_put_offload_short_progress_common(self, 1);
+}
+
+static void ucp_proto_put_offload_short_probe_common(
+        const ucp_proto_init_params_t *init_params, unsigned extra_flags,
+        ucp_lane_type_t lane_type, uint64_t tl_v2_cap_flags,
+        ucp_lane_map_t exclude_map)
 {
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
@@ -80,19 +128,14 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               extra_flags,
+        .super.exclude_map   = exclude_map,
         .super.reg_mem_info  = ucp_mem_info_unknown,
-        .lane_type           = UCP_LANE_TYPE_RMA,
-        .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
+        .lane_type           = lane_type,
+        .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT,
+        .tl_v2_cap_flags     = tl_v2_cap_flags
     };
-
-    /* TODO: no completion, so repost cannot reach the ucp_rkey a zcopy
-     * offload keeps on the origin request. */
-    if (init_params->ep_config_key->err_mode ==
-        UCP_ERR_HANDLING_MODE_FAILOVER) {
-        return;
-    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         !ucp_proto_is_short_supported(init_params->select_param)) {
@@ -107,6 +150,31 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_single_probe(&params);
 }
 
+static void
+ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_put_offload_short_probe_common(
+            init_params, 0, UCP_LANE_TYPE_RMA, 0, ~UCP_MAX_FAST_PATH_LANES_MASK);
+}
+
+static void ucp_proto_put_offload_short_token_probe(
+        const ucp_proto_init_params_t *init_params)
+{
+    const ucp_ep_config_key_t *key = init_params->ep_config_key;
+    ucp_worker_h worker           = init_params->worker;
+
+    if ((key->err_mode != UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        (worker->context->config.ext.failover_mode != UCP_FAILOVER_MODE_TOKEN)) {
+        return;
+    }
+
+    ucp_proto_put_offload_short_probe_common(
+            init_params, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+            UCP_LANE_TYPE_RMA_BW,
+            UCT_IFACE_FLAG_V2_QUERY_TOKEN | UCT_IFACE_FLAG_V2_PUT_SHORT_COMP,
+            0);
+}
+
 ucp_proto_t ucp_put_offload_short_proto = {
     .name     = "put/offload/short",
     .desc     = UCP_PROTO_SHORT_DESC,
@@ -115,6 +183,18 @@ ucp_proto_t ucp_put_offload_short_proto = {
     .probe    = ucp_proto_put_offload_short_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_put_offload_short_progress},
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
+};
+
+ucp_proto_t ucp_put_offload_short_token_proto = {
+    .name     = "put/offload/short/token",
+    .desc     = UCP_PROTO_SHORT_DESC,
+    .flags    = 0, /* Route through a request so token purge can restart it. */
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe    = ucp_proto_put_offload_short_token_probe,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_put_offload_short_token_progress},
     .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };

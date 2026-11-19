@@ -382,7 +382,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
             &iface->super, UCT_IB_QPT_DCI, &cache, sizeof(cache.am_hdr), buffer,
             length, MLX5_OPCODE_SEND,
             MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-            ep->dci_channel_index, 0, 0, txqp, txwq, av_size);
+            ep->dci_channel_index, 0, 0, txqp, txwq, av_size, NULL);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -547,7 +547,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                                             MLX5_OPCODE_RDMA_WRITE,
                                             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
                                             ep->dci_channel_index, remote_addr,
-                                            rkey, txqp, txwq, av_size);
+                                            rkey, txqp, txwq, av_size, NULL);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -1028,7 +1028,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
             &iface->super, UCT_IB_QPT_DCI, &cache, sizeof(cache.tm_hdr), data,
             length, MLX5_OPCODE_SEND,
             MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-            ep->dci_channel_index, 0, 0, txqp, txwq, av_size);
+            ep->dci_channel_index, 0, 0, txqp, txwq, av_size, NULL);
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super, TAG, SHORT, length);
     }
