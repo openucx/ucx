@@ -278,7 +278,7 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
     ucs_status_t status;
 
     lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
-                                    &adjusted);
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
     if (ucs_unlikely(lpriv == NULL)) {
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
@@ -422,7 +422,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_proto_multi_lane_priv_t adjusted;
 
     lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
-                                    &adjusted);
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
     if (ucs_unlikely(lpriv == NULL)) {
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
@@ -509,7 +509,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     ucp_proto_multi_lane_priv_t adjusted;
 
     lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
-                                    &adjusted);
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
     if (ucs_unlikely(lpriv == NULL)) {
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
