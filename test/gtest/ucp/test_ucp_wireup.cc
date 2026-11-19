@@ -23,6 +23,7 @@ extern "C" {
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/math.h>
+#include <uct/base/uct_iface.h>
 }
 
 class test_ucp_wireup : public ucp_test {
@@ -1015,7 +1016,45 @@ public:
         flush_worker(closer);
         disconnect(other, true);
     }
+
+    static ssize_t wireup_am_bcopy_conn_reset(uct_ep_h ep, uint8_t id,
+                                              uct_pack_callback_t pack_cb,
+                                              void *arg, unsigned flags)
+    {
+        if (id != UCP_AM_ID_WIREUP) {
+            return m_orig_am_bcopy(ep, id, pack_cb, arg, flags);
+        }
+
+        /* Report the error from the send call, as tcp does on a broken
+         * socket */
+        ++m_wireup_send_errors;
+        uct_iface_handle_ep_err(ep->iface, ep, UCS_ERR_CONNECTION_RESET);
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    }
+
+    static void mock_tcp_am_bcopy(const entity &e, ucs::mock &mock)
+    {
+        ucp_worker_h worker = e.worker();
+
+        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+            ucp_worker_iface_t *wiface = worker->ifaces[i];
+            const char *tl_name =
+                    worker->context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+
+            if (!strcmp(tl_name, "tcp")) {
+                m_orig_am_bcopy = wiface->iface->ops.ep_am_bcopy;
+                mock.setup(&wiface->iface->ops.ep_am_bcopy,
+                           wireup_am_bcopy_conn_reset);
+            }
+        }
+    }
+
+    static uct_ep_am_bcopy_func_t m_orig_am_bcopy;
+    static volatile unsigned m_wireup_send_errors;
 };
+
+uct_ep_am_bcopy_func_t test_ucp_wireup_errh_peer::m_orig_am_bcopy = NULL;
+volatile unsigned test_ucp_wireup_errh_peer::m_wireup_send_errors = 0;
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
     receiver().connect(&sender(), get_ep_params());
@@ -1068,6 +1107,31 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_winner) {
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_peer) {
     force_close_simultaneous_connect(false);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, pending_wireup_msg_send_error,
+           "WIREUP_VIA_AM_LANE=y") {
+    if (!has_transport("tcp")) {
+        UCS_TEST_SKIP_R("wireup message is pending only on connecting tcp");
+    }
+
+    /* The wireup request stays pending on the wireup EP of the AM lane until
+     * the tcp connection is established, then it is sent from the tcp pending
+     * queue */
+    sender().connect(&receiver(), get_ep_params());
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        ucs::mock mock;
+
+        m_wireup_send_errors = 0;
+        mock_tcp_am_bcopy(sender(), mock);
+        wait_for_value(&m_wireup_send_errors, 1u);
+    }
+
+    EXPECT_EQ(1u, m_wireup_send_errors);
+    EXPECT_TRUE(sender().ep()->flags & UCP_EP_FLAG_FAILED);
+    disconnect(sender(), true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
