@@ -1032,21 +1032,16 @@ public:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     }
 
-    static void mock_tcp_am_bcopy(const entity &e, ucs::mock &mock)
+    static void mock_wireup_msg_am_bcopy(ucp_ep_h ep, ucs::mock &mock)
     {
-        ucp_worker_h worker = e.worker();
+        ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(
+                ucp_ep_get_lane(ep, ucp_ep_get_wireup_msg_lane(ep)));
+        uct_iface_h iface;
 
-        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
-            ucp_worker_iface_t *wiface = worker->ifaces[i];
-            const char *tl_name =
-                    worker->context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
-
-            if (!strcmp(tl_name, "tcp")) {
-                m_orig_am_bcopy = wiface->iface->ops.ep_am_bcopy;
-                mock.setup(&wiface->iface->ops.ep_am_bcopy,
-                           wireup_am_bcopy_conn_reset);
-            }
-        }
+        ASSERT_TRUE(wireup_ep != NULL);
+        iface           = ucp_wireup_ep_get_msg_ep(wireup_ep)->iface;
+        m_orig_am_bcopy = iface->ops.ep_am_bcopy;
+        mock.setup(&iface->ops.ep_am_bcopy, wireup_am_bcopy_conn_reset);
     }
 
     static uct_ep_am_bcopy_func_t m_orig_am_bcopy;
@@ -1125,7 +1120,7 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, pending_wireup_msg_send_error,
         ucs::mock mock;
 
         m_wireup_send_errors = 0;
-        mock_tcp_am_bcopy(sender(), mock);
+        ASSERT_NO_FATAL_FAILURE(mock_wireup_msg_am_bcopy(sender().ep(), mock));
         wait_for_value(&m_wireup_send_errors, 1u);
     }
 
