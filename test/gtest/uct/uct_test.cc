@@ -1000,13 +1000,18 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
 
 void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                                  uct_allocated_memory_t *mem,
-                                 ucs_memory_type_t mem_type,
-                                 unsigned num_retries) const
+                                 ucs_memory_type_t mem_type) const
 {
-    void *address       = NULL;
-    uct_md_h uct_md     = md();
-    ucs_status_t status = UCS_OK;
+    void *address         = NULL;
+    uct_md_h uct_md       = md();
+    ucs_status_t status   = UCS_OK;
+    /* Other processes on the host may hold all device memory for a while */
+    double timeout        = (mem_type == UCS_MEMORY_TYPE_RDMA) ? 30.0 : 0.0;
+    ucs_time_t start_time = ucs_get_time();
+    ucs_time_t deadline   = start_time + ucs_time_from_sec(timeout);
+    bool waiting          = false;
     uct_mem_alloc_params_t params;
+    bool last;
 
     params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
@@ -1017,8 +1022,11 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     params.mem_type        = mem_type;
     params.address         = address;
 
-    for (unsigned i = 0; i <= num_retries; ++i) {
-        scoped_log_handler slh(wrap_errors_logger);
+    do {
+        /* Do not repeat the allocation errors while waiting */
+        last = ucs_get_time() >= deadline;
+        scoped_log_handler slh((waiting && !last) ? hide_errors_logger :
+                                                    wrap_errors_logger);
         if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
             (mem_type == UCS_MEMORY_TYPE_HOST)) {
             status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
@@ -1038,18 +1046,22 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
             break;
         }
 
-        if (i < num_retries) {
-            UCS_TEST_MESSAGE << "Retry " << (i + 1) << "/" << num_retries
-                             << ": Allocation failed - "
-                             << ucs_status_string(status);
-            /* Sleep only if there are more retries remaining */
+        if (!last) {
+            if (!waiting) {
+                UCS_TEST_MESSAGE << "waiting up to " << timeout
+                                 << " seconds for memory to be released";
+                waiting = true;
+            }
+
             usleep(ucs::rand() % 10000);
         }
-    }
+    } while (!last);
 
-    if ((status == UCS_ERR_NO_MEMORY) && (mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        /* Other processes on the host may hold all device memory */
-        UCS_TEST_SKIP_R("not enough device memory");
+    if (waiting) {
+        UCS_TEST_MESSAGE << "waited "
+                         << ucs_time_to_sec(ucs_get_time() - start_time)
+                         << " seconds for memory: "
+                         << ucs_status_string(status);
     }
 
     ASSERT_UCS_OK(status);
@@ -1528,8 +1540,8 @@ void uct_test::mapped_buffer::reset()
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
-                                       unsigned mem_flags, unsigned num_retries) :
-    mapped_buffer(size, entity, offset, mem_type, mem_flags, num_retries)
+                                       unsigned mem_flags) :
+    mapped_buffer(size, entity, offset, mem_type, mem_flags)
 {
     pattern_fill(seed);
 }
@@ -1537,7 +1549,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
 uct_test::mapped_buffer::mapped_buffer(size_t size,
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
-                                       unsigned mem_flags, unsigned num_retries) :
+                                       unsigned mem_flags) :
     m_entity(entity)
 {
     if (size == 0)  {
@@ -1547,7 +1559,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size,
 
     size_t alloc_size = size + offset;
     if ((mem_type == UCS_MEMORY_TYPE_HOST) || (mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type, num_retries);
+        m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type);
     } else {
         m_mem.method     = UCT_ALLOC_METHOD_LAST;
         m_mem.address    = mem_buffer::allocate(alloc_size, mem_type);
