@@ -2,10 +2,8 @@ parameters:
   demands: []
   name: subtest
   container:
-  # Oldest release branch to test, newer ones are found at runtime
-  min_release: v1.15.x
-  # Refs to test on top of the release branches
-  extra_refs: v1.14.0
+  # Number of latest releases to test, found at runtime
+  num_releases: 6
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -24,7 +22,7 @@ jobs:
         fetchDepth: 1
         retryCountOnTaskFailure: 5
 
-      - bash: buildlib/tools/wire_compat_matrix.sh ${{ parameters.min_release }} ${{ parameters.extra_refs }}
+      - bash: buildlib/tools/wire_compat_matrix.sh ${{ parameters.num_releases }}
         name: targets
         displayName: Find UCX releases to test
         retryCountOnTaskFailure: 5
@@ -91,7 +89,6 @@ jobs:
           UCX_PR_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)
           UCX_LEGACY_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)
         displayName: compare tls performance characteristics
-        condition: ne(variables.ucx_tag, 'v1.14.0')
       - bash: |
           export WIRE_COMPAT_STAGE_ID=1
           buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
@@ -100,7 +97,6 @@ jobs:
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_client_server with UCX $(ucx_tag)
-        condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
       - bash: |
           export WIRE_COMPAT_STAGE_ID=2
@@ -120,7 +116,6 @@ jobs:
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_client_server (no sm) with UCX $(ucx_tag)
-        condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
       - bash: |
           export WIRE_COMPAT_STAGE_ID=4

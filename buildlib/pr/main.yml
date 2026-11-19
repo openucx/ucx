@@ -349,7 +349,6 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         container: centos7_cuda11
-        extra_refs: ''
     - template: wire_compat.yml
       parameters:
         name: new
