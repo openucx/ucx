@@ -125,6 +125,8 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_request_mem_free(proxy_req);
     } else {
+        ucs_assertv(status == UCS_ERR_NO_RESOURCE, "status=%s",
+                    ucs_status_string(status));
         ucs_atomic_add32(&wireup_ep->pending_count, +1);
     }
     return status;
