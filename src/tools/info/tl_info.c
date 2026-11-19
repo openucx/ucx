@@ -631,6 +631,7 @@ static void print_uct_component_info(uct_component_h component,
     }
 
     component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    /* coverity[uninit_use] */
     component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
                                          component_attr.md_resource_count);
     status = uct_component_query(component, &component_attr);
@@ -646,6 +647,7 @@ static void print_uct_component_info(uct_component_h component,
     }
 
     if (print_opts & PRINT_DEVICES) {
+        /* coverity[uninit_use] */
         if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
             print_cm_info(component, &component_attr);
         }
@@ -672,4 +674,3 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
 
     uct_release_component_list(components);
 }
-

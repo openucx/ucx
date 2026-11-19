@@ -141,6 +141,7 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
         return UCS_ERR_NO_DEVICE;
     }
 
+    /* coverity[uninit_use] */
     shm_size = shm_statvfs.f_bsize * shm_statvfs.f_bavail;
     if (shm_size < posix_config->shm_min_size) {
         ucs_debug("md alloc disabled: only %zu bytes left in shm", shm_size);

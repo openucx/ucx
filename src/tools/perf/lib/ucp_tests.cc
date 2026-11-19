@@ -746,6 +746,7 @@ public:
             }
             break;
         case UCX_PERF_CMD_ADD:
+            /* coverity[uninit_use_in_call] */
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
                                          remote_addr, rkey, &param);
             break;
@@ -754,6 +755,7 @@ public:
             /* Atomic argument to add/swap with contains LAST_ITER_SN */
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
             param.reply_buffer  = buffer;
+            /* coverity[uninit_use_in_call] */
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
                                          remote_addr, rkey, &param);
             break;
@@ -761,6 +763,7 @@ public:
             /* Buffer to swap with contains LAST_ITER_SN */
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
             param.reply_buffer  = &atomic_value;
+            /* coverity[uninit_use_in_call] */
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, buffer, 1,
                                          remote_addr, rkey, &param);
             break;
