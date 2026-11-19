@@ -1079,6 +1079,16 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
+static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    ucs_assert(count > 0);
+    uct_rc_ep_reserve_cqe(iface, ep, count - 1);
+    uct_rc_ep_reserve_txqp(ep, count - 1);
+}
+
 static ucs_status_t
 uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                              const size_t *lengths, uct_mem_h const *memhs,
@@ -1096,6 +1106,10 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
         status = uct_rc_mlx5_base_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
                                                    remote_addrs, rkeys, counts,
                                                    strides, count, comp);
+    }
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
     }
 
     return status;
@@ -1177,6 +1191,10 @@ uct_rc_mlx5_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
         status = uct_rc_mlx5_base_ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
                                                    remote_addrs, rkeys, counts,
                                                    strides, count, comp);
+    }
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
     }
 
     return status;

@@ -91,7 +91,7 @@ enum {
     uct_rc_ep_atomic_handler_##_num_bits##_be##_is_be
 
 /*
- * Check for send resources
+ * Check for send resources, without reserving them
  */
 #define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
@@ -103,7 +103,7 @@ enum {
     }
 
 #define UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (uct_rc_ep_reserve_cqe(_iface, _ep, (uint16_t)(_value))) { \
+    if (!uct_rc_ep_has_cqe(_iface, _ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -113,7 +113,7 @@ enum {
     UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
 
 #define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (uct_rc_ep_reserve_txqp(_ep, (uint16_t)(_value))) { \
+    if (!uct_rc_ep_has_txqp(_ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -391,30 +391,33 @@ uct_rc_ep_schedule_pending(uct_rc_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+uct_rc_ep_has_txqp(uct_rc_ep_t *ep, uint16_t value)
 {
-    uint16_t reserve = ucs_max(ep->txqp_reserve, value);
-
-    if (uct_rc_txqp_available(&ep->txqp) > reserve) {
-        return 0;
-    }
-
-    ep->txqp_reserve = reserve;
-    return 1;
+    return uct_rc_txqp_available(&ep->txqp) > ucs_max(ep->txqp_reserve, value);
 }
 
 static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_has_cqe(const uct_rc_iface_t *iface, const uct_rc_ep_t *ep,
+                  uint16_t value)
+{
+    return iface->tx.cq_available > (signed)ucs_max(ep->cq_reserve, value);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+{
+    if (!uct_rc_ep_has_txqp(ep, value)) {
+        ep->txqp_reserve = ucs_max(ep->txqp_reserve, value);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_ep_reserve_cqe(const uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                       uint16_t value)
 {
-    uint16_t reserve = ucs_max(ep->cq_reserve, value);
-
-    if (iface->tx.cq_available > (signed)reserve) {
-        return 0;
+    if (!uct_rc_ep_has_cqe(iface, ep, value)) {
+        ep->cq_reserve = ucs_max(ep->cq_reserve, value);
     }
-
-    ep->cq_reserve = reserve;
-    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
