@@ -1,6 +1,6 @@
 # UCXX CI: RAPIDS wrapper images
 
-The UCXX jobs in the openucx/ucx Azure pipelines run inside thin wrapper images
+The UCXX jobs in the openucx/ucx Azure PR pipeline run inside thin wrapper images
 built on top of upstream RAPIDS CI images. This directory holds the compose file
 and build script that (re)build and push them from `rapidsai-ci-conda.Dockerfile`
 and `rapidsai-ci-wheel.Dockerfile`.
@@ -63,8 +63,7 @@ updated together:
 
 - the `BASE_IMAGE` args in `docker-compose-rapidsai.yml`
 - the `BASE_IMAGE` defaults in the two Dockerfiles
-- `rapids_cuda_version` / `rapids_py_version` in `pr/main.yml` +
-  `azure-pipelines-release.yml`
+- `rapids_cuda_version` / `rapids_py_version` in `pr/main.yml`
 
 ### 2. Build + push all three images, multi-arch
 
@@ -73,7 +72,7 @@ the opposite arch over ssh). Set the opposite-arch node endpoint and harbor cred
 the environment:
 
 ```sh
-RAPIDS_VER=26.12 IMAGE_REV=azp-1 \
+RAPIDS_VER=<VER> IMAGE_REV=<REV> \
 ARM_NODE=ssh://<user>@<arm-builder> \   # when running on an x86 host
 HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 ./rapidsai-images-build.sh
@@ -89,26 +88,20 @@ pushed tag is multi-arch.
 Credential hygiene: pass creds via the environment, never leave them at rest on a
 builder. The script logs out on exit.
 
-### 3. Point the pipelines at the new images
+### 3. Point the pipeline at the new images
 
 Bump the old `<VER>`/`<REV>` to the new one in the only places that reference it
-(a same-version refresh only changes `<REV>` in the two pipeline files). The
+(a same-version refresh only changes `<REV>` in `main.yml`). The
 compose needs no edit here: it takes the version from `RAPIDS_VER`.
 
 - `buildlib/dockers/rapidsai-ci-conda.Dockerfile` (`BASE_IMAGE` default, for a build without the compose)
 - `buildlib/dockers/rapidsai-ci-wheel.Dockerfile` (`BASE_IMAGE` default, for a build without the compose)
 - `buildlib/pr/main.yml` (image tags)
-- `buildlib/azure-pipelines-release.yml` (image tags)
 
 ```sh
-grep -rn <VER> buildlib/dockers buildlib/pr/main.yml buildlib/azure-pipelines-release.yml
+grep -rn <VER> buildlib/dockers buildlib/pr/main.yml
 python3 -c "import yaml; yaml.safe_load(open('buildlib/pr/main.yml'))"
-python3 -c "import yaml; yaml.safe_load(open('buildlib/azure-pipelines-release.yml'))"
 ```
-
-Commit on the PR-pipeline branch, rebase the release-pipeline branch onto it (so it
-inherits the Dockerfile + `main.yml` bump), bump the release.yml tags there, push,
-and re-run CI.
 
 ## Why multi-arch + buildx
 
