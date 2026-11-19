@@ -54,7 +54,7 @@
 #### ROCM
  * Added BISTRO memory hooks for ROCm
  * Added peer failure error handling to ROCm IPC transport
- * Change the default setting for using dma-buf registration instead of peer-mem
+ * Changed the default setting for using dma-buf registration instead of peer-mem
  * Added device-initiated IPC PUT for ROCm
 #### UCS
  * Added ucs_array_for_each_index utility
