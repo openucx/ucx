@@ -1084,7 +1084,10 @@ static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    ucs_assert(count > 0);
+    if (count == 0) {
+        return;
+    }
+
     uct_rc_ep_reserve_cqe(iface, ep, count - 1);
     uct_rc_ep_reserve_txqp(ep, count - 1);
 }

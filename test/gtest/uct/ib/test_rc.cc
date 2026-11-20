@@ -19,6 +19,7 @@ extern "C" {
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
@@ -150,8 +151,11 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
-void test_rc::test_sgl_reserve(bool get, bool cq_limited, bool add_pending)
+void test_rc::test_sgl_reserve(unsigned flags)
 {
+    const bool get           = flags & SGL_GET;
+    const bool cq_limited    = flags & SGL_CQ_LIMITED;
+    const bool add_pending   = flags & SGL_ADD_PENDING;
     uct_iface_attr_v2_t attr = {};
     const size_t count       = 2;
     uct_rc_iface_t *iface    = rc_iface(m_e1);
@@ -160,6 +164,10 @@ void test_rc::test_sgl_reserve(bool get, bool cq_limited, bool add_pending)
     ucs_status_t status;
     uct_pending_req_t pend_req;
     size_t length;
+
+    /* Without a WQE in flight, no completion releases a CQ reserve, only the
+     * purge of the pending request does */
+    ASSERT_TRUE(!cq_limited || add_pending);
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
                       UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
@@ -252,14 +260,14 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
                                  UCT_IFACE_FLAG_PENDING  |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(false, false, true);
+    test_sgl_reserve(SGL_ADD_PENDING);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(false, false, false);
+    test_sgl_reserve(0);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_get_pending_am_order,
@@ -267,28 +275,28 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_get_pending_am_order,
                                  UCT_IFACE_FLAG_PENDING  |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(true, false, true);
+    test_sgl_reserve(SGL_GET | SGL_ADD_PENDING);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_get_reserve_released_on_completion,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(true, false, false);
+    test_sgl_reserve(SGL_GET);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_cq_reserve_pending,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_PENDING))
 {
-    test_sgl_reserve(false, true, true);
+    test_sgl_reserve(SGL_CQ_LIMITED | SGL_ADD_PENDING);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_get_cq_reserve_pending,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_PENDING))
 {
-    test_sgl_reserve(true, true, true);
+    test_sgl_reserve(SGL_GET | SGL_CQ_LIMITED | SGL_ADD_PENDING);
 }
 
 /* The resource check of an operation of value + 1 WQEs, as the SGL one */
@@ -332,6 +340,77 @@ UCS_TEST_SKIP_COND_P(test_rc, tx_resource_check_no_reserve,
 
     flush();
 }
+
+#ifdef HAVE_MLX5_DV
+static unsigned sgl_ext_refusals;
+
+/* SGL operation of a provider extension which refuses every request */
+static ucs_status_t
+sgl_ext_refuse(uct_ep_h ep, void * const *buffers, const size_t *lengths,
+               uct_mem_h const *memhs, const uint64_t *remote_addrs,
+               uct_rkey_t const *rkeys, const size_t *counts,
+               const size_t *strides, size_t count, uct_completion_t *comp)
+{
+    ++sgl_ext_refusals;
+    return UCS_ERR_NO_RESOURCE;
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_ext_refusal_reserve,
+                     (GetParam()->tl_name != "rc_mlx5") ||
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    const size_t count        = 2;
+    uct_ib_mlx5_ext_ops_t ops = {};
+    uct_rc_ep_t *ep           = rc_ep(m_e1);
+    mapped_buffer s0(64, 0ul, *m_e1), s1(64, 0ul, *m_e1);
+    mapped_buffer r0(64, 0ul, *m_e2), r1(64, 0ul, *m_e2);
+    void *buffers[]           = {s0.ptr(), s1.ptr()};
+    size_t lengths[]          = {64, 64};
+    uct_mem_h memhs[]         = {s0.memh(), s1.memh()};
+    uint64_t raddrs[]         = {r0.addr(), r1.addr()};
+    uct_rkey_t rkeys[]        = {r0.rkey(), r1.rkey()};
+
+    ucs_strncpy_zero(ops.name, "gtest_sgl", sizeof(ops.name));
+    ops.ep_put_sgl_zcopy = sgl_ext_refuse;
+    ops.ep_get_sgl_zcopy = sgl_ext_refuse;
+    ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
+
+    struct ext_registration {
+        const char *name;
+        ~ext_registration() {
+            uct_ib_mlx5_ext_unregister(name);
+        }
+    } registration = {ops.name};
+
+    sgl_ext_refusals = 0;
+
+    /* A refused operation of no elements lacks nothing */
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, 0, NULL));
+    EXPECT_EQ(0, ep->txqp_reserve);
+    EXPECT_EQ(0, ep->cq_reserve);
+
+    /* With one free WQE, the provider refusal reserves the WQE which the
+     * operation lacks, as a refusal of the base implementation does */
+    for (int16_t i = uct_rc_txqp_available(&ep->txqp);
+         i > (int16_t)(count - 1); --i) {
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
+                                       r0.rkey()));
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ((uint16_t)(count - 1), ep->txqp_reserve);
+    EXPECT_EQ(0, ep->cq_reserve);
+    EXPECT_EQ(2u, sgl_ext_refusals);
+
+    flush();
+
+    EXPECT_EQ(0, ep->txqp_reserve);
+}
+#endif
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
                      GetParam()->tl_name != "rc_mlx5",

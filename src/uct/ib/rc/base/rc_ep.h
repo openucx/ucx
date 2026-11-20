@@ -424,8 +424,7 @@ static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
 
-    return (uct_rc_txqp_available(&ep->txqp) > ep->txqp_reserve) &&
-           uct_rc_fc_has_resources(iface, &ep->fc);
+    return uct_rc_ep_has_txqp(ep, 0) && uct_rc_fc_has_resources(iface, &ep->fc);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -434,7 +433,7 @@ uct_rc_ep_have_tx_cqe_avail(uct_rc_ep_t *ep)
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_rc_iface_t);
 
-    return iface->tx.cq_available > (signed)ep->cq_reserve;
+    return uct_rc_ep_has_cqe(iface, ep, 0);
 }
 
 static UCS_F_ALWAYS_INLINE void
