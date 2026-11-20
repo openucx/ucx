@@ -1718,6 +1718,7 @@ typedef struct {
  * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
  * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
  * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
+ * [4] https://pcisig.com/pci-express-6.0-specification
  */
 static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
     {.name          = "gen1",
