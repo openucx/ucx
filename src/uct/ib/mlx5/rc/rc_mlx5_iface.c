@@ -1081,20 +1081,11 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
 {
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    unsigned cq_capacity;
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    /* Cap the reserve by what the endpoint and the CQ can ever have free, so
-     * that it can be satisfied */
-    cq_capacity = uct_rc_iface_tx_cq_capacity(iface->super.config.tx_cq_len);
-    count       = ucs_min(count, ep->tx.wq.bb_max);
-    count       = ucs_min(count, cq_capacity);
-    if (count == 0) {
-        return;
-    }
-
-    uct_rc_ep_reserve_cqe(&iface->super, &ep->super, count - 1);
-    uct_rc_ep_reserve_txqp(&ep->super, count - 1);
+    uct_rc_ep_reserve_cqe(iface, ep, count - 1);
+    uct_rc_ep_reserve_txqp(ep, count - 1);
 }
 
 static ucs_status_t
@@ -1114,10 +1105,9 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
         status = uct_rc_mlx5_base_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
                                                    remote_addrs, rkeys, counts,
                                                    strides, count, comp);
-    }
-
-    if (status == UCS_ERR_NO_RESOURCE) {
-        uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
+        }
     }
 
     return status;
@@ -1199,10 +1189,9 @@ uct_rc_mlx5_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
         status = uct_rc_mlx5_base_ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
                                                    remote_addrs, rkeys, counts,
                                                    strides, count, comp);
-    }
-
-    if (status == UCS_ERR_NO_RESOURCE) {
-        uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            uct_rc_mlx5_ep_sgl_zcopy_reserve(ep, count);
+        }
     }
 
     return status;

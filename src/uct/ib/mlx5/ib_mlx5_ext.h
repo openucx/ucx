@@ -111,15 +111,6 @@ typedef struct uct_rc_mlx5_ext_ops {
 
 /**
  * @brief External plugin operations.
- *
- * When an SGL zero-copy callback returns UCS_ERR_NO_RESOURCE, the RC endpoint
- * reserves send credits for one WQE and completion per element, as the base
- * implementation posts, up to what the endpoint and the TX CQ can have free,
- * so that smaller sends do not pass the operation. A callback which needs
- * more send credits of the endpoint has to reserve them with
- * uct_rc_ep_reserve_txqp() and uct_rc_ep_reserve_cqe(), otherwise
- * uct_ep_pending_add() may return UCS_ERR_BUSY while the operation does not
- * fit.
  */
 typedef struct uct_ib_mlx5_ext_ops {
     char                                           name[UCT_COMPONENT_NAME_MAX]; /**< Plugin name */
