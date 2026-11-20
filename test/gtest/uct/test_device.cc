@@ -13,6 +13,8 @@
 #include "uct_test.h"
 
 extern "C" {
+#include <uct/ib/base/ib_verbs.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/cuda/base/cuda_util.h>
 }
 
@@ -107,6 +109,15 @@ protected:
     {
         if (!has_transport("rc_gda")) {
             UCS_TEST_SKIP_R("rc_gda transport not supported");
+        }
+    }
+
+    void skip_if_no_named_qp() const
+    {
+        auto *md = ucs_derived_of(m_sender->md(), uct_ib_mlx5_md_t);
+
+        if (!(md->flags & UCT_IB_MLX5_MD_FLAG_QP_BY_NAME)) {
+            UCS_TEST_SKIP_R("named QP is not supported");
         }
     }
 
@@ -254,6 +265,16 @@ UCS_TEST_P(test_device, reconnect)
 UCS_TEST_P(test_device, reconnect_multi_channel, "RC_GDA_NUM_CHANNELS?=4")
 {
     reconnect_test();
+}
+
+UCS_TEST_P(test_device, put_named_qp, "RC_GDA_EP_ALLOC_MODE?=auto",
+           "RC_GDA_QPN_RANGE?=1-8", "RC_GDA_NAMED_QP_RETRY_COUNT?=8",
+           "RC_GDA_NUM_PRE_ALLOC_EPS?=1")
+{
+    skip_if_no_cuda();
+    skip_if_not_rc_gda();
+    skip_if_no_named_qp();
+    device_put(0x1111111111111111lu, 0x2222222222222222lu);
 }
 
 UCS_TEST_P(test_device, destroy_one_of_multiple_eps)
