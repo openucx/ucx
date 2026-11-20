@@ -2042,11 +2042,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                     ucs_assert(wqe_size <= MLX5_SEND_WQE_BB);
                     info.field_mask |= UCT_EP_OP_INFO_FIELD_SGL_INDEX;
                     info.sgl_index   = (uint16_t)(pi - sgl_op->sn);
-                }
-                /* The original reference keeps the SGL alive even when a
-                 * replay callback completes a fragment synchronously. */
-                if ((sgl_op != NULL) && (sgl_op->user_comp != NULL)) {
-                    ++sgl_op->user_comp->count;
+                    /* Keep the SGL alive if replay completes synchronously. */
+                    if (sgl_op->user_comp != NULL) {
+                        ++sgl_op->user_comp->count;
+                    }
                 }
                 params->cb(&info, callback_arg);
             } else if (status != UCS_ERR_NO_ELEM) {

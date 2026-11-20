@@ -416,6 +416,12 @@ ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
     uintptr_t address, base;
     uint64_t remote;
 
+    if ((info->operation != UCT_EP_OP_PUT_ZCOPY) &&
+        (info->operation != UCT_EP_OP_GET_ZCOPY)) {
+        ucs_debug("repost %p: SGL replay requires a zcopy operation", req);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if ((origin == NULL) || (comp == NULL)) {
         ucs_debug("repost %p: missing original SGL request or completion", req);
         return UCS_ERR_INVALID_PARAM;
@@ -631,7 +637,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
     const uct_ep_op_info_t *info         = req->send.repost.info;
     uct_rkey_t tl_rkey                   = UCT_INVALID_RKEY;
-    size_t sgl_index                    = 0;
+    size_t sgl_index                     = 0;
     ucp_proto_repost_pack_t pack;
     uct_completion_t *comp;
     ucs_status_t status;
@@ -659,7 +665,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         (info->operation == UCT_EP_OP_GET_BCOPY) ||
         (info->operation == UCT_EP_OP_GET_ZCOPY)) {
         status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey,
-                                           &sgl_index);
+                                          &sgl_index);
         if (status != UCS_OK) {
             ucp_proto_repost_abort(req, status);
             return UCS_OK;
