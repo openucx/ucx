@@ -17,7 +17,8 @@ with its own `Makefile.am`. Nothing in `src/tools` is linked from
   - Top-level `perftest.c` + `perftest_run.c` + `perftest_params.c` is the
     CLI; `perftest_daemon.c` + `perftest_context.h` host the daemon mode.
   - GPU plug-ins under `cuda/`, `rocm/`, `ze/` provide host-managed device
-    buffers; `mad/` adds InfiniBand MAD-based control plane.
+    buffers; `rdu/` provides SambaNova RDU memory; `mad/` adds InfiniBand
+    MAD-based control plane.
 - `profile/` — `read_profile`, the offline reader for samples produced by
   the `ucs/profile` runtime. One file (`read_profile.c`).
 - `vfs/` — `ucx_vfs`, the FUSE daemon that mounts the per-process VFS tree

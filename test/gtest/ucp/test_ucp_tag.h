@@ -49,6 +49,8 @@ protected:
 
     virtual void init();
 
+    void init_eps();
+
     void enable_tag_mp_offload();
 
     static void request_init(void *request);

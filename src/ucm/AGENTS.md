@@ -28,6 +28,7 @@ is `api/ucm.h`; everything else is internal.
   as a module; emits `MEM_TYPE_ALLOC`/`FREE` events.
 - `rocm/` — analogous hooks for `hipMalloc`/`hipFree`.
 - `ze/` — Intel Level Zero allocations.
+- `rdu/` — hooks for SambaNova `rdu_malloc`/`rdu_free`.
 - `ptmalloc286/` — third-party allocator, only built when in-tree malloc
   replacement is enabled.
 

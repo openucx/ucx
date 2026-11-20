@@ -250,6 +250,15 @@ private:
                     continue;
                 }
 
+                /* Operands and results are accessed by the CPU, and memory
+                 * which cannot be copied is the target only of atomics by
+                 * transports which register it directly */
+                if (!is_mem_type_copy_supported(send_mem_type) ||
+                    (!is_mem_type_copy_supported(recv_mem_type) &&
+                     !check_reg_mem_types(sender(), recv_mem_type))) {
+                    continue;
+                }
+
                 static const std::string tls[] = {"ud_v", "ud_x", "rc_v", "tcp",
                                                   "srd"};
                 /* Target memory type atomics emulation not supported yet */

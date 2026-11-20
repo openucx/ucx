@@ -22,6 +22,7 @@ extern "C" {
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/memory/memtype_cache.h>
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
@@ -51,6 +52,7 @@ extern "C" {
                    rocm_ipc, \
                    ze_cpy, \
                    ib, \
+                   rdu, \
                    ugni, \
                    gdr_copy, \
                    sockcm, \
@@ -599,9 +601,12 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
                 (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_HOST) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_DEVICE) ||
-                (alloc_mem_type == UCS_MEMORY_TYPE_ZE_MANAGED)) {
-                /* ROCm HSA may round sizeInBytes up to a page */
-                if (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) {
+                (alloc_mem_type == UCS_MEMORY_TYPE_ZE_MANAGED) ||
+                (alloc_mem_type == UCS_MEMORY_TYPE_RDU)) {
+                /* ROCm HSA may round sizeInBytes up to a page, and the test
+                 * allocates RDU buffers with extra space */
+                if ((alloc_mem_type == UCS_MEMORY_TYPE_ROCM) ||
+                    (alloc_mem_type == UCS_MEMORY_TYPE_RDU)) {
                     EXPECT_GE(mem_attr.alloc_length, buffer_size);
                 } else {
                     EXPECT_EQ(buffer_size, mem_attr.alloc_length);
@@ -1141,6 +1146,130 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_compare,
     EXPECT_UCS_OK(ucs_mmap_free(address, size));
 }
 
+class test_rdu_md : public test_md {
+protected:
+    /* Remove the 1 MB memory type cache entry a test added at an address */
+    static void memtype_cache_remove_mbyte(void *address)
+    {
+        ucs_memtype_cache_remove(address, UCS_MBYTE);
+    }
+};
+
+/*
+ * RDU memory which the memory type cache does not know, such as memory mapped
+ * by the runtime rather than allocated through the hooked rdu_malloc(), must
+ * not be added to the cache by mem_query: no release event would remove it,
+ * so later memory at the same address would be detected as RDU memory.
+ */
+UCS_TEST_P(test_rdu_md, rdu_mem_query_uncached_not_added) {
+    const size_t size = UCS_MBYTE;
+    ucs_memory_info_t mem_info;
+
+    if (!mem_buffer::is_rdu_supported()) {
+        UCS_TEST_SKIP_R("RDU memory is not supported");
+    }
+
+    ucs_memtype_cache_global_create();
+    if (ucs_memtype_cache_global_instance == NULL) {
+        UCS_TEST_SKIP_R("memory type cache is disabled");
+    }
+
+    void *buffer = mem_buffer::allocate_rdu(size,
+                                            mem_buffer::rdu_mem_kind::HBM);
+    /* Make the memory unknown to the cache, as if the hooks had not seen it */
+    ucs_memtype_cache_remove(buffer, size);
+
+    uct_md_mem_attr_t mem_attr = {};
+    mem_attr.field_mask        = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    EXPECT_UCS_OK(uct_md_mem_query(md(), buffer, size, &mem_attr));
+    EXPECT_EQ(UCS_MEMORY_TYPE_RDU, mem_attr.mem_type);
+    EXPECT_NE(UCS_OK, ucs_memtype_cache_lookup(buffer, size, &mem_info))
+            << "memory type " << ucs_memory_type_names[mem_info.type];
+
+    mem_buffer::release(buffer, UCS_MEMORY_TYPE_RDU);
+}
+
+/*
+ * The RDU memory domain must advertise the same dma-buf memory types for the
+ * whole process: UCP copies them when a context is created, so a change after
+ * a dma-buf query would make contexts register RDU memory differently.
+ */
+UCS_TEST_P(test_rdu_md, rdu_dmabuf_mem_types_fixed) {
+    const size_t size            = UCS_MBYTE;
+    uct_md_attr_v2_t attr_before = {}, attr_after = {};
+
+    if (!mem_buffer::is_rdu_supported()) {
+        UCS_TEST_SKIP_R("RDU memory is not supported");
+    }
+
+    attr_before.field_mask = UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES;
+    ASSERT_UCS_OK(uct_md_query_v2(md(), &attr_before));
+
+    {
+        mem_buffer mem_buf(size, UCS_MEMORY_TYPE_RDU);
+        uct_md_mem_attr_t mem_attr = {};
+
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+        EXPECT_UCS_OK(uct_md_mem_query(md(), mem_buf.ptr(), size, &mem_attr));
+        if (mem_attr.dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+            close(mem_attr.dmabuf_fd);
+        }
+    }
+
+    attr_after.field_mask = UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES;
+    ASSERT_UCS_OK(uct_md_query_v2(md(), &attr_after));
+    EXPECT_EQ(attr_before.dmabuf_mem_types, attr_after.dmabuf_mem_types);
+}
+
+/*
+ * mem_query marks only the part of a cached region which belongs to the RDU
+ * allocation as RDU memory: the cache may merge neighbouring regions into one.
+ */
+UCS_TEST_P(test_rdu_md, rdu_mem_query_bounded_update) {
+    const size_t size = UCS_MBYTE;
+    ucs_memory_info_t mem_info;
+
+    if (!mem_buffer::is_rdu_supported()) {
+        UCS_TEST_SKIP_R("RDU memory is not supported");
+    }
+
+    ucs_memtype_cache_global_create();
+    if (ucs_memtype_cache_global_instance == NULL) {
+        UCS_TEST_SKIP_R("memory type cache is disabled");
+    }
+
+    mem_buffer mem_buf(size, UCS_MEMORY_TYPE_RDU);
+    void *buffer = mem_buf.ptr();
+
+    /* The runtime may round the allocation up */
+    uct_md_mem_attr_t mem_attr = {};
+    mem_attr.field_mask        = UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer, size, &mem_attr));
+    void *tail = UCS_PTR_BYTE_OFFSET(buffer, mem_attr.alloc_length);
+
+    /* One unknown region covering the allocation and 1 MB past it; the part
+     * past the allocation is removed again when the test ends */
+    ucs_memtype_cache_update(buffer, mem_attr.alloc_length + UCS_MBYTE,
+                             UCS_MEMORY_TYPE_UNKNOWN, UCS_SYS_DEVICE_ID_UNKNOWN,
+                             0);
+    ucs::handle<void*> tail_entry(tail, memtype_cache_remove_mbyte);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    EXPECT_UCS_OK(uct_md_mem_query(md(), buffer, size, &mem_attr));
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(buffer, size, &mem_info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_RDU, mem_info.type)
+            << "allocation: memory type "
+            << ucs_memory_type_names[mem_info.type];
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(tail, UCS_MBYTE, &mem_info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type)
+            << "past the allocation: memory type "
+            << ucs_memory_type_names[mem_info.type];
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_rdu_md, rdu)
+
 UCT_MD_INSTANTIATE_TEST_CASE(test_md)
 
 class test_md_fork : private ucs::clear_dontcopy_regions, public test_md {
@@ -1342,6 +1471,52 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
     if (tested == 0) {
         UCS_TEST_SKIP_R("MD does not expose dmabuf for any supported memory "
                         "type");
+    }
+}
+
+/* MDs which only detect memory and export it as dma-buf for other MDs */
+UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_export) {
+    const size_t size      = 4 * ucs_get_page_size();
+    const size_t offsets[] = {0, 128, ucs_get_page_size() + 64};
+    size_t tested          = 0;
+
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (!(md_attr().dmabuf_mem_types & md_attr().detect_mem_types &
+              ~md_attr().access_mem_types & UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        mem_buffer mem_buf(size, mem_type);
+
+        for (size_t offset : offsets) {
+            uct_md_mem_attr_t mem_attr = {};
+            void *query_ptr = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
+            size_t length   = size - offset;
+
+            mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                                  UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                                  UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+
+            ASSERT_UCS_OK(uct_md_mem_query(md(), query_ptr, length, &mem_attr));
+            EXPECT_EQ(mem_type, mem_attr.mem_type);
+            EXPECT_EQ(mem_buf.ptr(), mem_attr.base_address);
+            EXPECT_GE(mem_attr.alloc_length, size);
+
+            ASSERT_GE(mem_attr.dmabuf_fd, 0);
+
+            /* The exported dma-buf covers the queried range */
+            off_t dmabuf_size = lseek(mem_attr.dmabuf_fd, 0, SEEK_END);
+            EXPECT_GE(dmabuf_size, (off_t)(mem_attr.dmabuf_offset + length));
+            close(mem_attr.dmabuf_fd);
+        }
+
+        ++tested;
+    }
+
+    if (tested == 0) {
+        UCS_TEST_SKIP_R("MD does not export dmabuf for detected memory types");
     }
 }
 
