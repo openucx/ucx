@@ -173,7 +173,6 @@ uct_rocm_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rocm_ipc_iface_t);
-
     return uct_rocm_base_ep_flush(tl_ep, &iface->signal_pool,
                                   &iface->signal_queue, comp);
 }
@@ -275,14 +274,10 @@ UCT_TL_DEFINE(&uct_rocm_ipc_component.super, rocm_ipc,
               uct_rocm_base_query_devices, uct_rocm_ipc_iface_t, "ROCM_IPC_",
               uct_rocm_ipc_iface_config_table, uct_rocm_ipc_iface_config_t);
 
-static const uct_rocm_ipc_iface_config_params_t *
-uct_rocm_ipc_cached_config(void)
+int uct_rocm_ipc_signal_invalidate_enabled(void)
 {
     static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
-    static uct_rocm_ipc_iface_config_params_t params = {
-        .signal_invalidate       = 1,
-        .enable_ipc_handle_cache = 1
-    };
+    static int enabled         = 1;
 
     UCS_INIT_ONCE(&once) {
         uct_rocm_ipc_iface_config_t config;
@@ -291,24 +286,14 @@ uct_rocm_ipc_cached_config(void)
         status = ucs_config_parser_fill_opts(&config, &uct_rocm_ipc_tl.config,
                                              UCS_DEFAULT_ENV_PREFIX, 0);
         if (status == UCS_OK) {
-            params = config.params;
+            enabled = config.params.signal_invalidate;
             ucs_config_parser_release_opts(&config,
                                            uct_rocm_ipc_iface_config_table);
         }
-        if (!params.signal_invalidate) {
+        if (!enabled) {
             ucs_diag("rocm ipc signal invalidation is disabled");
         }
     }
 
-    return &params;
-}
-
-int uct_rocm_ipc_signal_invalidate_enabled(void)
-{
-    return uct_rocm_ipc_cached_config()->signal_invalidate;
-}
-
-int uct_rocm_ipc_cache_enabled(void)
-{
-    return uct_rocm_ipc_cached_config()->enable_ipc_handle_cache;
+    return enabled;
 }
