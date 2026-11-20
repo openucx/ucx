@@ -19,6 +19,7 @@
 
 #include <fcntl.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -282,6 +283,12 @@ uct_ze_ipc_md_open(uct_component_h component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_ze_ipc_component;
+#ifdef SYS_pidfd_getfd
+    /* Peers import the exported dma-buf file descriptors with pidfd_getfd(),
+     * which requires them to pass the ptrace access check against this
+     * process */
+    ucs_sys_ptrace_enable_peers();
+#endif
 
     *md_p = (uct_md_h)md;
     return UCS_OK;
