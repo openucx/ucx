@@ -486,6 +486,7 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
     std::vector<uct_cuda_ipc_vmm_chunk_desc_t> descs(num_chunks);
     uct_cuda_ipc_vmm_multi_range_t range, sub_range;
     const uct_cuda_ipc_vmm_multi_meta_t *meta;
+    unsigned long long buffer_id;
     uct_mem_h memh;
     CUdeviceptr chunk;
 
@@ -517,6 +518,10 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
         chunk = (CUdeviceptr)alloc.ptr() + (i * alloc.chunk_size());
         EXPECT_EQ(chunk, descs[i].d_bptr);
         EXPECT_EQ(alloc.chunk_size(), descs[i].b_len);
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuPointerGetAttribute(&buffer_id,
+                                        CU_POINTER_ATTRIBUTE_BUFFER_ID, chunk));
+        EXPECT_EQ(buffer_id, descs[i].buffer_id);
     }
 
     /* A sub-range is described by its own slots of the same metadata */
