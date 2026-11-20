@@ -378,100 +378,43 @@ static void ucs_interval_tree_delete_fixup(ucs_interval_tree_t *tree,
     }
 }
 
-/**
- * Find any single node that overlaps or is adjacent to @a range.
- * Returns NULL if none found. Does not modify the tree.
+/*
+ * Nodes are disjoint and non-adjacent, since inserts merge them. So if the
+ * range ends before a node with a gap, only the left subtree can overlap it,
+ * and if it starts after the node with a gap, only the right subtree can. When
+ * the descent reaches a NULL link, that is where the merged range belongs.
  */
-static ucs_interval_node_t *
-ucs_interval_tree_find_overlap(ucs_interval_node_t *node,
-                               ucs_interval_tree_range_t range)
-{
-    ucs_interval_node_t *found;
-
-    if (node == NULL) {
-        return NULL;
-    }
-
-    if ((range.start <= (node->end + 1)) && (node->start <= (range.end + 1))) {
-        return node;
-    }
-
-    found = ucs_interval_tree_find_overlap(node->left, range);
-    if (found != NULL) {
-        return found;
-    }
-
-    /* Right subtree: all nodes have start >= node->start, so if
-     * node->start > range.end + 1, no right descendant can overlap. */
-    if (node->start <= (range.end + 1)) {
-        return ucs_interval_tree_find_overlap(node->right, range);
-    }
-
-    return NULL;
-}
-
-/**
- * Iteratively find and remove all overlapping/adjacent nodes, expanding the
- * merged range. Each removal properly rebalances the RB tree before the next
- * search restarts from the root.
- */
-static void ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
-                                                 ucs_interval_tree_range_t *range)
-{
-    ucs_interval_node_t *overlap;
-
-    while ((overlap = ucs_interval_tree_find_overlap(tree->root,
-                                                     *range)) != NULL) {
-        range->start = ucs_min(range->start, overlap->start);
-        range->end   = ucs_max(range->end, overlap->end);
-        ucs_interval_tree_remove_node(tree, &tree->root, overlap);
-    }
-}
-
-/**
- * BST insert by start; sets parent when attaching. Caller must run insert_fixup.
- */
-static ucs_interval_node_t *
-ucs_interval_tree_insert_node(ucs_interval_node_t *root,
-                              ucs_interval_node_t *new_node)
-{
-    if (root == NULL) {
-        return new_node;
-    }
-
-    if (new_node->start < root->start) {
-        root->left = ucs_interval_tree_insert_node(root->left, new_node);
-        if (root->left != NULL) {
-            root->left->parent = root;
-        }
-    } else {
-        root->right = ucs_interval_tree_insert_node(root->right, new_node);
-        if (root->right != NULL) {
-            root->right->parent = root;
-        }
-    }
-
-    return root;
-}
-
 ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
                                            ucs_interval_tree_range_t range)
 {
-    ucs_interval_tree_range_t merged = range;
-    ucs_interval_node_t *new_node;
+    ucs_interval_node_t *parent = NULL;
+    ucs_interval_node_t **link  = &tree->root;
+    ucs_interval_node_t *node;
 
-    ucs_interval_tree_remove_overlapping(tree, &merged);
+    while (*link != NULL) {
+        parent = *link;
+        if ((range.end + 1) < parent->start) {
+            link = &parent->left;
+        } else if ((parent->end + 1) < range.start) {
+            link = &parent->right;
+        } else {
+            /* Merge the node and search again from the rebalanced root */
+            range.start = ucs_min(range.start, parent->start);
+            range.end   = ucs_max(range.end, parent->end);
+            ucs_interval_tree_remove_node(tree, &tree->root, parent);
+            parent = NULL;
+            link   = &tree->root;
+        }
+    }
 
-    new_node = ucs_interval_tree_node_create(tree, merged.start, merged.end);
-    if (ucs_unlikely(new_node == NULL)) {
+    node = ucs_interval_tree_node_create(tree, range.start, range.end);
+    if (ucs_unlikely(node == NULL)) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    tree->root = ucs_interval_tree_insert_node(tree->root, new_node);
-    if (tree->root != NULL) {
-        tree->root->parent = NULL;
-    }
-    ucs_interval_tree_insert_fixup(tree, new_node);
+    node->parent = parent;
+    *link        = node;
+    ucs_interval_tree_insert_fixup(tree, node);
     return UCS_OK;
 }
 
