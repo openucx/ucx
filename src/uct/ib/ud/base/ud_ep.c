@@ -252,12 +252,13 @@ static void uct_ud_ep_crep_comp_wait(uct_ud_ep_t *ep)
 
     /* Only our CREQ was sent, the next packet is our CREP */
     ucs_assert(!uct_ud_ep_is_connected(ep));
-    ucs_assert(ep->tx.psn == (uct_ud_psn_t)(UCT_UD_INITIAL_PSN + 1));
+    ucs_assertv(ep->tx.psn == (uct_ud_psn_t)(UCT_UD_INITIAL_PSN + 1),
+                "ep %p: tx.psn=%u", ep, ep->tx.psn);
 
     ucs_queue_for_each(skb, &ep->tx.window, queue) {
         if ((skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) &&
-            (skb->neth->psn == UCT_UD_INITIAL_PSN)) {
-            skb->neth->psn = UCT_UD_INITIAL_PSN + 1;
+            (skb->neth->psn == (uct_ud_psn_t)(ep->tx.psn - 1))) {
+            skb->neth->psn = ep->tx.psn;
         }
     }
 }
