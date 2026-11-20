@@ -52,7 +52,12 @@ enum {
     UCP_RKEY_CONFIG_FLAG_FLUSH            = UCS_BIT(0),
 
     /* Synthetic key used only for protocol performance estimation */
-    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1)
+    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1),
+
+    /* Some MDs in unreachable_md_map failed to unpack because the remote
+     * device is not reachable at all (rather than only the remote buffer), so
+     * the peer is not expected to access local buffers through them either */
+    UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE = UCS_BIT(2)
 };
 
 
