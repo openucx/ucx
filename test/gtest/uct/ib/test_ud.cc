@@ -1108,6 +1108,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_destroy,
     iface(m_e1)->tx.available = 0;
     m_e2->connect_to_iface(0, *m_e1);
     validate_connect(ep(m_e1), 0U);
+    ASSERT_TRUE(uct_ud_ep_ctl_op_check(ep(m_e1), UCT_UD_EP_OP_CREP));
     EXPECT_EQ(0u, ep_check_count)
             << "ep check completed with status "
             << ucs_status_string(ep_check_status)
