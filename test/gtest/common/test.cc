@@ -55,39 +55,40 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
-bool test_base::is_open_file_whitelisted(const std::string &path) const
+static bool is_path_matched(const std::string &path,
+                            const std::vector<std::string> &patterns)
 {
-    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
-    static const std::string targets_whitelist[] = {
-        "/dev/infiniband/uverbs*",
-        "*anon_inode:\\[infinibandevent\\]",
-        "/dev/nvidia*",
-        "/proc/*/pagemap",
-    };
-
-    for (const auto &str : targets_whitelist) {
-        if (fnmatch(str.c_str(), path.c_str(), 0) == 0) {
+    for (const auto &pattern : patterns) {
+        if (fnmatch(pattern.c_str(), path.c_str(), 0) == 0) {
             return true;
         }
     }
     return false;
 }
 
+bool test_base::is_open_file_whitelisted(const std::string &path) const
+{
+    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
+    static const std::vector<std::string> targets_whitelist = {
+        "/dev/infiniband/uverbs*",
+        "*anon_inode:\\[infinibandevent\\]",
+        "/dev/nvidia*",
+        "/proc/*/pagemap",
+    };
+
+    return is_path_matched(path, targets_whitelist);
+}
+
 bool test_base::is_cuda_ctx_file(const std::string &path) const
 {
     /* Besides /dev/nvidia*, the CUDA driver opens eventfds and pipes when it
      * creates a context, and keeps them open until the context is destroyed */
-    static const std::string targets[] = {
+    static const std::vector<std::string> targets = {
         "anon_inode:\\[eventfd\\]",
         "pipe:*",
     };
 
-    for (const auto &str : targets) {
-        if (fnmatch(str.c_str(), path.c_str(), 0) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return is_path_matched(path, targets);
 }
 
 /* Compare open file descriptors against the previous test's post-cleanup
