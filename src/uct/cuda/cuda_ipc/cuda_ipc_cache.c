@@ -212,7 +212,11 @@ static void uct_cuda_ipc_cache_lru_remove(uct_cuda_ipc_cache_t *cache,
 {
     ucs_list_del(&region->lru_list);
 
-    ucs_assert(cache->num_regions > 0);
+    ucs_assertv(cache->num_regions > 0, "%s: num_regions=%lu", cache->name,
+                cache->num_regions);
+    ucs_assertv(cache->total_size >= region->key.b_len,
+                "%s: total_size=%zu b_len=%zu", cache->name, cache->total_size,
+                region->key.b_len);
     cache->num_regions--;
     cache->total_size -= region->key.b_len;
 }
