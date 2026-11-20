@@ -165,6 +165,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     const void *mapped_addr;
     void *local_addr;
     uct_cuda_ipc_cache_region_t *cache_region;
+    uct_cuda_ipc_mapping_t mapping;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -193,7 +194,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                                &q_desc, &stream,
                                                &cuda_ipc_event);
     if (ucs_unlikely(status != UCS_OK)) {
-        goto out;
+        goto out_unmap;
     }
 
     dst = (CUdeviceptr)((direction == UCT_CUDA_IPC_PUT) ? local_addr :
@@ -205,14 +206,14 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                                         *stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
-        goto out;
+        goto out_unmap;
     }
 
     status = uct_cuda_ipc_event_record_and_enqueue(iface, q_desc,
                                                    cuda_ipc_event, *stream);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_mpool_put(cuda_ipc_event);
-        goto out;
+        goto out_unmap;
     }
 
     cuda_ipc_event->super.comp  = comp;
@@ -223,7 +224,13 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     status = UCS_INPROGRESS;
+    goto out;
 
+out_unmap:
+    uct_cuda_ipc_mapping_init(&mapping, &key->super, mapped_addr,
+                              cache_region);
+    uct_cuda_ipc_unmap_memhandle(&mapping, cuda_device,
+                                 uct_cuda_ipc_component.enable_remote_cache);
 out:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
     return status;
