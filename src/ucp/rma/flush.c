@@ -372,7 +372,9 @@ static void ucp_ep_flush_assert_started_lanes(ucp_ep_h ep, ucp_request_t *req)
                 "req=%p lane=%d started_lanes=0x%" PRIx64, req,
                 req->send.lane, req->send.flush.started_lanes);
 
-    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        /* Sockaddr endpoints do not recover lanes */
+        !ucp_ep_has_cm_lane(ep)) {
         /* A lane still on its wireup proxy cannot have been flushed.
          * Recovery switches lanes one at a time, so another lane may already
          * be on the transport with a flush in progress. */
