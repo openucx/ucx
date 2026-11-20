@@ -1201,10 +1201,11 @@ protected:
             bool complete_inline;
             std::vector<uct_iov_t> iov;
             std::vector<uint64_t> addrs;
+            std::vector<size_t> indices;
         } ctx = {{[](uct_completion_t *comp) {
                       ++ucs_container_of(comp, replay_ctx, comp)->completions;
                   }, 1, UCS_OK}, 0, operation, with_comp,
-                    completion_mode == INLINE, {}, {}};
+                    completion_mode == INLINE, {}, {}, {}};
 
         auto rx_token = get_rx_token();
         ASSERT_EQ(sizeof(uint32_t), rx_token.size());
@@ -1252,6 +1253,8 @@ protected:
             ASSERT_LE(info->rma.payload.zcopy.iovcnt, 1u);
             ctx.iov.push_back(info->rma.payload.zcopy.iovcnt ?
                               info->rma.payload.zcopy.iov[0] : uct_iov_t{});
+            ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL_INDEX);
+            ctx.indices.push_back(info->sgl_index);
             ctx.addrs.push_back(info->rma.remote_addr);
         };
         if (with_rx_token) {
@@ -1269,6 +1272,7 @@ protected:
         }
         for (unsigned i = first; i < count; ++i) {
             auto &iov = ctx.iov[i - first];
+            EXPECT_EQ(i, ctx.indices[i - first]);
             ASSERT_EQ(addrs[i], ctx.addrs[i - first]);
             ASSERT_EQ(lengths[i], iov.length);
             if (lengths[i] > 0) {

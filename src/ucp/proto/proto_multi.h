@@ -199,7 +199,8 @@ typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
 typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
-        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
+        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
+        const size_t *elem_indices);
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,

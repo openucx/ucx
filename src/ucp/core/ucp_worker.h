@@ -110,7 +110,11 @@ enum {
 
     /** Indicates that UCT EP discarding was disabled on this worker */
     UCP_WORKER_FLAG_DISCARD_DISABLED =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 5)
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 5),
+
+    /** SGL replay batch pool has been initialized. */
+    UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 6)
 };
 
 
@@ -371,6 +375,7 @@ typedef struct ucp_worker {
     uint64_t                         client_id;           /* Worker client id for wireup */
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
+    ucs_mpool_t                      sgl_repost_mp;       /* SGL replay batches */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 

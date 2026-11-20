@@ -466,7 +466,7 @@ ucp_proto_rma_sgl_offload_send_frags(
     }
 
     return post_func(req, lpriv, buffers, lengths, uct_memhs, remote_addrs,
-                     uct_rkeys, frag_count);
+                     uct_rkeys, frag_count, elem_indices);
 }
 
 /* Post the user arrays as a batch, or fall back to copying fragments */
@@ -561,7 +561,7 @@ ucp_proto_rma_sgl_offload_send_func(
 
     status = post_func(req, lpriv, &buffers[start_index], &lengths[start_index],
                        uct_memhs, &remote_addrs[start_index], uct_rkeys,
-                       elem_count);
+                       elem_count, NULL);
 
     /* coverity[incorrect_free] */
     ucs_free_on_stack(uct_memhs, uct_memhs_size);

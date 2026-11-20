@@ -15,8 +15,11 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
+#include <ucp/proto/proto_repost.h>
+#include <ucp/dt/datatype_iter.inl>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/base/uct_iface.h>
 }
 
 
@@ -2424,3 +2427,642 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_contig, ib, "ib")
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")
+
+/* Exercise replay independently of SGL failover protocol selection. */
+class test_ucp_rma_sgl_repost : public test_ucp_rma_sgl {
+public:
+    void init() override
+    {
+        modify_config("PROTOS", "all");
+        test_ucp_rma_sgl::init();
+        receiver().connect(&sender(), get_ep_params());
+        flush_workers();
+    }
+
+    struct capture {
+        unsigned               calls = 0;
+        uct_ep_h               ep = nullptr;
+        uct_rkey_t             rkey = UCT_INVALID_RKEY;
+        uct_mem_h              memh = UCT_MEM_HANDLE_NULL;
+        uint64_t               remote_addr = 0;
+        void                   *buffer = nullptr;
+        size_t                 length = 0;
+        std::vector<uct_iov_t> iov;
+    };
+
+    enum replay_case {
+        LEGACY,
+        BATCH,
+        FRAGMENTS,
+        ALIAS,
+        INVALID_INDEX,
+        MISSING_INDEX,
+        OUT_OF_BOUNDS,
+        MISSING_MEMH,
+        MISSING_RKEY,
+        EMPTY,
+        MULTI_IOV,
+        GET,
+        CONTIG,
+        ASYNC,
+        RETRY,
+        RESTART,
+        AMBIGUOUS,
+        EMPTY_UNREGISTERED,
+        MISSING_LOCAL_MD,
+        MISSING_REMOTE_MD,
+        WIRE_ADDRESS
+    };
+
+    static capture *m_capture;
+    static replay_case m_case;
+    static uct_completion_t *m_comp;
+
+    static ucs_status_t put_zcopy(uct_ep_h ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        ++m_capture->calls;
+        m_capture->ep          = ep;
+        m_capture->rkey        = rkey;
+        m_capture->remote_addr = remote_addr;
+        if (iovcnt != 0) {
+            m_capture->iov.assign(iov, iov + iovcnt);
+            m_capture->memh   = iov[0].memh;
+            m_capture->buffer = iov[0].buffer;
+            m_capture->length = iov[0].length;
+        }
+        m_comp = comp;
+        if ((m_case == RETRY) && (m_capture->calls == 1)) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+        return ((m_case == ASYNC) || (m_case == RESTART)) ? UCS_INPROGRESS :
+                                                            UCS_OK;
+    }
+
+    static ucs_status_t m_native_status;
+
+    void batch_post_status(ucs_status_t expected)
+    {
+        ucp_ep_h ep           = sender().ep();
+        ucp_lane_index_t lane = ucp_ep_config(ep)->key.rma_bw_lanes[0];
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        uct_ep_h tl_ep = ucp_ep_get_lane(ep, lane);
+        auto *iface    = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
+        auto *saved    = iface->internal_ops;
+        auto ops       = *saved;
+        capture result;
+        m_capture       = &result;
+        m_native_status = expected;
+        m_comp          = nullptr;
+        ops.ep_put_sgl_zcopy =
+                [](uct_ep_h, void *const*, const size_t*, uct_mem_h const*,
+                   const uint64_t*, uct_rkey_t const*, const size_t*,
+                   const size_t*, size_t, uct_completion_t *comp) {
+                    m_comp = comp;
+                    return m_native_status;
+                };
+        ucp_request_t origin              = {};
+        origin.send.ep                    = ep;
+        origin.send.state.uct_comp.count  = 1;
+        origin.send.state.uct_comp.status = UCS_OK;
+        origin.send.state.uct_comp.func   = [](uct_completion_t*) {
+            ++m_capture->calls;
+        };
+        iface->internal_ops               = &ops;
+        auto status = ucp_proto_repost_sgl_put(&origin, tl_ep, nullptr, nullptr,
+                                               nullptr, nullptr, nullptr, 1,
+                                               nullptr);
+        iface->internal_ops = saved;
+        ASSERT_EQ(expected, status);
+        EXPECT_EQ(0u, result.calls);
+        EXPECT_EQ(1, origin.send.state.uct_comp.count);
+        if (status == UCS_INPROGRESS) {
+            ASSERT_TRUE(m_comp != nullptr);
+            uct_invoke_completion(m_comp, UCS_OK);
+            EXPECT_EQ(1u, result.calls);
+        }
+    }
+
+    void replay_element(replay_case test_case = LEGACY)
+    {
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, {4096, 8192, 12288});
+        const bool alias = (test_case == ALIAS) || (test_case == AMBIGUOUS);
+        if (alias) {
+            ctx.buffers[0]      = ctx.buffers[1];
+            ctx.remote_addrs[0] = ctx.remote_addrs[1];
+            ctx.lengths[0]      = ctx.lengths[1];
+        }
+        if (test_case == EMPTY_UNREGISTERED) {
+            ctx.lengths[1] = 0;
+            ctx.memhs[1]   = nullptr;
+        }
+        if (test_case == MISSING_MEMH) {
+            ctx.memhs[1] = nullptr;
+        }
+        if (test_case == MISSING_RKEY) {
+            ctx.rkeys[1] = nullptr;
+        }
+        ucp_request_t origin               = {};
+        ucp_proto_config_t config          = {};
+        config.select_param.op_id_flags    = UCP_OP_ID_PUT;
+        origin.flags                       = UCP_REQUEST_FLAG_PROTO_SEND;
+        origin.send.ep                     = sender().ep();
+        origin.send.proto_config           = &config;
+        origin.send.state.dt_iter.dt_class = UCP_DATATYPE_SGL;
+        origin.send.state.dt_iter.length   = ctx.lengths.size();
+        origin.send.state.dt_iter.type.sgl.buffers = ctx.buffers.data();
+        origin.send.state.dt_iter.type.sgl.lengths = ctx.lengths.data();
+        origin.send.state.dt_iter.type.sgl.memhs   = ctx.memhs.data();
+        origin.send.rma.sgl.remote_addrs           = ctx.remote_addrs.data();
+        origin.send.rma.sgl.rkeys                  = ctx.rkeys.data();
+        origin.send.rma.rkey                       = ctx.rkeys[0];
+        origin.send.state.uct_comp.count           = 2;
+        origin.send.state.uct_comp.status          = UCS_OK;
+        origin.send.state.uct_comp.func            = [](uct_completion_t*) {
+            ADD_FAILURE() << "origin completed while batch reference is held";
+        };
+
+        if (test_case == CONTIG) {
+            origin.send.state.dt_iter.dt_class         = UCP_DATATYPE_CONTIG;
+            origin.send.state.dt_iter.type.contig.memh = ctx.memhs[1];
+            origin.send.rma.rkey                       = ctx.rkeys[1];
+        }
+        capture result;
+        m_capture = &result;
+        m_case    = test_case;
+        m_comp    = nullptr;
+        std::map<uct_iface_h, decltype(uct_iface_ops_t::ep_put_zcopy)> saved;
+        std::map<uct_iface_h, decltype(uct_iface_ops_t::ep_get_zcopy)> saved_get;
+        ucp_ep_h ep = sender().ep();
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            uct_iface_h iface = ucp_ep_get_lane(ep, lane)->iface;
+            if (saved.emplace(iface, iface->ops.ep_put_zcopy).second) {
+                iface->ops.ep_put_zcopy = put_zcopy;
+                saved_get.emplace(iface, iface->ops.ep_get_zcopy);
+                iface->ops.ep_get_zcopy = put_zcopy;
+            }
+        }
+
+        uct_iov_t iov         = {};
+        iov.buffer            = UCS_PTR_BYTE_OFFSET(ctx.buffers[1], 37);
+        iov.length            = 257;
+        iov.count             = 1;
+        iov.memh              = reinterpret_cast<uct_mem_h>(uintptr_t(0xdead));
+        uct_ep_op_info_t info = {};
+        info.field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
+                                UCT_EP_OP_INFO_FIELD_RMA | UCT_EP_OP_INFO_FIELD_COMP;
+        info.operation        = (test_case == GET) ? UCT_EP_OP_GET_ZCOPY :
+                                                            UCT_EP_OP_PUT_ZCOPY;
+        info.comp             = &origin.send.state.uct_comp;
+        info.rma.field_mask   = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+        info.rma.remote_addr  = ctx.remote_addrs[1] + 37;
+        info.rma.rkey         = UCT_INVALID_RKEY;
+        info.rma.payload.zcopy.iov    = &iov;
+        info.rma.payload.zcopy.iovcnt = 1;
+        uct_iov_t multi[2]            = {iov, iov};
+        if (test_case == MULTI_IOV) {
+            multi[0].length            = 128;
+            multi[1].buffer            = UCS_PTR_BYTE_OFFSET(iov.buffer, 128);
+            multi[1].length            = 129;
+            info.rma.payload.zcopy.iov = multi;
+            info.rma.payload.zcopy.iovcnt = 2;
+            iov.length                    = 128;
+        }
+        if ((test_case == EMPTY) || (test_case == EMPTY_UNREGISTERED)) {
+            info.rma.payload.zcopy.iov    = nullptr;
+            info.rma.payload.zcopy.iovcnt = 0;
+            info.rma.remote_addr          = ctx.remote_addrs[1];
+        }
+        if (test_case == OUT_OF_BOUNDS) {
+            iov.length = ctx.lengths[1];
+        }
+        uct_completion_t *batch = nullptr;
+        if ((test_case != LEGACY) && (test_case != CONTIG) &&
+            (test_case != AMBIGUOUS)) {
+            const size_t indices[] = {1, 2, 0};
+            if (test_case == BATCH) {
+                origin.send.state.dt_iter.offset = 1;
+            }
+            batch = ucp_proto_repost_sgl_completion(
+                    &origin, (test_case == FRAGMENTS) ? indices : nullptr, 3);
+            ASSERT_TRUE(batch != nullptr);
+            ++batch->count; /* retain the original UCT batch reference */
+            info.comp = batch;
+            if (test_case != MISSING_INDEX) {
+                info.field_mask |= UCT_EP_OP_INFO_FIELD_SGL_INDEX;
+                info.sgl_index   = (test_case == INVALID_INDEX) ? 3 :
+                                     ((test_case == FRAGMENTS) ||
+                                    (test_case == BATCH)) ?
+                                                                    0 :
+                                                                    1;
+            }
+        }
+        ucp_md_map_t local_map = 0, remote_map = 0;
+        if (test_case == MISSING_LOCAL_MD) {
+            local_map            = ctx.memhs[1]->md_map;
+            ctx.memhs[1]->md_map = 0;
+        }
+        if (test_case == MISSING_REMOTE_MD) {
+            remote_map           = ctx.rkeys[1]->md_map;
+            ctx.rkeys[1]->md_map = 0;
+        }
+        const uint64_t logical_remote_addr = info.rma.remote_addr;
+        if (test_case == WIRE_ADDRESS) {
+            info.rma.remote_addr += UCS_MBYTE;
+        }
+        ucs_status_t status = ucp_proto_repost_submit(ep, &info);
+        if (test_case == MISSING_LOCAL_MD) {
+            ctx.memhs[1]->md_map = local_map;
+        }
+        if (test_case == MISSING_REMOTE_MD) {
+            ctx.rkeys[1]->md_map = remote_map;
+        }
+        if (test_case == RETRY) {
+            for (unsigned i = 0; (i < 100) && (result.calls < 2); ++i) {
+                progress();
+            }
+        }
+        if (test_case == RESTART) {
+            uct_ep_op_info_t retry = info;
+            retry.comp             = m_comp;
+            EXPECT_UCS_OK(ucp_proto_repost_submit(ep, &retry));
+        }
+        if ((test_case == ASYNC) || (test_case == RESTART)) {
+            EXPECT_EQ(2, origin.send.state.uct_comp.count);
+            if (m_comp != nullptr) {
+                uct_invoke_completion(m_comp, UCS_OK);
+            }
+        }
+        if (batch != nullptr) {
+            EXPECT_EQ(1, batch->count);
+            uct_invoke_completion(batch, UCS_OK);
+        }
+        for (const auto &entry : saved) {
+            entry.first->ops.ep_put_zcopy = entry.second;
+        }
+        for (const auto &entry : saved_get) {
+            entry.first->ops.ep_get_zcopy = entry.second;
+        }
+        ASSERT_UCS_OK(status);
+        const bool invalid     = (test_case == INVALID_INDEX) ||
+                                 (test_case == MISSING_INDEX) ||
+                                 (test_case == OUT_OF_BOUNDS) ||
+                                 (test_case == AMBIGUOUS);
+        const bool unreachable = (test_case == MISSING_MEMH) ||
+                                 (test_case == MISSING_RKEY) ||
+                                 (test_case == MISSING_LOCAL_MD) ||
+                                 (test_case == MISSING_REMOTE_MD);
+        if (invalid || unreachable) {
+            EXPECT_EQ(0u, result.calls);
+            EXPECT_EQ(invalid ? UCS_ERR_INVALID_PARAM : UCS_ERR_UNREACHABLE,
+                      origin.send.state.uct_comp.status);
+            EXPECT_EQ(1, origin.send.state.uct_comp.count);
+            return;
+        }
+        EXPECT_EQ(((test_case == RETRY) || (test_case == RESTART)) ? 2u : 1u,
+                  result.calls);
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (ucp_ep_get_lane(ep, lane) != result.ep) {
+                continue;
+            }
+            ucp_md_index_t md = ucp_ep_md_index(ep, lane);
+            ucp_md_index_t dst_md =
+                    ucp_ep_config(ep)->key.lanes[lane].dst_md_index;
+            if ((test_case != EMPTY) && (test_case != EMPTY_UNREGISTERED)) {
+                for (const auto &posted_iov : result.iov) {
+                    EXPECT_EQ(ucp_datatype_iter_uct_memh(ctx.memhs[1], md),
+                              posted_iov.memh);
+                }
+            }
+            EXPECT_EQ(ucp_rkey_get_tl_rkey(ctx.rkeys[1],
+                                           ucs_bitmap2idx(ctx.rkeys[1]->md_map,
+                                                          dst_md)),
+                      result.rkey);
+        }
+        EXPECT_EQ(1, origin.send.state.uct_comp.count);
+        EXPECT_UCS_OK(origin.send.state.uct_comp.status);
+        if ((test_case != EMPTY) && (test_case != EMPTY_UNREGISTERED)) {
+            EXPECT_EQ(iov.buffer, result.buffer);
+            EXPECT_EQ(iov.length, result.length);
+        }
+        EXPECT_EQ(logical_remote_addr, result.remote_addr);
+        EXPECT_EQ(reinterpret_cast<uct_mem_h>(uintptr_t(0xdead)), iov.memh);
+    }
+};
+
+test_ucp_rma_sgl_repost::capture *test_ucp_rma_sgl_repost::m_capture;
+test_ucp_rma_sgl_repost::replay_case test_ucp_rma_sgl_repost::m_case;
+uct_completion_t *test_ucp_rma_sgl_repost::m_comp;
+ucs_status_t test_ucp_rma_sgl_repost::m_native_status;
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, element_keys_and_memory) {
+    replay_element();
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, batch_identity) {
+    replay_element(BATCH);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, fragment_identity) {
+    replay_element(FRAGMENTS);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, overlapping_ranges) {
+    replay_element(ALIAS);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, invalid_index) {
+    replay_element(INVALID_INDEX);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, missing_index) {
+    replay_element(MISSING_INDEX);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, out_of_bounds) {
+    replay_element(OUT_OF_BOUNDS);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, missing_memory) {
+    replay_element(MISSING_MEMH);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, missing_key) {
+    replay_element(MISSING_RKEY);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, zero_length) {
+    replay_element(EMPTY);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, multiple_iov) {
+    replay_element(MULTI_IOV);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, get) {
+    replay_element(GET);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, contiguous_control) {
+    replay_element(CONTIG);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, async_completion) {
+    replay_element(ASYNC);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, no_resource_retry) {
+    replay_element(RETRY);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, repeated_recovery) {
+    replay_element(RESTART);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, ambiguous_legacy) {
+    replay_element(AMBIGUOUS);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, zero_length_unregistered) {
+    replay_element(EMPTY_UNREGISTERED);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, unregistered_local_md) {
+    replay_element(MISSING_LOCAL_MD);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, missing_remote_md) {
+    replay_element(MISSING_REMOTE_MD);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, native_post_completion_ownership) {
+    batch_post_status(UCS_ERR_NO_RESOURCE);
+    batch_post_status(UCS_ERR_CANCELED);
+    batch_post_status(UCS_OK);
+    batch_post_status(UCS_INPROGRESS);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost, transport_adjusted_remote_address) {
+    replay_element(WIRE_ADDRESS);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_repost, rc_x, "rc_x")
+
+class test_ucp_rma_sgl_repost_failover : public test_ucp_rma_sgl_failover {
+public:
+    void init() override
+    {
+        configure_peer_failure_settings();
+        modify_config("PROTOS", "all");
+        modify_config("FAILOVER_MODE", (mode() == MODE_SW) ? "sw" : "token");
+        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("KEEPALIVE_INTERVAL", "0.1s");
+        modify_config("RECOVERY_RETRIES", "10");
+        test_ucp_rma_sgl::init();
+        receiver().connect(&sender(), get_ep_params());
+        flush_workers();
+    }
+
+    void test_native_replay(bool is_get = false, bool fragmented = false,
+                            bool fenced = false)
+    {
+        ucp_ep_h ep = sender().ep();
+        std::vector<ucp_lane_index_t> lanes;
+        for (auto lane : ucp_ep_config(ep)->key.rma_bw_lanes) {
+            if ((lane != UCP_NULL_LANE) &&
+                (ucp_worker_iface_get_attr_v2(ep->worker,
+                                              ucp_ep_get_rsc_index(ep, lane))
+                         ->cap.flags &
+                 (is_get ? UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY :
+                           UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))) {
+                lanes.push_back(lane);
+            }
+        }
+        if (lanes.size() < 2) {
+            UCS_TEST_SKIP_R("requires two native SGL RMA lanes");
+        }
+        if (ucp_ep_md_index(ep, lanes[0]) == ucp_ep_md_index(ep, lanes[1])) {
+            UCS_TEST_SKIP_R("requires native SGL lanes on different MDs");
+        }
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, {4096, 12288, 8192, 20480});
+        struct origin_state {
+            ucp_request_t req;
+            unsigned      calls;
+            ucs_status_t  status;
+        } state                            = {};
+        ucp_proto_config_t config          = {};
+        config.select_param.op_id_flags    = is_get ? UCP_OP_ID_GET :
+                                                         UCP_OP_ID_PUT;
+        auto &origin                       = state.req;
+        origin.flags                       = UCP_REQUEST_FLAG_PROTO_SEND;
+        origin.send.ep                     = ep;
+        origin.send.proto_config           = &config;
+        origin.send.state.dt_iter.dt_class = UCP_DATATYPE_SGL;
+        origin.send.state.dt_iter.length   = ctx.lengths.size();
+        origin.send.state.dt_iter.type.sgl.buffers = ctx.buffers.data();
+        origin.send.state.dt_iter.type.sgl.lengths = ctx.lengths.data();
+        origin.send.state.dt_iter.type.sgl.memhs   = ctx.memhs.data();
+        origin.send.rma.sgl.remote_addrs           = ctx.remote_addrs.data();
+        origin.send.rma.sgl.rkeys                  = ctx.rkeys.data();
+        origin.send.rma.rkey                       = ctx.rkeys[0];
+        origin.send.state.uct_comp.count           = 1;
+        origin.send.state.uct_comp.status          = UCS_OK;
+        origin.send.state.uct_comp.func = [](uct_completion_t *comp) {
+            auto *req   = ucs_container_of(comp, ucp_request_t,
+                                           send.state.uct_comp);
+            auto *state = ucs_container_of(req, origin_state, req);
+            ++state->calls;
+            state->status = comp->status;
+        };
+
+        auto lane   = lanes[0];
+        auto md     = ucp_ep_md_index(ep, lane);
+        auto dst_md = ucp_ep_config(ep)->key.lanes[lane].dst_md_index;
+        std::vector<uct_mem_h> memhs;
+        std::vector<uct_rkey_t> rkeys;
+        for (size_t i = 0; i < ctx.lengths.size(); ++i) {
+            memhs.push_back(ucp_datatype_iter_uct_memh(ctx.memhs[i], md));
+            rkeys.push_back(
+                    ucp_rkey_get_tl_rkey(ctx.rkeys[i],
+                                         ucs_bitmap2idx(ctx.rkeys[i]->md_map,
+                                                        dst_md)));
+        }
+        const size_t indices[]      = {2, 1, 0};
+        std::vector<void*> buffers  = ctx.buffers;
+        std::vector<size_t> lengths = ctx.lengths;
+        std::vector<uint64_t> addrs = ctx.remote_addrs;
+        const size_t count          = fragmented ? 3 : ctx.lengths.size();
+        if (is_get) {
+            for (size_t i = 0; i < ctx.lengths.size(); ++i) {
+                ctx.dst[i].memset(i + 1);
+                ctx.src[i].memset(0);
+            }
+        }
+        if (fragmented) {
+            for (size_t i = 0; i < count; ++i) {
+                size_t index = indices[i];
+                buffers[i]   = UCS_PTR_BYTE_OFFSET(ctx.buffers[index], 37);
+                lengths[i]   = 257;
+                addrs[i]     = ctx.remote_addrs[index] + 37;
+                memhs[i] = ucp_datatype_iter_uct_memh(ctx.memhs[index], md);
+                rkeys[i] = ucp_rkey_get_tl_rkey(
+                        ctx.rkeys[index],
+                        ucs_bitmap2idx(ctx.rkeys[index]->md_map, dst_md));
+            }
+        }
+        uct_completion_t *comp = nullptr;
+        if (is_get) {
+            comp = ucp_proto_repost_sgl_completion(&origin,
+                                                   fragmented ? indices :
+                                                                nullptr,
+                                                   count);
+            ASSERT_TRUE(comp != nullptr);
+        }
+        if (fenced) {
+            ASSERT_UCS_OK(uct_ep_fence(ucp_ep_get_lane(ep, lane), 0));
+        }
+        ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, lane), nullptr));
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        ucs_status_t status;
+        if (is_get) {
+            status = uct_ep_get_sgl_zcopy(ucp_ep_get_lane(ep, lane),
+                                          buffers.data(), lengths.data(),
+                                          memhs.data(), addrs.data(),
+                                          rkeys.data(), nullptr, nullptr, count,
+                                          comp);
+            if (status != UCS_INPROGRESS) {
+                ucp_proto_repost_sgl_release(comp);
+            }
+        } else {
+            status = ucp_proto_repost_sgl_put(&origin,
+                                              ucp_ep_get_lane(ep, lane),
+                                              buffers.data(), lengths.data(),
+                                              memhs.data(), addrs.data(),
+                                              rkeys.data(), count,
+                                              fragmented ? indices : nullptr);
+        }
+        ASSERT_EQ(UCS_INPROGRESS, status);
+        wait_for_flag(&state.calls);
+        if (state.calls == 0) {
+            request_wait(sender().disconnect_nb(0, 0, UCP_EP_CLOSE_FLAG_FORCE));
+        }
+        ASSERT_EQ(1u, state.calls);
+        if (mode() == MODE_PEER) {
+            EXPECT_NE(UCS_OK, state.status);
+        } else if (mode() == MODE_SW) {
+            /* SW recovery cancels transport batches so the original UCP
+             * protocol can restart. This test submits directly to UCT. */
+            EXPECT_EQ(UCS_ERR_CANCELED, state.status);
+        } else {
+            ASSERT_UCS_OK(state.status);
+            unsigned other_md_lanes = 0;
+            for (auto remaining : ucp_ep_config(ep)->key.rma_bw_lanes) {
+                if ((remaining != UCP_NULL_LANE) &&
+                    (ucp_ep_md_index(ep, remaining) != md)) {
+                    ++other_md_lanes;
+                }
+            }
+            EXPECT_GT(other_md_lanes, 0u);
+            UCS_TEST_MESSAGE << "replayed after MD " << unsigned(md)
+                             << " failed; other-MD lanes=" << other_md_lanes;
+            flush_workers();
+            for (size_t i = 0; i < ctx.lengths.size(); ++i) {
+                std::vector<char> actual(ctx.lengths[i]);
+                auto &buffer = is_get ? ctx.src[i] : ctx.dst[i];
+                mem_buffer::copy_from(actual.data(), buffer.ptr(),
+                                      actual.size(), src_mem_type());
+                std::vector<char> expected(actual.size(), 0);
+                if (!fragmented) {
+                    std::fill(expected.begin(), expected.end(), char(i + 1));
+                } else if (i < count) {
+                    std::fill(expected.begin() + 37, expected.begin() + 294,
+                              char(i + 1));
+                }
+                EXPECT_EQ(expected, actual);
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_repost_failover, native_batch) {
+    test_native_replay();
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost_failover, native_get_batch) {
+    test_native_replay(true);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_repost_failover, native_fragments) {
+    test_native_replay(false, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_repost_failover, rc_x, "rc_x")
+
+class test_ucp_rma_sgl_repost_fence : public test_ucp_rma_sgl_repost_failover {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        test_ucp_rma_sgl_repost_failover::get_test_variants(variants);
+        for (auto &variant : variants) {
+            variant.ctx_params.features |= UCP_FEATURE_AMO64;
+        }
+    }
+
+    void init() override
+    {
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_INDIRECT_ATOMIC", "y"));
+        test_ucp_rma_sgl_repost_failover::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_repost_fence, native_fenced_put) {
+    test_native_replay(false, true, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_repost_fence, rc_x, "rc_x")

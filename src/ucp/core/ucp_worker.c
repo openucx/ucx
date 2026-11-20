@@ -2459,6 +2459,9 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
+    if (worker->flags & UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED) {
+        ucs_mpool_cleanup(&worker->sgl_repost_mp, 1);
+    }
     if (worker->flags & UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED) {
         ucs_mpool_set_cleanup(&worker->am_mps, 1);
         worker->flags &= ~UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;

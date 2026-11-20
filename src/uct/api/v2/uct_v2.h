@@ -1753,6 +1753,9 @@ typedef enum uct_ep_op_info_field {
 
     /** Enables @ref uct_ep_op_info_t::atomic. */
     UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::sgl_index. */
+    UCT_EP_OP_INFO_FIELD_SGL_INDEX = UCS_BIT(5),
 } uct_ep_op_info_field_t;
 
 
@@ -2001,6 +2004,13 @@ typedef struct uct_ep_op_info {
             size_t          size;
         } atomic;
     };
+
+    /**
+     * Index of this operation's element in the original UCT SGL submission.
+     * Valid with UCT_EP_OP_INFO_FIELD_SGL_INDEX. The completion identifies
+     * the submission; addresses need not uniquely identify an element.
+     */
+    size_t sgl_index;
 } uct_ep_op_info_t;
 
 
