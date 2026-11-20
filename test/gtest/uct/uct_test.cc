@@ -1017,16 +1017,16 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = mem_flags;
     params.name            = "uct_test";
     params.mem_type        = mem_type;
     params.address         = address;
 
     do {
         /* Do not repeat the allocation errors while waiting */
-        last = ucs_get_time() >= deadline;
-        scoped_log_handler slh((waiting && !last) ? hide_errors_logger :
-                                                    wrap_errors_logger);
+        last         = ucs_get_time() >= deadline;
+        params.flags = mem_flags |
+                       ((waiting && !last) ? UCT_MD_MEM_FLAG_HIDE_ERRORS : 0);
+        scoped_log_handler slh(wrap_errors_logger);
         if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
             (mem_type == UCS_MEMORY_TYPE_HOST)) {
             status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
@@ -1053,7 +1053,8 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                 waiting = true;
             }
 
-            usleep(ucs::rand() % 10000);
+            /* Keep errors not hidden by the flag below the logger limit */
+            usleep(100000 + (ucs::rand() % 10000));
         }
     } while (!last);
 
