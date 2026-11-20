@@ -106,6 +106,17 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t drop_all(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
+    {
+        return UCS_ERR_BUSY;
+    }
+
+    static void ep_check_done(uct_completion_t *self)
+    {
+        ep_check_status = self->status;
+        ucs_atomic_add32(&ep_check_count, 1);
+    }
+
     void connect_to_iface(unsigned index = 0)
     {
         m_e1->connect_to_iface(index, *m_e2);
@@ -187,6 +198,10 @@ public:
     static volatile uint32_t     tx_count;
     static volatile uct_ud_psn_t tx_ackreq_psn;
     static volatile uct_ud_psn_t tx_ack_psn;
+    static volatile uint32_t     ep_check_count;
+    static volatile ucs_status_t ep_check_status;
+    /* Static, since the endpoint teardown completes a check left in flight */
+    static uct_completion_t      ep_check_comp;
 };
 
 volatile uint32_t      test_ud::ack_req_tx_cnt = 0;
@@ -195,6 +210,9 @@ volatile uint32_t      test_ud::rx_drop_count  = 0;
 volatile uint32_t      test_ud::tx_count  = 0;
 volatile uct_ud_psn_t  test_ud::tx_ackreq_psn = 0;
 volatile uct_ud_psn_t  test_ud::tx_ack_psn = 0;
+volatile uint32_t      test_ud::ep_check_count  = 0;
+volatile ucs_status_t  test_ud::ep_check_status = UCS_OK;
+uct_completion_t       test_ud::ep_check_comp;
 
 UCS_TEST_SKIP_COND_P(test_ud, basic_tx,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
@@ -1027,6 +1045,79 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
     validate_connect(ep(m_e1), 0U);
     validate_connect(ep(m_e2), 0U);
+}
+
+/* An ep check completes when the peer acknowledges packets of the endpoint.
+ * Use-case: nothing m_e1 sends reaches m_e2, but m_e1 receives the packets of
+ * m_e2. m_e1 checks its endpoint while its CREQ is not acknowledged, and then
+ * receives the CREQ of m_e2 (simultaneous connect).
+ * Check: the check completes only after a packet of m_e1 reaches m_e2 */
+UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_tx_lost,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK)) {
+    ucs_time_t deadline;
+
+    ep_check_comp.func   = ep_check_done;
+    ep_check_comp.count  = 1;
+    ep_check_comp.status = UCS_OK;
+    ep_check_count       = 0;
+    ep_check_status      = UCS_OK;
+
+    iface(m_e2)->rx.hook = drop_all;
+    m_e1->connect_to_iface(0, *m_e2);
+    ASSERT_EQ(UCS_INPROGRESS, uct_ep_check(m_e1->ep(0), 0, &ep_check_comp));
+
+    m_e2->connect_to_iface(0, *m_e1);
+    validate_connect(ep(m_e1), 0U);
+    short_progress_loop(100);
+    EXPECT_EQ(0u, ep_check_count)
+            << "ep check completed with status "
+            << ucs_status_string(ep_check_status)
+            << ", but no packet of the endpoint reached the peer";
+
+    /* Resent packets of m_e1 reach m_e2 now */
+    iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
+    deadline = ucs::get_deadline(TEST_UD_LINGER_TIMEOUT_IN_SEC);
+    while ((ep_check_count == 0) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    EXPECT_EQ(1u, ep_check_count);
+    EXPECT_UCS_OK(ep_check_status);
+    validate_connect(ep(m_e2), 0U);
+}
+
+/* As ep_check_simultaneous_creq_tx_lost, but m_e1 cannot send its CREP and
+ * destroys the endpoint.
+ * Check: the check completes once, as canceled */
+UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_destroy,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK)) {
+    int16_t tx_available;
+
+    ep_check_comp.func   = ep_check_done;
+    ep_check_comp.count  = 1;
+    ep_check_comp.status = UCS_OK;
+    ep_check_count       = 0;
+    ep_check_status      = UCS_OK;
+
+    iface(m_e2)->rx.hook = drop_all;
+    m_e1->connect_to_iface(0, *m_e2);
+    ASSERT_EQ(UCS_INPROGRESS, uct_ep_check(m_e1->ep(0), 0, &ep_check_comp));
+
+    /* No TX resources on m_e1: its CREP stays scheduled */
+    tx_available              = iface(m_e1)->tx.available;
+    iface(m_e1)->tx.available = 0;
+    m_e2->connect_to_iface(0, *m_e1);
+    validate_connect(ep(m_e1), 0U);
+    EXPECT_EQ(0u, ep_check_count)
+            << "ep check completed with status "
+            << ucs_status_string(ep_check_status)
+            << ", but no packet of the endpoint reached the peer";
+
+    m_e1->destroy_ep(0);
+    iface(m_e1)->tx.available = tx_available;
+    iface(m_e2)->rx.hook      = uct_ud_iface_null_hook;
+    EXPECT_EQ(1u, ep_check_count) << "ep check lost on endpoint destroy";
+    EXPECT_EQ(UCS_ERR_CANCELED, ep_check_status);
 }
 #endif
 
