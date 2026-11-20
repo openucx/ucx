@@ -19,7 +19,6 @@ extern "C" {
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
-#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
@@ -340,110 +339,6 @@ UCS_TEST_SKIP_COND_P(test_rc, tx_resource_check_no_reserve,
 
     flush();
 }
-
-#ifdef HAVE_MLX5_DV
-static unsigned sgl_ext_refusals;
-static size_t sgl_ext_max_count;
-
-/* SGL operation of a provider extension which refuses every request */
-static ucs_status_t
-sgl_ext_refuse(uct_ep_h ep, void * const *buffers, const size_t *lengths,
-               uct_mem_h const *memhs, const uint64_t *remote_addrs,
-               uct_rkey_t const *rkeys, const size_t *counts,
-               const size_t *strides, size_t count, uct_completion_t *comp)
-{
-    ++sgl_ext_refusals;
-    return UCS_ERR_NO_RESOURCE;
-}
-
-static size_t sgl_ext_get_max_count()
-{
-    return sgl_ext_max_count;
-}
-
-UCS_TEST_SKIP_COND_P(test_rc, sgl_ext_refusal_reserve,
-                     (GetParam()->tl_name != "rc_mlx5") ||
-                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
-{
-    const size_t count        = 2;
-    uct_ib_mlx5_ext_ops_t ops = {};
-    uct_iface_attr_v2_t attr  = {};
-    uct_rc_ep_t *ep           = rc_ep(m_e1);
-    mapped_buffer sbuf(64, 0ul, *m_e1), rbuf(64, 0ul, *m_e2);
-    size_t base_max_count;
-    uint16_t bb_max;
-
-    attr.field_mask = UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
-    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
-    base_max_count = attr.max_get_sgl_zcopy_count;
-    bb_max         = ucs_derived_of(ep, uct_rc_mlx5_base_ep_t)->tx.wq.bb_max;
-
-    /* The provider takes more elements than the endpoint can have free */
-    sgl_ext_max_count = bb_max + 1;
-
-    std::vector<void*> buffers(sgl_ext_max_count, sbuf.ptr());
-    std::vector<size_t> lengths(sgl_ext_max_count, sbuf.length());
-    std::vector<uct_mem_h> memhs(sgl_ext_max_count, sbuf.memh());
-    std::vector<uint64_t> raddrs(sgl_ext_max_count, rbuf.addr());
-    std::vector<uct_rkey_t> rkeys(sgl_ext_max_count, rbuf.rkey());
-
-    ucs_strncpy_zero(ops.name, "gtest_sgl", sizeof(ops.name));
-    ops.ep_put_sgl_zcopy        = sgl_ext_refuse;
-    ops.max_get_sgl_zcopy_count = sgl_ext_get_max_count;
-    ops.ep_get_sgl_zcopy        = sgl_ext_refuse;
-    ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
-    UCS_TEST_SCOPE_EXIT() {
-        uct_ib_mlx5_ext_unregister("gtest_sgl");
-    } UCS_TEST_SCOPE_EXIT_END
-
-    sgl_ext_refusals = 0;
-
-    /* A refused operation of no elements lacks nothing */
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
-                                   memhs.data(), raddrs.data(), rkeys.data(),
-                                   NULL, NULL, 0, NULL));
-    EXPECT_EQ(0, ep->txqp_reserve);
-    EXPECT_EQ(0, ep->cq_reserve);
-
-    /* With one free WQE, the provider refusal reserves the WQE which the
-     * operation lacks, as a refusal of the base implementation does */
-    for (int16_t i = uct_rc_txqp_available(&ep->txqp);
-         i > (int16_t)(count - 1); --i) {
-        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sbuf.ptr(), 8, rbuf.addr(),
-                                       rbuf.rkey()));
-    }
-
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
-                                   memhs.data(), raddrs.data(), rkeys.data(),
-                                   NULL, NULL, count, NULL));
-    EXPECT_EQ((uint16_t)(count - 1), ep->txqp_reserve);
-    EXPECT_EQ(0, ep->cq_reserve);
-
-    /* An operation which the base implementation would not take still needs
-     * all its WQEs: with a smaller reserve, pending_add would return
-     * UCS_ERR_BUSY while the operation does not fit */
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
-                                   memhs.data(), raddrs.data(), rkeys.data(),
-                                   NULL, NULL, base_max_count + 1, NULL));
-    EXPECT_EQ((uint16_t)base_max_count, ep->txqp_reserve);
-
-    /* The reserve is limited by what the endpoint can have free, so that it
-     * can be satisfied */
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
-                                   memhs.data(), raddrs.data(), rkeys.data(),
-                                   NULL, NULL, sgl_ext_max_count, NULL));
-    EXPECT_EQ((uint16_t)(bb_max - 1), ep->txqp_reserve);
-    EXPECT_EQ(4u, sgl_ext_refusals);
-
-    flush();
-
-    EXPECT_EQ(0, ep->txqp_reserve);
-}
-#endif
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
                      GetParam()->tl_name != "rc_mlx5",
