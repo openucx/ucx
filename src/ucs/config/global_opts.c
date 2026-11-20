@@ -223,8 +223,9 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "traffic of the devices.\n"
   " - auto : detect from the IOMMU groups of the devices and their domain\n"
   "          type, as the kernel set them up. ACS changes at run time (e.g.\n"
-  "          by setpci) and peer-to-peer traffic of address-translated (ATS)\n"
-  "          requests are not detected; set it to on or off for them.\n"
+  "          by setpci), ACS redirect without an IOMMU (e.g. set by the BIOS)\n"
+  "          and peer-to-peer traffic of address-translated (ATS) requests\n"
+  "          are not detected; set it to on or off for them.\n"
   " - on   : assume it for every device.\n"
   " - off  : assume it for no device.\n"
   "Must be the same in all processes on a node.",

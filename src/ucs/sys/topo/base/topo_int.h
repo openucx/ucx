@@ -14,6 +14,9 @@
 
 BEGIN_C_DECLS
 
+/* Root port of a device which is not behind a PCIe root port */
+#define UCS_TOPO_ROOT_PORT_NONE ((ucs_bus_id_bit_rep_t)-1)
+
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
@@ -63,7 +66,7 @@ typedef struct {
     ucs_ternary_auto_value_t p2p_redirect;
 
     /* PCIe root port of the device as returned by
-     * ucs_topo_get_bus_id_bit_repr(), or -1 if not behind a root port */
+     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
     ucs_bus_id_bit_rep_t     root_port;
 } ucs_topo_sys_device_info_t;
 
@@ -109,8 +112,8 @@ int ucs_topo_sysfs_is_p2p_redirected(const char *dev_path);
  * @param [in] path  Canonical sysfs path of the device.
  *
  * @return Bus ID of the root port as returned by
- *         ucs_topo_get_bus_id_bit_repr(), or -1 if the device is not behind a
- *         root port.
+ *         ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE if the
+ *         device is not behind a root port.
  */
 ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *path);
 
