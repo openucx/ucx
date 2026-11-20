@@ -481,7 +481,15 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     }
 
     if (enable_am_bw || (req->send.state.dt.offset == 0)) {
-        ucp_request_send_reg_lane(req, req->send.lane);
+        status = ucp_request_send_reg_lane(req, req->send.lane);
+        if ((status == UCS_OK) && (req->send.lane != ucp_ep_get_am_lane(ep)) &&
+            !ucp_request_send_lane_has_memh(req, req->send.lane)) {
+            /* Registration leaves out an MD that cannot reach the memory, so
+             * send this fragment on the AM lane, like the first one */
+            ucp_trace_req(req, "no memh for lane[%d], using am lane",
+                          req->send.lane);
+            req->send.lane = ucp_ep_get_am_lane(ep);
+        }
     }
 
     max_zcopy = ucp_ep_get_max_zcopy(ep, req->send.lane) - user_hdr_size;
