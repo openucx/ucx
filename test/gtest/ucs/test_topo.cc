@@ -1300,7 +1300,8 @@ UCS_TEST_F(test_topo, sysfs_root_port) {
         path = get_sysfs_device_path(entry->d_name);
         if (!path.empty() &&
             (strchr(entry->d_name, ':') == (entry->d_name + 4)) &&
-            (ucs_topo_sysfs_get_root_port(path.c_str()) >= 0)) {
+            (ucs_topo_sysfs_get_root_port(path.c_str()) !=
+             UCS_TOPO_ROOT_PORT_NONE)) {
             bdf = entry->d_name;
             break;
         }
@@ -1542,8 +1543,10 @@ UCS_TEST_F(test_topo_p2p_redirect, same_root_port) {
     EXPECT_NE(ucs_topo_sysfs_get_root_port(m_nic.c_str()),
               ucs_topo_sysfs_get_root_port(m_other_nic.c_str()));
     /* The host bridge and the root port itself are not behind a root port */
-    EXPECT_EQ(-1, ucs_topo_sysfs_get_root_port(host_bridge().c_str()));
-    EXPECT_EQ(-1, ucs_topo_sysfs_get_root_port(m_root_port.c_str()));
+    EXPECT_EQ(UCS_TOPO_ROOT_PORT_NONE,
+              ucs_topo_sysfs_get_root_port(host_bridge().c_str()));
+    EXPECT_EQ(UCS_TOPO_ROOT_PORT_NONE,
+              ucs_topo_sysfs_get_root_port(m_root_port.c_str()));
 }
 
 UCS_TEST_F(test_topo_p2p_redirect, not_peers) {

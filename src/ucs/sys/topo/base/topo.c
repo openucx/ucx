@@ -477,7 +477,7 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
 
     *numa_node_p = UCS_NUMA_NODE_UNDEFINED;
     *pci_id_p    = UCS_SYS_PCI_ID_UNDEFINED;
-    *root_port_p = -1;
+    *root_port_p = UCS_TOPO_ROOT_PORT_NONE;
 
     status = ucs_string_alloc_path_buffer(&path, "sysfs_path");
     if (status != UCS_OK) {
@@ -1653,7 +1653,8 @@ static int ucs_topo_sysfs_is_p2p_via_root_complex(const char *dev_path,
     char domain_type[16];
 
     if ((iommu_group < 0) && (peer_iommu_group < 0)) {
-        /* IOMMU is disabled */
+        /* IOMMU is disabled, so no IOMMU groups tell whether ACS (e.g. set by
+         * the BIOS) redirects the traffic; assume it does not */
         return 0;
     }
 
@@ -1775,7 +1776,7 @@ ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *path)
     const char *name;
 
     if (length == 0) {
-        return -1;
+        return UCS_TOPO_ROOT_PORT_NONE;
     }
 
     /* The bus ID of the root port is the last component of its path */
@@ -1785,7 +1786,7 @@ ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *path)
     }
 
     if (!ucs_topo_parse_bus_id(name, &bus_id)) {
-        return -1;
+        return UCS_TOPO_ROOT_PORT_NONE;
     }
 
     return ucs_topo_get_bus_id_bit_repr(&bus_id);
@@ -1890,7 +1891,7 @@ int ucs_topo_is_same_root_port(ucs_sys_device_t sys_dev1,
     device1 = ucs_topo_get_sys_device_nolock(sys_dev1);
     device2 = ucs_topo_get_sys_device_nolock(sys_dev2);
     result  = (device1 != NULL) && (device2 != NULL) &&
-              (device1->root_port >= 0) &&
+              (device1->root_port != UCS_TOPO_ROOT_PORT_NONE) &&
               (device1->root_port == device2->root_port);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
