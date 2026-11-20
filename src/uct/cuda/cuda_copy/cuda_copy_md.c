@@ -333,11 +333,13 @@ out:
 typedef struct {
     int is_async_managed;
     int is_host_located;
-    /* Localized to a locality domain, so that its export may need PCIe */
+    /* VMM memory localized to a locality domain */
     int is_localized;
     int is_gdr_capable;
     /* Allocated for GPUDirect RDMA over PCIe, which MPS MLOPart may localize */
     int is_gdr_over_pcie;
+    /* Stream-ordered memory allocated from a memory pool */
+    int is_pool;
 } uct_cuda_copy_alloc_props_t;
 
 
@@ -571,6 +573,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     props->is_localized     = 0;
     props->is_gdr_capable   = 0;
     props->is_gdr_over_pcie = 0;
+    props->is_pool          = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
                                       props);
@@ -649,10 +652,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             props->is_async_managed = 1;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
-            if (cuda_mem_ctx == NULL) {
-                props->is_localized =
-                        uct_cuda_copy_md_is_localized_pool(address);
-            }
+            props->is_pool = (cuda_mem_ctx == NULL);
         }
     }
 
@@ -822,9 +822,9 @@ static int uct_cuda_copy_md_is_mps_disabled(ucs_sys_device_t sys_dev)
 #endif
 }
 
-/* The driver exports localized memory only mapped via PCIe, which is used for
- * a Direct NIC, unless the default RDMA mapping of the device supports it. */
-static int uct_cuda_copy_md_is_localized_exportable(ucs_sys_device_t sys_dev)
+/* Whether the default RDMA mapping of the device supports localized memory */
+static int
+uct_cuda_copy_md_is_localized_rdma_supported(ucs_sys_device_t sys_dev)
 {
 #if HAVE_DECL_CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED
     CUdevice_attribute attr =
@@ -841,7 +841,7 @@ static int uct_cuda_copy_md_is_localized_exportable(ucs_sys_device_t sys_dev)
     }
 #endif
 
-    return ucs_topo_device_has_sibling(sys_dev);
+    return 0;
 }
 
 static int
@@ -851,6 +851,7 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
+    int is_localized;
     int dmabuf_fd;
 
     if (props->is_async_managed) {
@@ -878,18 +879,27 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
         return dmabuf->fd != UCT_DMABUF_FD_INVALID;
     }
 
-    /* Avoid the costly dmabuf export when its outcome is known */
-    if (props->is_localized) {
-        return uct_cuda_copy_md_is_localized_exportable(mem_info->sys_dev);
+    /* Avoid the costly dmabuf export when its outcome is known. The dmabuf of
+     * localized memory is mapped via PCIe for a Direct NIC, which VMM memory
+     * must be allocated for, and otherwise via the default RDMA mapping. */
+    is_localized = props->is_localized ||
+                   (props->is_pool &&
+                    uct_cuda_copy_md_is_localized_pool(mem_info->base_address));
+    if (is_localized && !ucs_topo_device_has_sibling(mem_info->sys_dev)) {
+        return uct_cuda_copy_md_is_localized_rdma_supported(mem_info->sys_dev);
+    }
+
+    if (is_localized && (props->is_pool || props->is_gdr_over_pcie)) {
+        return 1;
     }
 
     /* The driver exports GPUDirect RDMA capable memory, which MPS MLOPart does
      * not localize unless allocated for PCIe, and other memory unless MPS
      * localizes all of the device memory, e.g. MPS MLOPart, which the memory
-     * does not report. Locality is unknown without locality domain support in
-     * the CUDA headers, assume it is not localized. */
-    if ((props->is_gdr_capable && !props->is_gdr_over_pcie) ||
-        uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev)) {
+     * does not report */
+    if (!is_localized &&
+        ((props->is_gdr_capable && !props->is_gdr_over_pcie) ||
+         uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev))) {
         return 1;
     }
 
