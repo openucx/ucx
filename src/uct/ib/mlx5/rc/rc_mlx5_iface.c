@@ -1081,15 +1081,15 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
 
+    count = ucs_min(count, uct_rc_mlx5_base_sgl_zcopy_max_count(iface));
     if (count == 0) {
         return;
     }
 
-    uct_rc_ep_reserve_cqe(iface, ep, count - 1);
-    uct_rc_ep_reserve_txqp(ep, count - 1);
+    uct_rc_ep_reserve_cqe(&iface->super, &ep->super, count - 1);
+    uct_rc_ep_reserve_txqp(&ep->super, count - 1);
 }
 
 static ucs_status_t
