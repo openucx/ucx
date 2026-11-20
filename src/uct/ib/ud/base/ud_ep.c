@@ -263,8 +263,8 @@ static void uct_ud_ep_crep_comp_wait(uct_ud_ep_t *ep)
     }
 }
 
-/* A purge drops the CREP which is not sent yet, so release the completions
- * waiting for it with the packets sent */
+/* A purge or flush(CANCEL) does not wait for the CREP which is not sent yet, so
+ * release the completions waiting for it with the packets sent */
 static void uct_ud_ep_crep_comp_purge(uct_ud_ep_t *ep)
 {
     uct_ud_send_skb_t *skb;
@@ -1343,6 +1343,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ud_ep_reset_max_psn(ep);
         ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
+        uct_ud_ep_crep_comp_purge(ep);
     }
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
