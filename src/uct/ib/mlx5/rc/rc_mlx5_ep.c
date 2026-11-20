@@ -2037,6 +2037,9 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                                               wqe_size, &callback_data, &info);
             if (status == UCS_OK) {
                 if (sgl_op != NULL) {
+                    /* Each SGL element occupies one BB. Preserve this contract
+                     * when changing the batch WQE layout. */
+                    ucs_assert(wqe_size <= MLX5_SEND_WQE_BB);
                     info.field_mask |= UCT_EP_OP_INFO_FIELD_SGL_INDEX;
                     info.sgl_index   = (uint16_t)(pi - sgl_op->sn);
                 }

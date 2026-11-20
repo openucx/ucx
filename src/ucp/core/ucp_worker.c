@@ -17,6 +17,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
+#include <ucp/proto/proto_repost.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -2415,6 +2416,11 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_rkey_mp_cleanup;
     }
 
+    status = ucp_proto_repost_init_mpool(worker);
+    if (status != UCS_OK) {
+        goto err_reg_mp_cleanup;
+    }
+
     if (max_mp_entry_size > 0) {
         /* Create memory pool for incoming UCT messages without a UCT descriptor */
         status = ucs_mpool_set_init(&worker->am_mps,
@@ -2425,13 +2431,15 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
                                     0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                                     &ucp_am_mpool_ops, "ucp_am_bufs");
         if (status != UCS_OK) {
-            goto err_reg_mp_cleanup;
+            goto err_sgl_repost_mp_cleanup;
         }
         worker->flags |= UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
     }
 
     return UCS_OK;
 
+err_sgl_repost_mp_cleanup:
+    ucs_mpool_cleanup(&worker->sgl_repost_mp, 0);
 err_reg_mp_cleanup:
     ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_rkey_mp_cleanup:
@@ -2459,9 +2467,7 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    if (worker->flags & UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED) {
-        ucs_mpool_cleanup(&worker->sgl_repost_mp, 1);
-    }
+    ucs_mpool_cleanup(&worker->sgl_repost_mp, 1);
     if (worker->flags & UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED) {
         ucs_mpool_set_cleanup(&worker->am_mps, 1);
         worker->flags &= ~UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;

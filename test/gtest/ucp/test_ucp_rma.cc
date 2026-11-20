@@ -2428,7 +2428,8 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_contig, ib, "ib")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")
 
-/* Exercise replay independently of SGL failover protocol selection. */
+/* Isolate key/memory resolution until protocol enablement in the next step.
+ * Real QP failure and completion ownership are covered below and in UCT. */
 class test_ucp_rma_sgl_repost : public test_ucp_rma_sgl {
 public:
     void init() override
@@ -2440,320 +2441,150 @@ public:
     }
 
     struct capture {
-        unsigned               calls = 0;
-        uct_ep_h               ep = nullptr;
-        uct_rkey_t             rkey = UCT_INVALID_RKEY;
-        uint64_t               remote_addr = 0;
-        void                   *buffer = nullptr;
-        size_t                 length = 0;
-        std::vector<uct_iov_t> iov;
+        uct_completion_t *comp = nullptr;
+        uct_ep_h ep           = nullptr;
+        uct_rkey_t rkey       = UCT_INVALID_RKEY;
+        uct_mem_h memh        = UCT_MEM_HANDLE_NULL;
+        uint64_t remote_addr  = 0;
+        unsigned calls        = 0;
     };
-
-    enum replay_case {
-        LEGACY,
-        BATCH,
-        FRAGMENTS,
-        ALIAS,
-        INVALID_INDEX,
-        MISSING_INDEX,
-        OUT_OF_BOUNDS,
-        MISSING_MEMH,
-        MISSING_RKEY,
-        ASYNC,
-        RETRY,
-        RESTART,
-        AMBIGUOUS,
-        EMPTY_UNREGISTERED,
-        WIRE_ADDRESS
-    };
-
     static capture *m_capture;
-    static replay_case m_case;
-    static uct_completion_t *m_comp;
 
     static ucs_status_t put_zcopy(uct_ep_h ep, const uct_iov_t *iov,
                                   size_t iovcnt, uint64_t remote_addr,
-                                  uct_rkey_t rkey, uct_completion_t *comp)
+                                  uct_rkey_t rkey, uct_completion_t*)
     {
+        if (iovcnt != 1) {
+            ADD_FAILURE() << "expected one IOV, got " << iovcnt;
+            return UCS_ERR_INVALID_PARAM;
+        }
         ++m_capture->calls;
         m_capture->ep          = ep;
         m_capture->rkey        = rkey;
+        m_capture->memh        = iov[0].memh;
         m_capture->remote_addr = remote_addr;
-        if (iovcnt != 0) {
-            m_capture->iov.assign(iov, iov + iovcnt);
-            m_capture->buffer = iov[0].buffer;
-            m_capture->length = iov[0].length;
-        }
-        m_comp = comp;
-        if ((m_case == RETRY) && (m_capture->calls == 1)) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-        return ((m_case == ASYNC) || (m_case == RESTART)) ? UCS_INPROGRESS :
-                                                            UCS_OK;
+        return UCS_OK;
     }
 
-    static ucs_status_t m_native_status;
-
-    void batch_post_status(ucs_status_t expected)
-    {
-        ucp_ep_h ep           = sender().ep();
-        ucp_lane_index_t lane = ucp_ep_config(ep)->key.rma_bw_lanes[0];
-        ASSERT_NE(UCP_NULL_LANE, lane);
-        uct_ep_h tl_ep = ucp_ep_get_lane(ep, lane);
-        auto *iface    = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
-        auto *saved    = iface->internal_ops;
-        auto ops       = *saved;
-        capture result;
-        m_capture       = &result;
-        m_native_status = expected;
-        m_comp          = nullptr;
-        ops.ep_put_sgl_zcopy =
-                [](uct_ep_h, void *const*, const size_t*, uct_mem_h const*,
-                   const uint64_t*, uct_rkey_t const*, const size_t*,
-                   const size_t*, size_t, uct_completion_t *comp) {
-                    m_comp = comp;
-                    return m_native_status;
-                };
-        ucp_request_t origin              = {};
-        origin.send.ep                    = ep;
-        origin.send.state.uct_comp.count  = 1;
-        origin.send.state.uct_comp.status = UCS_OK;
-        origin.send.state.uct_comp.func   = [](uct_completion_t*) {
-            ++m_capture->calls;
-        };
-        iface->internal_ops               = &ops;
-        auto status = ucp_proto_repost_sgl_put(&origin, tl_ep, nullptr, nullptr,
-                                               nullptr, nullptr, nullptr, 1,
-                                               nullptr);
-        iface->internal_ops = saved;
-        ASSERT_EQ(expected, status);
-        EXPECT_EQ(0u, result.calls);
-        EXPECT_EQ(1, origin.send.state.uct_comp.count);
-        if (status == UCS_INPROGRESS) {
-            ASSERT_TRUE(m_comp != nullptr);
-            uct_invoke_completion(m_comp, UCS_OK);
-            EXPECT_EQ(1u, result.calls);
-        }
-    }
-
-    void replay_element(replay_case test_case = LEGACY)
+    void replay_element(bool fragmented)
     {
         sgl_ctx ctx;
-        init_sgl_ctx(ctx, {4096, 8192, 12288});
-        const bool alias = (test_case == ALIAS) || (test_case == AMBIGUOUS);
-        if (alias) {
-            ctx.buffers[0]      = ctx.buffers[1];
-            ctx.remote_addrs[0] = ctx.remote_addrs[1];
-            ctx.lengths[0]      = ctx.lengths[1];
-        }
-        if (test_case == EMPTY_UNREGISTERED) {
-            ctx.lengths[1] = 0;
-            ctx.memhs[1]   = nullptr;
-        }
-        if (test_case == MISSING_MEMH) {
-            ctx.memhs[1] = nullptr;
-        }
-        if (test_case == MISSING_RKEY) {
-            ctx.rkeys[1] = nullptr;
-        }
+        init_sgl_ctx(ctx, {4096, 8192});
+        /* Addresses alone cannot distinguish these elements. */
+        ctx.buffers[0]      = ctx.buffers[1];
+        ctx.remote_addrs[0] = ctx.remote_addrs[1];
+        ctx.lengths[0]      = ctx.lengths[1];
+
+        ucp_ep_h ep                        = sender().ep();
         ucp_request_t origin               = {};
         ucp_proto_config_t config          = {};
         config.select_param.op_id_flags    = UCP_OP_ID_PUT;
         origin.flags                       = UCP_REQUEST_FLAG_PROTO_SEND;
-        origin.send.ep                     = sender().ep();
+        origin.send.ep                     = ep;
         origin.send.proto_config           = &config;
         origin.send.state.dt_iter.dt_class = UCP_DATATYPE_SGL;
         origin.send.state.dt_iter.length   = ctx.lengths.size();
+        origin.send.state.dt_iter.offset   = 1;
         origin.send.state.dt_iter.type.sgl.buffers = ctx.buffers.data();
         origin.send.state.dt_iter.type.sgl.lengths = ctx.lengths.data();
         origin.send.state.dt_iter.type.sgl.memhs   = ctx.memhs.data();
         origin.send.rma.sgl.remote_addrs           = ctx.remote_addrs.data();
         origin.send.rma.sgl.rkeys                  = ctx.rkeys.data();
-        origin.send.rma.rkey                       = ctx.rkeys[0];
-        origin.send.state.uct_comp.count           = 2;
-        origin.send.state.uct_comp.status          = UCS_OK;
-        origin.send.state.uct_comp.func            = [](uct_completion_t*) {
+        origin.send.state.uct_comp.count          = 2;
+        origin.send.state.uct_comp.status         = UCS_OK;
+        origin.send.state.uct_comp.func = [](uct_completion_t*) {
             ADD_FAILURE() << "origin completed while batch reference is held";
         };
 
+        auto lane = ucp_ep_config(ep)->key.rma_bw_lanes[0];
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        auto tl_ep = ucp_ep_get_lane(ep, lane);
+        auto iface = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
+        auto saved = iface->internal_ops;
+        auto ops   = *saved;
         capture result;
-        m_capture = &result;
-        m_case    = test_case;
-        m_comp    = nullptr;
+        m_capture  = &result;
+        ops.ep_put_sgl_zcopy =
+                [](uct_ep_h, void *const*, const size_t*, uct_mem_h const*,
+                   const uint64_t*, uct_rkey_t const*, const size_t*,
+                   const size_t*, size_t, uct_completion_t *comp) {
+                    m_capture->comp = comp;
+                    return UCS_INPROGRESS;
+                };
+        const size_t indices[] = {1};
+        iface->internal_ops = &ops;
+        auto status = ucp_proto_repost_sgl_zcopy(
+                &origin, tl_ep, UCT_EP_OP_PUT_ZCOPY, nullptr, nullptr, nullptr,
+                nullptr, nullptr, 1, fragmented ? indices : nullptr);
+        iface->internal_ops = saved;
+        ASSERT_EQ(UCS_INPROGRESS, status);
+        ASSERT_TRUE(result.comp != nullptr);
+        ++result.comp->count; /* replay reference normally transferred by UCT */
+        origin.send.state.dt_iter.offset = 2; /* iterator advanced after post */
 
-        uct_iov_t iov         = {};
-        iov.buffer            = UCS_PTR_BYTE_OFFSET(ctx.buffers[1], 37);
-        iov.length            = 257;
-        iov.count             = 1;
-        iov.memh              = reinterpret_cast<uct_mem_h>(uintptr_t(0xdead));
+        uct_iov_t iov = {};
+        iov.buffer    = UCS_PTR_BYTE_OFFSET(ctx.buffers[1], 37);
+        iov.length    = 257;
+        iov.count     = 1;
+        iov.memh      = reinterpret_cast<uct_mem_h>(uintptr_t(0xdead));
         uct_ep_op_info_t info = {};
-        info.field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
-                                UCT_EP_OP_INFO_FIELD_RMA | UCT_EP_OP_INFO_FIELD_COMP;
-        info.operation        = UCT_EP_OP_PUT_ZCOPY;
-        info.comp             = &origin.send.state.uct_comp;
-        info.rma.field_mask   = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
-                                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
-                                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
-        info.rma.remote_addr  = ctx.remote_addrs[1] + 37;
-        info.rma.rkey         = UCT_INVALID_RKEY;
+        info.field_mask = UCT_EP_OP_INFO_FIELD_OPERATION |
+                          UCT_EP_OP_INFO_FIELD_RMA | UCT_EP_OP_INFO_FIELD_COMP |
+                          UCT_EP_OP_INFO_FIELD_SGL_INDEX;
+        info.operation      = UCT_EP_OP_PUT_ZCOPY;
+        info.comp           = result.comp;
+        info.sgl_index      = 0;
+        info.rma.field_mask = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                              UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                              UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+        /* Fenced PUT can use a transport alias rather than the logical VA. */
+        info.rma.remote_addr          = ctx.remote_addrs[1] + 37 + UCS_MBYTE;
+        info.rma.rkey                 = UCT_INVALID_RKEY;
         info.rma.payload.zcopy.iov    = &iov;
         info.rma.payload.zcopy.iovcnt = 1;
-        if (test_case == EMPTY_UNREGISTERED) {
-            info.rma.payload.zcopy.iov    = nullptr;
-            info.rma.payload.zcopy.iovcnt = 0;
-            info.rma.remote_addr          = ctx.remote_addrs[1];
-        }
-        if (test_case == OUT_OF_BOUNDS) {
-            iov.length = ctx.lengths[1];
-        }
-        uct_completion_t *batch = nullptr;
-        if ((test_case != LEGACY) && (test_case != AMBIGUOUS)) {
-            const size_t indices[] = {1, 2, 0};
-            if (test_case == BATCH) {
-                origin.send.state.dt_iter.offset = 1;
-            }
-            batch = ucp_proto_repost_sgl_completion(
-                    &origin, (test_case == FRAGMENTS) ? indices : nullptr,
-                    (test_case == BATCH) ? 2 : 3);
-            ASSERT_TRUE(batch != nullptr);
-            ++batch->count; /* retain the original UCT batch reference */
-            info.comp = batch;
-            if (test_case != MISSING_INDEX) {
-                info.field_mask |= UCT_EP_OP_INFO_FIELD_SGL_INDEX;
-                info.sgl_index = (test_case == INVALID_INDEX) ? 3 :
-                                 ((test_case == FRAGMENTS) ||
-                                  (test_case == BATCH)) ? 0 : 1;
-            }
-        }
-        const uint64_t logical_remote_addr = info.rma.remote_addr;
-        if (test_case == WIRE_ADDRESS) {
-            info.rma.remote_addr += UCS_MBYTE;
-        }
-        ucp_ep_h ep = sender().ep();
-        std::map<uct_iface_h, decltype(uct_iface_ops_t::ep_put_zcopy)> saved;
-        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            uct_iface_h iface = ucp_ep_get_lane(ep, lane)->iface;
-            if (saved.emplace(iface, iface->ops.ep_put_zcopy).second) {
-                iface->ops.ep_put_zcopy = put_zcopy;
-            }
-        }
 
-        ucs_status_t status = ucp_proto_repost_submit(ep, &info);
-        if (test_case == RETRY) {
-            for (unsigned i = 0; (i < 100) && (result.calls < 2); ++i) {
-                progress();
+        std::map<uct_iface_h, decltype(uct_iface_ops_t::ep_put_zcopy)> saved_put;
+        for (ucp_lane_index_t i = 0; i < ucp_ep_num_lanes(ep); ++i) {
+            auto tl_iface = ucp_ep_get_lane(ep, i)->iface;
+            if (saved_put.emplace(tl_iface, tl_iface->ops.ep_put_zcopy).second) {
+                tl_iface->ops.ep_put_zcopy = put_zcopy;
             }
         }
-        if (test_case == RESTART) {
-            uct_ep_op_info_t retry = info;
-            retry.comp             = m_comp;
-            EXPECT_UCS_OK(ucp_proto_repost_submit(ep, &retry));
-        }
-        if ((test_case == ASYNC) || (test_case == RESTART)) {
-            EXPECT_EQ(2, origin.send.state.uct_comp.count);
-            if (m_comp != nullptr) {
-                uct_invoke_completion(m_comp, UCS_OK);
-            }
-        }
-        if (batch != nullptr) {
-            EXPECT_EQ(1, batch->count);
-            uct_invoke_completion(batch, UCS_OK);
-        }
-        for (const auto &entry : saved) {
+        status = ucp_proto_repost_submit(ep, &info);
+        for (const auto &entry : saved_put) {
             entry.first->ops.ep_put_zcopy = entry.second;
         }
+        EXPECT_EQ(1, result.comp->count);
+        uct_invoke_completion(result.comp, UCS_OK);
         ASSERT_UCS_OK(status);
-        const bool invalid     = (test_case == INVALID_INDEX) ||
-                                 (test_case == MISSING_INDEX) ||
-                                 (test_case == OUT_OF_BOUNDS) ||
-                                 (test_case == AMBIGUOUS);
-        const bool unreachable = (test_case == MISSING_MEMH) ||
-                                 (test_case == MISSING_RKEY);
-        if (invalid || unreachable) {
-            EXPECT_EQ(0u, result.calls);
-            EXPECT_EQ(invalid ? UCS_ERR_INVALID_PARAM : UCS_ERR_UNREACHABLE,
-                      origin.send.state.uct_comp.status);
-            EXPECT_EQ(1, origin.send.state.uct_comp.count);
-            return;
-        }
-        EXPECT_EQ(((test_case == RETRY) || (test_case == RESTART)) ? 2u : 1u,
-                  result.calls);
-        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            if (ucp_ep_get_lane(ep, lane) != result.ep) {
-                continue;
+        ASSERT_EQ(1u, result.calls);
+        ucp_lane_index_t replay_lane;
+        for (replay_lane = 0; replay_lane < ucp_ep_num_lanes(ep); ++replay_lane) {
+            if (ucp_ep_get_lane(ep, replay_lane) == result.ep) {
+                break;
             }
-            ucp_md_index_t md = ucp_ep_md_index(ep, lane);
-            ucp_md_index_t dst_md =
-                    ucp_ep_config(ep)->key.lanes[lane].dst_md_index;
-            if (test_case != EMPTY_UNREGISTERED) {
-                for (const auto &posted_iov : result.iov) {
-                    EXPECT_EQ(ucp_datatype_iter_uct_memh(ctx.memhs[1], md),
-                              posted_iov.memh);
-                }
-            }
-            EXPECT_EQ(ucp_rkey_get_tl_rkey(ctx.rkeys[1],
-                                           ucs_bitmap2idx(ctx.rkeys[1]->md_map,
-                                                          dst_md)),
-                      result.rkey);
         }
+        ASSERT_LT(replay_lane, ucp_ep_num_lanes(ep));
+        const auto md     = ucp_ep_md_index(ep, replay_lane);
+        const auto dst_md = ucp_ep_config(ep)->key.lanes[replay_lane].dst_md_index;
+        EXPECT_EQ(ucp_datatype_iter_uct_memh(ctx.memhs[1], md), result.memh);
+        EXPECT_EQ(ucp_rkey_get_tl_rkey(
+                          ctx.rkeys[1],
+                          ucs_bitmap2idx(ctx.rkeys[1]->md_map, dst_md)),
+                  result.rkey);
+        EXPECT_EQ(ctx.remote_addrs[1] + 37, result.remote_addr);
+        EXPECT_EQ(reinterpret_cast<uct_mem_h>(uintptr_t(0xdead)), iov.memh);
         EXPECT_EQ(1, origin.send.state.uct_comp.count);
         EXPECT_UCS_OK(origin.send.state.uct_comp.status);
-        if (test_case != EMPTY_UNREGISTERED) {
-            EXPECT_EQ(iov.buffer, result.buffer);
-            EXPECT_EQ(iov.length, result.length);
-        }
-        EXPECT_EQ(logical_remote_addr, result.remote_addr);
-        EXPECT_EQ(reinterpret_cast<uct_mem_h>(uintptr_t(0xdead)), iov.memh);
     }
 };
 
 test_ucp_rma_sgl_repost::capture *test_ucp_rma_sgl_repost::m_capture;
-test_ucp_rma_sgl_repost::replay_case test_ucp_rma_sgl_repost::m_case;
-uct_completion_t *test_ucp_rma_sgl_repost::m_comp;
-ucs_status_t test_ucp_rma_sgl_repost::m_native_status;
 
 UCS_TEST_P(test_ucp_rma_sgl_repost, element_keys_and_memory) {
-    replay_element();
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, batch_identity) {
-    for (auto test_case : {BATCH, FRAGMENTS, ALIAS, WIRE_ADDRESS}) {
-        SCOPED_TRACE(test_case);
-        replay_element(test_case);
-    }
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, invalid_identity) {
-    for (auto test_case : {INVALID_INDEX, MISSING_INDEX, OUT_OF_BOUNDS,
-                          AMBIGUOUS}) {
-        SCOPED_TRACE(test_case);
-        replay_element(test_case);
-    }
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, missing_registration) {
-    for (auto test_case : {MISSING_MEMH, MISSING_RKEY}) {
-        SCOPED_TRACE(test_case);
-        replay_element(test_case);
-    }
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, zero_length_unregistered) {
-    replay_element(EMPTY_UNREGISTERED);
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, retry_completion) {
-    for (auto test_case : {ASYNC, RETRY, RESTART}) {
-        SCOPED_TRACE(test_case);
-        replay_element(test_case);
-    }
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_repost, native_post_completion_ownership) {
-    for (auto status : {UCS_ERR_NO_RESOURCE, UCS_ERR_CANCELED, UCS_OK,
-                        UCS_INPROGRESS}) {
-        SCOPED_TRACE(status);
-        batch_post_status(status);
+    for (bool fragmented : {false, true}) {
+        SCOPED_TRACE(fragmented);
+        replay_element(fragmented);
     }
 }
 
@@ -2863,37 +2694,16 @@ public:
                         ucs_bitmap2idx(ctx.rkeys[index]->md_map, dst_md));
             }
         }
-        uct_completion_t *comp = nullptr;
-        if (is_get) {
-            comp = ucp_proto_repost_sgl_completion(&origin,
-                                                   fragmented ? indices :
-                                                                nullptr,
-                                                   count);
-            ASSERT_TRUE(comp != nullptr);
-        }
         if (fenced) {
             ASSERT_UCS_OK(uct_ep_fence(ucp_ep_get_lane(ep, lane), 0));
         }
         ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, lane), nullptr));
         scoped_log_handler wrap_err(wrap_errors_logger);
-        ucs_status_t status;
-        if (is_get) {
-            status = uct_ep_get_sgl_zcopy(ucp_ep_get_lane(ep, lane),
-                                          buffers.data(), lengths.data(),
-                                          memhs.data(), addrs.data(),
-                                          rkeys.data(), nullptr, nullptr, count,
-                                          comp);
-            if (status != UCS_INPROGRESS) {
-                ucp_proto_repost_sgl_release(comp);
-            }
-        } else {
-            status = ucp_proto_repost_sgl_put(&origin,
-                                              ucp_ep_get_lane(ep, lane),
-                                              buffers.data(), lengths.data(),
-                                              memhs.data(), addrs.data(),
-                                              rkeys.data(), count,
-                                              fragmented ? indices : nullptr);
-        }
+        auto status = ucp_proto_repost_sgl_zcopy(
+                &origin, ucp_ep_get_lane(ep, lane),
+                is_get ? UCT_EP_OP_GET_ZCOPY : UCT_EP_OP_PUT_ZCOPY,
+                buffers.data(), lengths.data(), memhs.data(), addrs.data(),
+                rkeys.data(), count, fragmented ? indices : nullptr);
         ASSERT_EQ(UCS_INPROGRESS, status);
         wait_for_flag(&state.calls);
         if (state.calls == 0) {

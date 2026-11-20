@@ -422,8 +422,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_repost_post(
     uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
     ucs_status_t status;
 
-    status = ucp_proto_repost_sgl_put(req, uct_ep, buffers, lengths, memhs,
-                                      remote_addrs, rkeys, count, elem_indices);
+    status = ucp_proto_repost_sgl_zcopy(
+            req, uct_ep, UCT_EP_OP_PUT_ZCOPY, buffers, lengths, memhs,
+            remote_addrs, rkeys, count, elem_indices);
     if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
                                                   rkeys[0], uct_ep,
@@ -480,6 +481,7 @@ ucp_proto_put_sgl_offload_repost_progress(uct_pending_req_t *self)
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
 }
+
 static ucs_status_t ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);

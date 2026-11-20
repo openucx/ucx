@@ -110,11 +110,7 @@ enum {
 
     /** Indicates that UCT EP discarding was disabled on this worker */
     UCP_WORKER_FLAG_DISCARD_DISABLED =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 5),
-
-    /** SGL replay batch pool has been initialized. */
-    UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 6)
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 5)
 };
 
 

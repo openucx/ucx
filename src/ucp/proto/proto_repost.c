@@ -61,32 +61,28 @@ static void ucp_proto_repost_sgl_complete(uct_completion_t *comp)
     ucp_invoke_uct_completion(origin, status);
 }
 
-uct_completion_t *ucp_proto_repost_sgl_completion(ucp_request_t *origin,
-                                                  const size_t *indices,
-                                                  size_t count)
+ucs_status_t ucp_proto_repost_init_mpool(ucp_worker_h worker)
 {
     static ucs_mpool_ops_t ops = {
         .chunk_alloc   = ucs_mpool_chunk_malloc,
         .chunk_release = ucs_mpool_chunk_free
     };
-    ucp_worker_h worker        = origin->send.ep->worker;
-    ucp_proto_repost_sgl_t *batch;
     ucs_mpool_params_t params;
-    ucs_status_t status;
 
-    if (ucs_unlikely(!(worker->flags &
-                       UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED))) {
-        ucs_mpool_params_reset(&params);
-        params.elem_size       = sizeof(*batch);
-        params.elems_per_chunk = 128;
-        params.ops             = &ops;
-        params.name            = "ucp_sgl_repost";
-        status = ucs_mpool_init(&params, &worker->sgl_repost_mp);
-        if (status != UCS_OK) {
-            return NULL;
-        }
-        worker->flags |= UCP_WORKER_FLAG_SGL_REPOST_MPOOL_INITIALIZED;
-    }
+    ucs_mpool_params_reset(&params);
+    params.elem_size       = sizeof(ucp_proto_repost_sgl_t);
+    params.elems_per_chunk = 128;
+    params.ops             = &ops;
+    params.name            = "ucp_sgl_repost";
+    return ucs_mpool_init(&params, &worker->sgl_repost_mp);
+}
+
+static uct_completion_t *
+ucp_proto_repost_sgl_completion(ucp_request_t *origin, const size_t *indices,
+                                size_t count)
+{
+    ucp_worker_h worker = origin->send.ep->worker;
+    ucp_proto_repost_sgl_t *batch;
 
     batch = ucs_mpool_get_inline(&worker->sgl_repost_mp);
     if (batch == NULL) {
@@ -107,18 +103,17 @@ uct_completion_t *ucp_proto_repost_sgl_completion(ucp_request_t *origin,
     return &batch->comp;
 }
 
-void ucp_proto_repost_sgl_release(uct_completion_t *comp)
+static void ucp_proto_repost_sgl_release(uct_completion_t *comp)
 {
     ucs_mpool_put_inline(ucs_container_of(comp, ucp_proto_repost_sgl_t, comp));
 }
 
 
-ucs_status_t
-ucp_proto_repost_sgl_put(ucp_request_t *origin, uct_ep_h ep,
-                         void *const *buffers, const size_t *lengths,
-                         uct_mem_h const *memhs, const uint64_t *remote_addrs,
-                         uct_rkey_t const *rkeys, size_t count,
-                         const size_t *indices)
+ucs_status_t ucp_proto_repost_sgl_zcopy(
+        ucp_request_t *origin, uct_ep_h ep, uct_ep_operation_t operation,
+        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
+        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
+        const size_t *indices)
 {
     uct_completion_t *comp;
     ucs_status_t status;
@@ -127,8 +122,15 @@ ucp_proto_repost_sgl_put(ucp_request_t *origin, uct_ep_h ep,
     if (comp == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
-    status = uct_ep_put_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
-                                  rkeys, NULL, NULL, count, comp);
+    ucs_assert((operation == UCT_EP_OP_PUT_ZCOPY) ||
+               (operation == UCT_EP_OP_GET_ZCOPY));
+    if (operation == UCT_EP_OP_PUT_ZCOPY) {
+        status = uct_ep_put_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
+                                      rkeys, NULL, NULL, count, comp);
+    } else {
+        status = uct_ep_get_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
+                                      rkeys, NULL, NULL, count, comp);
+    }
     if (status != UCS_INPROGRESS) {
         ucp_proto_repost_sgl_release(comp);
     }
@@ -414,16 +416,25 @@ ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
     uintptr_t address, base;
     uint64_t remote;
 
+    if ((origin == NULL) || (comp == NULL)) {
+        ucs_debug("repost %p: missing original SGL request or completion", req);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (comp->func == ucp_proto_repost_sgl_complete) {
         batch = ucs_container_of(comp, ucp_proto_repost_sgl_t, comp);
         if (!(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL_INDEX) ||
             (info->sgl_index >= batch->count)) {
+            ucs_debug("repost %p: missing or invalid SGL batch index (count %zu)",
+                      req, batch->count);
             return UCS_ERR_INVALID_PARAM;
         }
         index = (batch->first_index != SIZE_MAX) ?
                 batch->first_index + info->sgl_index :
                 batch->indices[info->sgl_index];
         if (index >= origin->send.state.dt_iter.length) {
+            ucs_debug("repost %p: SGL element %zu exceeds count %zu", req, index,
+                      origin->send.state.dt_iter.length);
             return UCS_ERR_INVALID_PARAM;
         }
 
@@ -432,11 +443,15 @@ ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
             address = (uintptr_t)info->rma.payload.zcopy.iov[0].buffer;
             base = (uintptr_t)origin->send.state.dt_iter.type.sgl.buffers[index];
             if (address < base) {
+                ucs_debug("repost %p: fragment precedes SGL element %zu", req,
+                          index);
                 return UCS_ERR_INVALID_PARAM;
             }
             offset = address - base;
         }
         if (!ucp_proto_repost_sgl_contains(origin, info, index, offset)) {
+            ucs_debug("repost %p: fragment exceeds SGL element %zu at offset %zu",
+                      req, index, offset);
             return UCS_ERR_INVALID_PARAM;
         }
 
@@ -458,11 +473,14 @@ ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
             continue;
         }
         if (found != SIZE_MAX) {
+            ucs_debug("repost %p: ambiguous SGL elements %zu and %zu", req,
+                      found, index);
             return UCS_ERR_INVALID_PARAM;
         }
         found = index;
     }
     if (found == SIZE_MAX) {
+        ucs_debug("repost %p: fragment does not match any SGL element", req);
         return UCS_ERR_INVALID_PARAM;
     }
     *index_p = found;
@@ -751,11 +769,12 @@ ucp_proto_repost_config(ucp_ep_h ep)
     ucp_proto_select_param_t select_param;
     ucp_proto_select_elem_t *select_elem;
     const ucp_proto_threshold_elem_t *thresh;
-    ucp_memory_info_t mem_info;
 
-    ucp_memory_info_set_host(&mem_info);
-    ucp_proto_select_param_init(&select_param, UCP_OP_ID_REPOST, 0, 0,
-                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+    memset(&select_param, 0, sizeof(select_param));
+    select_param.op_id_flags = UCP_OP_ID_REPOST;
+    select_param.dt_class    = UCP_DATATYPE_CONTIG;
+    select_param.mem_type    = UCS_MEMORY_TYPE_HOST;
+    select_param.sg_count    = 1;
 
     select_elem = ucp_proto_select_lookup_slow(
             ep->worker, &ucp_ep_config(ep)->proto_select, 0, ep->cfg_index,

@@ -16,22 +16,16 @@
 ucs_status_t
 ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info);
 
-/* Keep logical element identity until a native SGL batch is completed.
- * NULL indices denotes consecutive elements starting at the iterator offset;
- * otherwise count is at most UCP_MAX_IOV and indices is copied. */
-uct_completion_t *ucp_proto_repost_sgl_completion(ucp_request_t *origin,
-                                                  const size_t *indices,
-                                                  size_t count);
+/* Initialize replay batch metadata; chunks are allocated on first use. */
+ucs_status_t ucp_proto_repost_init_mpool(ucp_worker_h worker);
 
-/* Post a native PUT batch with its replay identity. */
-ucs_status_t
-ucp_proto_repost_sgl_put(ucp_request_t *origin, uct_ep_h ep,
-                         void *const *buffers, const size_t *lengths,
-                         uct_mem_h const *memhs, const uint64_t *remote_addrs,
-                         uct_rkey_t const *rkeys, size_t count,
-                         const size_t *indices);
-
-/* Release an unposted batch, including NO_RESOURCE; do not complete origin. */
-void ucp_proto_repost_sgl_release(uct_completion_t *comp);
+/* Post a native PUT/GET batch with its replay identity. NULL indices denotes
+ * consecutive elements starting at the iterator offset; otherwise count is
+ * at most UCP_MAX_IOV and indices is copied. */
+ucs_status_t ucp_proto_repost_sgl_zcopy(
+        ucp_request_t *origin, uct_ep_h ep, uct_ep_operation_t operation,
+        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
+        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
+        const size_t *indices);
 
 #endif
