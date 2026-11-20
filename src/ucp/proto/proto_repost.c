@@ -43,9 +43,8 @@ typedef struct {
 typedef struct {
     uct_completion_t comp;
     ucp_request_t    *origin;
-    size_t           first_index;
+    size_t           first_index; /* SIZE_MAX for an explicit index list */
     size_t           count;
-    int              consecutive;
     size_t           indices[UCP_MAX_IOV];
 } ucp_proto_repost_sgl_t;
 
@@ -95,9 +94,9 @@ uct_completion_t *ucp_proto_repost_sgl_completion(ucp_request_t *origin,
     }
 
     batch->origin      = origin;
-    batch->first_index = origin->send.state.dt_iter.offset;
+    batch->first_index = (indices == NULL) ? origin->send.state.dt_iter.offset :
+                                             SIZE_MAX;
     batch->count       = count;
-    batch->consecutive = (indices == NULL);
     if (indices != NULL) {
         ucs_assert(count <= ucs_static_array_size(batch->indices));
         memcpy(batch->indices, indices, count * sizeof(*indices));
@@ -421,8 +420,9 @@ ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
             (info->sgl_index >= batch->count)) {
             return UCS_ERR_INVALID_PARAM;
         }
-        index = batch->consecutive ? batch->first_index + info->sgl_index :
-                                     batch->indices[info->sgl_index];
+        index = (batch->first_index != SIZE_MAX) ?
+                batch->first_index + info->sgl_index :
+                batch->indices[info->sgl_index];
         if (index >= origin->send.state.dt_iter.length) {
             return UCS_ERR_INVALID_PARAM;
         }
@@ -487,14 +487,13 @@ static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
 
 static ucs_status_t
 ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
-                         uct_rkey_t *tl_rkey_p)
+                         uct_rkey_t *tl_rkey_p, size_t *sgl_index_p)
 {
     const uct_ep_op_info_t *info = req->send.repost.info;
     ucp_request_t *origin;
     ucp_md_index_t dst_md_index;
     ucp_rkey_h rkey;
     unsigned rkey_index;
-    size_t sgl_index;
     ucs_status_t status;
 
     if (ucp_proto_repost_origin_comp(req) == NULL) {
@@ -508,11 +507,11 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
     }
 
     if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
-        status = ucp_proto_repost_sgl_index(req, &sgl_index);
+        status = ucp_proto_repost_sgl_index(req, sgl_index_p);
         if (status != UCS_OK) {
             return status;
         }
-        rkey = origin->send.rma.sgl.rkeys[sgl_index];
+        rkey = origin->send.rma.sgl.rkeys[*sgl_index_p];
     } else {
         rkey = ucp_proto_repost_origin_rkey(origin);
     }
@@ -533,7 +532,8 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
 
 /* Copied zcopy IOV still holds the failed device memory handle. */
 static ucs_status_t
-ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
+ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane,
+                            size_t sgl_index)
 {
     uct_ep_op_info_t *op_info = req->send.repost.info;
     ucp_request_t *origin     = ucp_proto_repost_origin_req(req);
@@ -541,8 +541,7 @@ ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
     uct_mem_h uct_memh;
     ucp_mem_h memh;
     uct_iov_t *iov;
-    size_t i, sgl_index;
-    ucs_status_t status;
+    size_t i;
 
     if (origin == NULL) {
         return UCS_ERR_UNREACHABLE;
@@ -553,10 +552,6 @@ ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
     }
 
     if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
-        status = ucp_proto_repost_sgl_index(req, &sgl_index);
-        if (status != UCS_OK) {
-            return status;
-        }
         memh = (origin->send.state.dt_iter.type.sgl.memhs == NULL) ? NULL :
                 origin->send.state.dt_iter.type.sgl.memhs[sgl_index];
     } else if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
@@ -618,6 +613,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
     const uct_ep_op_info_t *info         = req->send.repost.info;
     uct_rkey_t tl_rkey                   = UCT_INVALID_RKEY;
+    size_t sgl_index                    = 0;
     ucp_proto_repost_pack_t pack;
     uct_completion_t *comp;
     ucs_status_t status;
@@ -644,7 +640,8 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         (info->operation == UCT_EP_OP_PUT_ZCOPY) ||
         (info->operation == UCT_EP_OP_GET_BCOPY) ||
         (info->operation == UCT_EP_OP_GET_ZCOPY)) {
-        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey);
+        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey,
+                                           &sgl_index);
         if (status != UCS_OK) {
             ucp_proto_repost_abort(req, status);
             return UCS_OK;
@@ -678,7 +675,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane, sgl_index);
         if (status != UCS_OK) {
             break;
         }
@@ -694,7 +691,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
                                   info->rma.remote_addr, tl_rkey, comp);
         break;
     case UCT_EP_OP_GET_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane, sgl_index);
         if (status != UCS_OK) {
             break;
         }
