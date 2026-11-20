@@ -1052,8 +1052,8 @@ private:
     };
 };
 
-UCS_TEST_P(test_ucp_rma_restart, put_offload_bcopy,
-           "PROTOS=put/offload/bcopy,reconfig")
+UCS_TEST_SKIP_COND_P(test_ucp_rma_restart, put_offload_bcopy,
+                     !is_proto_enabled(), "PROTOS=put/offload/bcopy,reconfig")
 {
     ucp_lane_index_t lane = ucp_ep_config(sender().ep())->key.rma_bw_lanes[0];
 
@@ -1066,7 +1066,8 @@ UCS_TEST_P(test_ucp_rma_restart, put_offload_bcopy,
     test_restart();
 }
 
-UCS_TEST_P(test_ucp_rma_restart, put_am_bcopy, "PROTOS=put/am/bcopy,reconfig")
+UCS_TEST_SKIP_COND_P(test_ucp_rma_restart, put_am_bcopy, !is_proto_enabled(),
+                     "PROTOS=put/am/bcopy,reconfig")
 {
     test_restart();
 }
