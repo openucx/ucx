@@ -474,6 +474,18 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
+    if (ucp_ep_failover_in_wireup(ucp_ep, lane)) {
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        /* Aux error after the peer address keeps the discard path below.
+         * Any other failure during the initial handshake, including an aux
+         * error before the peer address, fails the ep. */
+        if (!ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
+            !ucp_ep_is_local_connected(ucp_ep)) {
+            ucp_ep_set_failed(ucp_ep, lane, status);
+            return UCS_OK;
+        }
+    }
+
     /* The lane slot may already be the replacement. This error belongs
      * to the transport endpoint that is still held. */
     if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
@@ -3931,6 +3943,52 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.round_count++;
 }
 
+/* A p2p keepalive wireup_ep has no aux, so uct_ep_check skips until the
+ * lane is remotely connected. Probe the wireup-msg aux instead. */
+static void
+ucp_worker_keepalive_uct_ep(ucp_ep_h ep, ucp_lane_index_t *lane_p,
+                            uct_ep_h *uct_ep_p)
+{
+    ucp_lane_index_t lane = ucp_ep_config(ep)->key.keepalive_lane;
+    uct_ep_h uct_ep       = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_lane_index_t wireup_lane;
+    uct_ep_h wireup_uct_ep;
+
+    if (uct_ep == NULL) {
+        goto out;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if ((wireup_ep == NULL) ||
+        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED) ||
+        (wireup_ep->aux_ep != NULL)) {
+        goto out;
+    }
+
+    wireup_lane = ucp_ep_get_wireup_msg_lane(ep);
+    if ((wireup_lane == UCP_NULL_LANE) || (wireup_lane == lane)) {
+        goto out;
+    }
+
+    wireup_uct_ep = ucp_ep_get_lane(ep, wireup_lane);
+    if (wireup_uct_ep == NULL) {
+        goto out;
+    }
+
+    wireup_ep = ucp_wireup_ep(wireup_uct_ep);
+    if ((wireup_ep == NULL) || (wireup_ep->aux_ep == NULL)) {
+        goto out;
+    }
+
+    lane   = wireup_lane;
+    uct_ep = wireup_uct_ep;
+
+out:
+    *lane_p   = lane;
+    *uct_ep_p = uct_ep;
+}
+
 static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 {
     ucp_lane_index_t lane;
@@ -3959,8 +4017,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
         goto out_done;
     }
 
-    lane      = ucp_ep_config(ep)->key.keepalive_lane;
-    uct_ep    = ucp_ep_get_lane(ep, lane);
+    ucp_worker_keepalive_uct_ep(ep, &lane, &uct_ep);
     rsc_index = ucp_ep_get_rsc_index(ep, lane);
 
     /* When wireup fails to connect the lanes of a new configuration, they
