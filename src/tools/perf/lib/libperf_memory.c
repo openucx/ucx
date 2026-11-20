@@ -195,6 +195,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
                                 perf->send_allocator, &perf->send_buffer,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
+        ucs_error("failed to allocate send memory, \"-u <count>\" reduces "
+                  "the number of message buffers");
         goto err;
     }
 
@@ -209,6 +211,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
                                 perf->recv_allocator, &perf->recv_buffer,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
+        ucs_error("failed to allocate receive memory, \"-u <count>\" reduces "
+                  "the number of message buffers");
         goto err_free_send_buffer;
     }
 

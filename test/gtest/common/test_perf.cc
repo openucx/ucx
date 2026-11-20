@@ -257,6 +257,7 @@ void test_perf::test_params_init(const test_spec &test,
             UCP_ERR_HANDLING_MODE_PEER :
             UCP_ERR_HANDLING_MODE_NONE;
     params.ucp.am_hdr_size      = 0;
+    params.ucp.buffer_count     = 1;
     params.ucp.is_daemon_mode   = 0;
     params.ucp.dmn_local_addr   = {};
     params.ucp.dmn_remote_addr  = {};

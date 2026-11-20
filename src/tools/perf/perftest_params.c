@@ -188,6 +188,13 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
     printf("     -V             validate data correctness for pingpong tests\n");
+    printf("     -u <count>     number of message buffers that consecutive "
+           "operations of\n");
+    printf("                    ucp_put_bw, ucp_get, tag_bw and ucp_am_bw "
+           "rotate through (%zu):\n",
+           ctx->params.super.ucp.buffer_count);
+    printf("                        auto - 1 below 1 MB messages, else about "
+           "256 MB of buffers\n");
     printf("     -g <IP>[:<port>], --daemon-local <IP>[:<port>]\n");
     printf("                    IP address and port of the local daemon to offload UCP operations to\n");
     printf("                    Port is optional, by default daemon port is (%d)\n",
@@ -343,6 +350,26 @@ static ucs_status_t parse_thread_params(const char *opt_arg,
         *block_count = 1;
     }
 
+    return UCS_OK;
+}
+
+static ucs_status_t
+parse_buffer_count(const char *opt_arg, size_t *buffer_count)
+{
+    ucs_status_t status;
+    int value;
+
+    if (!strcmp(opt_arg, "auto")) {
+        *buffer_count = UCP_PERF_BUFFER_COUNT_AUTO;
+        return UCS_OK;
+    }
+
+    status = parse_int(opt_arg, &value, "buffer count", 1, INT_MAX);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *buffer_count = value;
     return UCS_OK;
 }
 
@@ -780,6 +807,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'V':
         params->super.flags |= UCX_PERF_TEST_FLAG_VALIDATE;
         return UCS_OK;
+    case 'u':
+        return parse_buffer_count(opt_arg, &params->super.ucp.buffer_count);
     default:
        return UCS_ERR_INVALID_PARAM;
     }

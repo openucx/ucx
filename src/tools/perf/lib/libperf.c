@@ -305,6 +305,20 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 }
 
+static int ucx_perf_buffer_rotation_supported(const ucx_perf_params_t *params)
+{
+    return (params->api == UCX_PERF_API_UCP) &&
+           ((params->command == UCX_PERF_CMD_PUT) ||
+            (params->command == UCX_PERF_CMD_GET) ||
+            (params->command == UCX_PERF_CMD_TAG) ||
+            (params->command == UCX_PERF_CMD_AM)) &&
+           (params->test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) &&
+           !(params->flags & UCX_PERF_TEST_FLAG_DEVICE) &&
+           !params->ucp.is_daemon_mode && (params->iov_stride == 0) &&
+           (params->ucp.send_datatype == UCP_PERF_DATATYPE_CONTIG) &&
+           (params->ucp.recv_datatype == UCP_PERF_DATATYPE_CONTIG);
+}
+
 static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 {
     size_t it;
@@ -372,6 +386,14 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
                 return UCS_ERR_INVALID_PARAM;
             }
         }
+    }
+
+    if ((params->ucp.buffer_count > 1) &&
+        !ucx_perf_buffer_rotation_supported(params)) {
+        ucs_error("multiple message buffers are only supported by the "
+                  "ucp_put_bw, ucp_get, tag_bw and ucp_am_bw tests with "
+                  "contiguous datatype");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
@@ -2369,7 +2391,38 @@ size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params)
         return params->msg_size_cnt * params->iov_stride;
     }
 
-    return ucx_perf_get_message_size(params);
+    return ucx_perf_get_message_size(params) *
+           ucx_perf_get_buffer_count(params);
+}
+
+size_t ucx_perf_get_buffer_count(const ucx_perf_params_t *params)
+{
+    size_t length;
+
+    if (params->ucp.buffer_count != UCP_PERF_BUFFER_COUNT_AUTO) {
+        return params->ucp.buffer_count;
+    }
+
+    if (!ucx_perf_buffer_rotation_supported(params)) {
+        return 1;
+    }
+
+    /* With a single buffer, all the operations in flight read the same source.
+     * Reading it with multi-rail zero-copy while it is cached in the GPU L2
+     * could be slower than reading it from device memory (HBM). Rotating the
+     * buffers makes it possible to measure the bandwidth from HBM:
+     * - small messages (< 1 MB) are limited by the per-message overhead, keep
+     *   one buffer
+     * - mid-size messages fit in the L2, rotate over 256 MB (more than the L2)
+     *   so that the source is read from HBM
+     * - big messages (>= 256 MB) exceed the L2 by themselves, the count drops
+     *   to one buffer */
+    length = ucx_perf_get_message_size(params);
+    if (length < UCS_MBYTE) {
+        return 1;
+    }
+
+    return ucs_div_round_up(256 * UCS_MBYTE, length);
 }
 
 unsigned rte_peer_index(unsigned group_size, unsigned group_index)
