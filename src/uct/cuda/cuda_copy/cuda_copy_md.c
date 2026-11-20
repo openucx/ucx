@@ -329,23 +329,13 @@ out:
     return status;
 }
 
-/* GPUDirect RDMA capability of an allocation */
-typedef enum {
-    UCT_CUDA_COPY_GDR_CAPABLE_NO,
-    UCT_CUDA_COPY_GDR_CAPABLE_YES,
-    /* Capable, but possibly only over PCIe, e.g. when localized */
-    UCT_CUDA_COPY_GDR_CAPABLE_PCIE,
-    /* Not reported by the CUDA headers */
-    UCT_CUDA_COPY_GDR_CAPABLE_UNKNOWN
-} uct_cuda_copy_gdr_capable_t;
-
-
 /* Allocation properties which determine the memory flags */
 typedef struct {
-    int                         is_async_managed;
-    int                         is_host_located;
-    int                         is_localized;
-    uct_cuda_copy_gdr_capable_t gdr_capable;
+    int is_async_managed;
+    int is_host_located;
+    /* Possibly localized, so that the dmabuf export may need PCIe */
+    int is_localized;
+    int is_gdr_capable;
 } uct_cuda_copy_alloc_props_t;
 
 
@@ -376,15 +366,14 @@ static int uct_cuda_copy_detect_vmm(const void *address,
         goto out;
     }
 
-    *cuda_device       = (CUdevice)prop.location.id;
-    props->gdr_capable = prop.allocFlags.gpuDirectRDMACapable ?
-                                 UCT_CUDA_COPY_GDR_CAPABLE_YES :
-                                 UCT_CUDA_COPY_GDR_CAPABLE_NO;
+    *cuda_device          = (CUdevice)prop.location.id;
+    props->is_gdr_capable = prop.allocFlags.gpuDirectRDMACapable;
 #ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
-    if ((props->gdr_capable == UCT_CUDA_COPY_GDR_CAPABLE_YES) &&
+    /* This usage is for localized memory, which may need a PCIe export */
+    if (props->is_gdr_capable &&
         (prop.allocFlags.usage &
          CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE)) {
-        props->gdr_capable = UCT_CUDA_COPY_GDR_CAPABLE_PCIE;
+        props->is_localized = 1;
     }
 #endif
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_HOST
@@ -537,18 +526,21 @@ static int uct_cuda_copy_md_is_localized_pool(const void *address)
 {
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL
     int locality_domain = -1;
+    ucs_status_t status;
 
     /* Queried separately, as older drivers fail on the unknown attribute */
-    if (cuPointerGetAttribute(&locality_domain,
-                              CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL,
-                              (CUdeviceptr)address) != CUDA_SUCCESS) {
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuPointerGetAttribute(&locality_domain,
+                                  CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL,
+                                  (CUdeviceptr)address));
+    if (status != UCS_OK) {
         return 0;
     }
 
     return locality_domain >= 0;
 #else
     /* Locality is unknown without locality domain support in the CUDA
-     * headers, assume it not localized */
+     * headers, assume it is not localized */
     return 0;
 #endif
 }
@@ -571,9 +563,6 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     CUdevice cuda_device;
     int32_t pref_loc;
-#if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
-    int is_gdr_capable = 0;
-#endif
     int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
@@ -581,7 +570,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     props->is_async_managed = 0;
     props->is_host_located  = 0;
     props->is_localized     = 0;
-    props->gdr_capable      = UCT_CUDA_COPY_GDR_CAPABLE_NO;
+    props->is_gdr_capable   = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
                                       props);
@@ -600,7 +589,9 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
         attr_data[3] = &cuda_mem_ctx;
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
         attr_type[4] = CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE;
-        attr_data[4] = &is_gdr_capable;
+        attr_data[4] = &props->is_gdr_capable;
+#else
+        props->is_gdr_capable = 1;
 #endif
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -611,13 +602,6 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             /* pointer not recognized */
             return status;
         }
-
-#if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
-        props->gdr_capable = is_gdr_capable ? UCT_CUDA_COPY_GDR_CAPABLE_YES :
-                                              UCT_CUDA_COPY_GDR_CAPABLE_NO;
-#else
-        props->gdr_capable = UCT_CUDA_COPY_GDR_CAPABLE_UNKNOWN;
-#endif
 
         if (cuda_mem_type != CU_MEMORYTYPE_DEVICE) {
             /* pointer not recognized */
@@ -865,32 +849,24 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     if (!md->config.dmabuf_supported) {
         /* Without dmabuf the NIC pins the pages behind the virtual address,
          * which the driver only allows for GPUDirect RDMA capable memory. */
-        return props->gdr_capable != UCT_CUDA_COPY_GDR_CAPABLE_NO;
+        return props->is_gdr_capable;
     }
 
     if (dmabuf != NULL) {
         return dmabuf->fd != UCT_DMABUF_FD_INVALID;
     }
 
-    /* Avoid the costly dmabuf export when its outcome is known. The driver
-     * exports GPUDirect RDMA capable memory: MPS MLOPart does not localize it,
-     * and localized memory is GPUDirect RDMA capable without PCIe only when
-     * the default RDMA mapping supports it. */
-    if (props->gdr_capable == UCT_CUDA_COPY_GDR_CAPABLE_YES) {
-        return 1;
-    }
-
-    /* The driver cannot export localized memory */
-    if (props->is_localized) {
-        return 0;
-    }
-
-    /* Memory pools and memory not allocated as GPUDirect RDMA capable are
-     * exported, unless MPS localizes all of the device memory, e.g. MPS
+    /* Avoid the costly dmabuf export when its outcome is known, except for
+     * localized memory, which is exported only over PCIe, e.g. for a Direct
+     * NIC, or when the default RDMA mapping supports it. The driver exports
+     * GPUDirect RDMA capable memory, which MPS MLOPart does not localize, and
+     * other memory unless MPS localizes all of the device memory, e.g. MPS
      * MLOPart, which the memory does not report. Locality is unknown without
-     * locality domain support in the CUDA headers, assume it not localized. */
-    if ((props->gdr_capable == UCT_CUDA_COPY_GDR_CAPABLE_NO) &&
-        uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev)) {
+     * locality domain support in the CUDA headers, assume it is not
+     * localized. */
+    if (!props->is_localized &&
+        (props->is_gdr_capable ||
+         uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev))) {
         return 1;
     }
 
@@ -919,8 +895,7 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
      * allocated for GPUDirect RDMA over PCIe, and any memory allocated under
      * an MPS MLOPart device. Memory is assumed capable when the CUDA headers
      * cannot report it. */
-    if ((mem_info->type == UCS_MEMORY_TYPE_CUDA) &&
-        (props->gdr_capable != UCT_CUDA_COPY_GDR_CAPABLE_NO)) {
+    if ((mem_info->type == UCS_MEMORY_TYPE_CUDA) && props->is_gdr_capable) {
         mem_flags |= UCS_MEM_FLAG_GDR_CAPABLE;
     }
 

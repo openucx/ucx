@@ -635,7 +635,8 @@ UCS_TEST_P(test_mem_alloc_device,
     check_registrable_iff_exportable(buffer.ptr(), size);
 }
 
-#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN && \
+    HAVE_DECL_CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL
 UCS_TEST_P(test_mem_alloc_device,
            localized_mem_pool_registrable_iff_exportable,
            "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
@@ -812,6 +813,17 @@ UCS_TEST_P(test_mem_alloc_device, localized_mem_not_gdr_capable,
 
     query_gdr_capable(buffer.ptr(), size, 0);
 }
+
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
+/* Localized memory allocated for GPUDirect RDMA over PCIe is GDR capable */
+UCS_TEST_P(test_mem_alloc_device, localized_pcie_mem_gdr_capable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_localized_pcie_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_gdr_capable(buffer.ptr(), size, 1);
+}
+#endif
 #endif
 
 UCS_TEST_P(test_mem_alloc_device,
