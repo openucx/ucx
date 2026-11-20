@@ -422,9 +422,14 @@ stages:
         - { name: x86_64_cuda13_py312, cpp_slice: x86_64_cuda13_py312, python_slice: x86_64_cuda13_py312,
             demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
       # Conda tests run the packages of conda_slice; the ucxx package is abi3,
-      # so the GPU slice tests the py312 build on py313.
+      # so the py313 and py314 GPU slices test the py312 build. The packages
+      # pin only the CUDA major version, so the GPU slices also cover the
+      # older CUDA runtimes (12.2, 13.0) and the oldest supported dependencies.
       conda_tests_slices:
         - { name: x86_64_cuda13_py313,  gpu: true,  conda_slice: x86_64_cuda13_py312,  demands: ucx_gpu,    rapids_cuda_version: '13.4.3', rapids_py_version: '3.13' }
+        - { name: x86_64_cuda122_py312_oldest, gpu: true, conda_slice: x86_64_cuda12_py312, demands: ucx_gpu, rapids_cuda_version: '12.2.2', rapids_py_version: '3.12',
+            rapids_dependencies: oldest }
+        - { name: x86_64_cuda130_py314, gpu: true,  conda_slice: x86_64_cuda13_py312,  demands: ucx_gpu,    rapids_cuda_version: '13.0.3', rapids_py_version: '3.14' }
         - { name: x86_64_cuda12_py312,  gpu: false, conda_slice: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
         - { name: x86_64_cuda13_py312,  gpu: false, conda_slice: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
         - { name: aarch64_cuda12_py312, gpu: false, conda_slice: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
