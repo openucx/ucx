@@ -110,6 +110,17 @@ size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
                            size_t start_index, size_t bit_count);
 
 
+/**
+ * Helper function to find the index of the last bit set to 1 in a given
+ * bitmap. If all bits are zero, returns the index past the last bit (bitmap
+ * size).
+ *
+ * @param bits       Look for the last bit in the words of this bitmap.
+ * @param num_words  Number of words in the bitmap.
+ */
+size_t ucs_bitmap_bits_fls(const ucs_bitmap_word_t *bits, size_t num_words);
+
+
 /* Helper function to set all bitmap bits to a given value. An empty bitmap is
  * skipped, since 'bits' may be NULL in that case, and memset() does not accept
  * a NULL pointer even with a zero length.
