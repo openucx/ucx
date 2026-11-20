@@ -942,6 +942,36 @@ protected:
                         threshold->proto_config.priv)
                         ->remote_proto_config;
     }
+
+    /* Add an RMA mock interface whose port speed is set by set_port_speed() */
+    void add_port_speed_mock_iface(const std::string &dev_name,
+                                   double bandwidth, double latency)
+    {
+        m_port_speed[dev_name] = bandwidth;
+        add_mock_iface(
+                dev_name,
+                [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+                    iface_attr.cap.get.min_zcopy = 0;
+                    iface_attr.bandwidth.shared  = bandwidth;
+                    iface_attr.latency.c         = latency;
+                    iface_attr.latency.m         = 1e-9;
+                },
+                [this, dev_name](uct_perf_attr_t &perf_attr) {
+                    perf_attr.bandwidth.shared = m_port_speed[dev_name];
+                    perf_attr.path_bandwidth   = perf_attr.bandwidth;
+                });
+    }
+
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    void set_port_speed(const std::string &dev_name, double port_speed)
+    {
+        m_port_speed[dev_name] = port_speed;
+        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
+        while (progress());
+    }
+#endif
+
+    std::map<std::string, double> m_port_speed;
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -5004,36 +5034,9 @@ public:
 
     virtual void init() override
     {
-        m_port_speed["mock_0:1"] = 28e9;
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.get.min_zcopy = 0;
-            iface_attr.bandwidth.shared  = 28e9;
-            iface_attr.latency.c         = 600e-9;
-            iface_attr.latency.m         = 1e-9;
-        }, [this](uct_perf_attr_t &perf_attr) {
-            perf_attr.bandwidth.shared = this->m_port_speed["mock_0:1"];
-            perf_attr.path_bandwidth   = perf_attr.bandwidth;
-        });
-
-        m_port_speed["mock_1:1"] = 24e9;
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.get.min_zcopy = 0;
-            iface_attr.bandwidth.shared  = 24e9;
-            iface_attr.latency.c         = 500e-9;
-            iface_attr.latency.m         = 1e-9;
-        }, [this](uct_perf_attr_t &perf_attr) {
-            perf_attr.bandwidth.shared = this->m_port_speed["mock_1:1"];
-            perf_attr.path_bandwidth   = perf_attr.bandwidth;
-        });
+        add_port_speed_mock_iface("mock_0:1", 28e9, 600e-9);
+        add_port_speed_mock_iface("mock_1:1", 24e9, 500e-9);
         test_ucp_proto_mock::init();
-    }
-
-    void set_port_speed(const std::string &iface_name, double port_speed)
-    {
-        m_port_speed[iface_name] = port_speed;
-
-        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
-        while (progress());
     }
 
     void test_port_speed(std::function<ucp_worker_cfg_index_t()> send,
@@ -5102,9 +5105,6 @@ public:
         EXPECT_EQ(ucs_array_length(&worker->rkey_config), rkey_config_count);
         EXPECT_EQ(worker->ep_config.length, ep_config_count);
     }
-
-protected:
-    std::map<std::string, double> m_port_speed;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
@@ -5292,8 +5292,8 @@ public:
             .function = 0
         };
 
-        add_rma_mock_iface("mock_0:1", 28e9, 600e-9);
-        add_rma_mock_iface("mock_1:1", 24e9, 500e-9);
+        add_port_speed_mock_iface("mock_0:1", 28e9, 600e-9);
+        add_port_speed_mock_iface("mock_1:1", 24e9, 500e-9);
         test_ucp_proto_mock::init();
 
         ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&mem_bus_id,
@@ -5355,15 +5355,6 @@ protected:
         check_lanes_distance(rkey_cfg_index);
     }
 
-#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
-    void set_port_speed(const std::string &dev_name, double port_speed)
-    {
-        m_port_speed[dev_name] = port_speed;
-        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
-        while (progress());
-    }
-#endif
-
     /* Move an RMA lane other than the AM lane to the error state, and wait
      * until the endpoint fails it over if @a wait */
     void fail_rma_lane(bool wait)
@@ -5394,24 +5385,6 @@ protected:
     }
 
 private:
-    void add_rma_mock_iface(const std::string &dev_name, double bandwidth,
-                            double latency)
-    {
-        m_port_speed[dev_name] = bandwidth;
-        add_mock_iface(
-                dev_name,
-                [bandwidth, latency](uct_iface_attr_t &iface_attr) {
-                    iface_attr.cap.get.min_zcopy = 0;
-                    iface_attr.bandwidth.shared  = bandwidth;
-                    iface_attr.latency.c         = latency;
-                    iface_attr.latency.m         = 1e-9;
-                },
-                [this, dev_name](uct_perf_attr_t &perf_attr) {
-                    perf_attr.bandwidth.shared = m_port_speed[dev_name];
-                    perf_attr.path_bandwidth   = perf_attr.bandwidth;
-                });
-    }
-
     void do_rma(ucp_operation_id_t op_id, mem_buffer &lbuf, mem_buffer &rbuf,
                 ucp_rkey_h rkey)
     {
@@ -5536,9 +5509,8 @@ private:
         *distance = ucs_topo_default_distance;
     }
 
-    bool                          m_topo_pushed;
-    uint64_t                      m_seed;
-    std::map<std::string, double> m_port_speed;
+    bool     m_topo_pushed;
+    uint64_t m_seed;
 
     static ucs_sys_device_t                                   s_mem_sys_dev;
     static std::map<ucs_sys_device_t, ucs_sys_dev_distance_t> s_mem_distance;
