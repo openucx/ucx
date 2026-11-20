@@ -5404,7 +5404,14 @@ private:
         }
 
         ASSERT_UCS_OK(request_wait(sptr));
-        ((op_id == UCP_OP_ID_PUT) ? rbuf : lbuf).pattern_check(m_seed);
+        if (op_id == UCP_OP_ID_PUT) {
+            /* A put completes locally: flush to have the data at the target */
+            ASSERT_UCS_OK(
+                    request_wait(ucp_ep_flush_nbx(sender().ep(), &param)));
+            rbuf.pattern_check(m_seed);
+        } else {
+            lbuf.pattern_check(m_seed);
+        }
     }
 
     /* Check the lane distances in the configuration of the remote key of
