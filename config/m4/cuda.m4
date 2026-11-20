@@ -258,6 +258,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL],
                         [], [], [[#include <cuda.h>]])
 
+         AC_CHECK_DECLS([CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED],
+                        [], [], [[#include <cuda.h>]])
+
          AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE],
                         [], [], [[#include <cuda.h>]])
 

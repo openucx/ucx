@@ -333,9 +333,11 @@ out:
 typedef struct {
     int is_async_managed;
     int is_host_located;
-    /* Possibly localized, so that the dmabuf export may need PCIe */
+    /* Localized to a locality domain, so that its export may need PCIe */
     int is_localized;
     int is_gdr_capable;
+    /* Allocated for GPUDirect RDMA over PCIe, which MPS MLOPart may localize */
+    int is_gdr_over_pcie;
 } uct_cuda_copy_alloc_props_t;
 
 
@@ -369,12 +371,9 @@ static int uct_cuda_copy_detect_vmm(const void *address,
     *cuda_device          = (CUdevice)prop.location.id;
     props->is_gdr_capable = prop.allocFlags.gpuDirectRDMACapable;
 #ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
-    /* This usage is for localized memory, which may need a PCIe export */
-    if (props->is_gdr_capable &&
-        (prop.allocFlags.usage &
-         CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE)) {
-        props->is_localized = 1;
-    }
+    props->is_gdr_over_pcie = props->is_gdr_capable &&
+                              (prop.allocFlags.usage &
+                               CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE);
 #endif
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_HOST
     if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST) ||
@@ -571,6 +570,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     props->is_host_located  = 0;
     props->is_localized     = 0;
     props->is_gdr_capable   = 0;
+    props->is_gdr_over_pcie = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
                                       props);
@@ -822,6 +822,28 @@ static int uct_cuda_copy_md_is_mps_disabled(ucs_sys_device_t sys_dev)
 #endif
 }
 
+/* The driver exports localized memory only mapped via PCIe, which is used for
+ * a Direct NIC, unless the default RDMA mapping of the device supports it. */
+static int uct_cuda_copy_md_is_localized_exportable(ucs_sys_device_t sys_dev)
+{
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED
+    CUdevice_attribute attr =
+            CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED;
+    CUdevice cuda_device    = uct_cuda_get_cuda_device(sys_dev);
+    int supported;
+
+    if ((cuda_device != CU_DEVICE_INVALID) &&
+        (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                 cuDeviceGetAttribute(&supported, attr, cuda_device)) ==
+         UCS_OK) &&
+        supported) {
+        return 1;
+    }
+#endif
+
+    return ucs_topo_device_has_sibling(sys_dev);
+}
+
 static int
 uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const ucs_memory_info_t *mem_info,
@@ -856,17 +878,18 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
         return dmabuf->fd != UCT_DMABUF_FD_INVALID;
     }
 
-    /* Avoid the costly dmabuf export when its outcome is known, except for
-     * localized memory, which is exported only over PCIe, e.g. for a Direct
-     * NIC, or when the default RDMA mapping supports it. The driver exports
-     * GPUDirect RDMA capable memory, which MPS MLOPart does not localize, and
-     * other memory unless MPS localizes all of the device memory, e.g. MPS
-     * MLOPart, which the memory does not report. Locality is unknown without
-     * locality domain support in the CUDA headers, assume it is not
-     * localized. */
-    if (!props->is_localized &&
-        (props->is_gdr_capable ||
-         uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev))) {
+    /* Avoid the costly dmabuf export when its outcome is known */
+    if (props->is_localized) {
+        return uct_cuda_copy_md_is_localized_exportable(mem_info->sys_dev);
+    }
+
+    /* The driver exports GPUDirect RDMA capable memory, which MPS MLOPart does
+     * not localize unless allocated for PCIe, and other memory unless MPS
+     * localizes all of the device memory, e.g. MPS MLOPart, which the memory
+     * does not report. Locality is unknown without locality domain support in
+     * the CUDA headers, assume it is not localized. */
+    if ((props->is_gdr_capable && !props->is_gdr_over_pcie) ||
+        uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev)) {
         return 1;
     }
 
