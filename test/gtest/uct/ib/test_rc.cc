@@ -367,18 +367,19 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_ext_refusal_reserve,
 {
     const size_t count        = 2;
     uct_ib_mlx5_ext_ops_t ops = {};
+    uct_iface_attr_v2_t attr  = {};
     uct_rc_ep_t *ep           = rc_ep(m_e1);
     mapped_buffer sbuf(64, 0ul, *m_e1), rbuf(64, 0ul, *m_e2);
-    uct_iface_attr_v2_t attr;
     size_t base_max_count;
+    uint16_t bb_max;
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
     ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
     base_max_count = attr.max_get_sgl_zcopy_count;
+    bb_max         = ucs_derived_of(ep, uct_rc_mlx5_base_ep_t)->tx.wq.bb_max;
 
-    /* The provider takes more elements than a send of the base
-     * implementation */
-    sgl_ext_max_count = base_max_count + 1;
+    /* The provider takes more elements than the endpoint can have free */
+    sgl_ext_max_count = bb_max + 1;
 
     std::vector<void*> buffers(sgl_ext_max_count, sbuf.ptr());
     std::vector<size_t> lengths(sgl_ext_max_count, sbuf.length());
@@ -420,14 +421,23 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_ext_refusal_reserve,
     EXPECT_EQ((uint16_t)(count - 1), ep->txqp_reserve);
     EXPECT_EQ(0, ep->cq_reserve);
 
-    /* The reserve is limited by what a send of the base implementation can
-     * take, so that the endpoint can satisfy it */
+    /* An operation which the base implementation would not take still needs
+     * all its WQEs: with a smaller reserve, pending_add would return
+     * UCS_ERR_BUSY while the operation does not fit */
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
+                                   memhs.data(), raddrs.data(), rkeys.data(),
+                                   NULL, NULL, base_max_count + 1, NULL));
+    EXPECT_EQ((uint16_t)base_max_count, ep->txqp_reserve);
+
+    /* The reserve is limited by what the endpoint can have free, so that it
+     * can be satisfied */
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(), lengths.data(),
                                    memhs.data(), raddrs.data(), rkeys.data(),
                                    NULL, NULL, sgl_ext_max_count, NULL));
-    EXPECT_EQ((uint16_t)(base_max_count - 1), ep->txqp_reserve);
-    EXPECT_EQ(3u, sgl_ext_refusals);
+    EXPECT_EQ((uint16_t)(bb_max - 1), ep->txqp_reserve);
+    EXPECT_EQ(4u, sgl_ext_refusals);
 
     flush();
 

@@ -1082,8 +1082,11 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    unsigned cq_capacity;
 
-    count = ucs_min(count, uct_rc_mlx5_base_sgl_zcopy_max_count(iface));
+    cq_capacity = uct_rc_iface_tx_cq_capacity(iface->super.config.tx_cq_len);
+    count       = ucs_min(count, ep->tx.wq.bb_max);
+    count       = ucs_min(count, cq_capacity);
     if (count == 0) {
         return;
     }
