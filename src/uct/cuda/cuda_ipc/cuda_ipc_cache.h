@@ -9,6 +9,7 @@
 
 #include "cuda_ipc_md.h"
 
+#include <ucs/datastruct/interval_map.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/type/init_once.h>
@@ -33,9 +34,21 @@ struct uct_cuda_ipc_cache_region {
 };
 
 
+#if HAVE_CUDA_FABRIC
+typedef struct {
+    uct_cuda_ipc_cache_region_t super;
+    ucs_interval_map_node_t     node;   /**< Entry in the multi-chunk views */
+    uint8_t                     in_map; /**< Whether the view is in the map */
+} uct_cuda_ipc_cache_view_t;
+#endif
+
+
 struct uct_cuda_ipc_cache {
-    pthread_rwlock_t      lock;         /**< Protects the page table */
+    pthread_rwlock_t      lock;         /**< Protects the page table, lru, views */
     ucs_pgtable_t         pgtable;      /**< Page table to hold the regions */
+#if HAVE_CUDA_FABRIC
+    ucs_interval_map_t    views;        /**< Multi-chunk views */
+#endif
     char                  *name;        /**< Name */
     ucs_list_link_t       lru_list;     /**< LRU list of all cached regions */
     unsigned long         num_regions;  /**< Current number of cached regions */
@@ -44,10 +57,11 @@ struct uct_cuda_ipc_cache {
 
 
 typedef struct {
-    pid_t        pid;          /**< Remote process ID */
-    ucs_sys_ns_t pid_ns;       /**< Remote PID namespace */
-    uintptr_t    d_bptr;       /**< Remote allocation base address */
-    const void   *mapped_addr; /**< Local mapped address */
+    pid_t                       pid;           /**< Remote process ID */
+    ucs_sys_ns_t                pid_ns;        /**< Remote PID namespace */
+    uintptr_t                   d_bptr;        /**< Remote allocation base */
+    const void                  *mapped_addr;  /**< Local mapped address */
+    uct_cuda_ipc_cache_region_t *cache_region; /**< Multi-chunk view, or NULL */
 } uct_cuda_ipc_mapping_t;
 
 
@@ -112,18 +126,38 @@ uct_cuda_ipc_open_memhandle_vmm_multi(const uct_cuda_ipc_rkey_t *key,
  * @param key          Pointer to the CUDA IPC remote memory key containing
  *                     the memory handle and other metadata needed for mapping
  * @param cu_dev       CUDA device handle where the memory should be mapped
- * @param mapped_addr  Pointer to store the resulting mapped local address
+ * @param mapped_addr  Pointer to store the local address of the key base
+ * @param region_p     Filled with the referenced multi-chunk view, which must
+ *                     be passed to @ref uct_cuda_ipc_unmap_memhandle, or NULL
+ *                     for any other mapping. The view may be wider than the
+ *                     key.
  * @param log_level    Log level for reporting failures during mapping operation
  * 
  * @return UCS_OK on success, or error status on failure
  */
 ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
                                         CUdevice cu_dev, void **mapped_addr,
+                                        uct_cuda_ipc_cache_region_t **region_p,
                                         ucs_log_level_t log_level);
 
 
 void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_mapping_t *mapping,
                                   CUdevice cu_dev, int cache_enabled);
+
+
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief Free the cached view of a multi-chunk key if nothing references it
+ *
+ * Used on release of a key which holds no mapping itself, after operations on
+ * the key mapped and released its view.
+ *
+ * @param key     Multi-chunk remote key
+ * @param cu_dev  CUDA device where the key was mapped
+ */
+void uct_cuda_ipc_unmap_unused_view(const uct_cuda_ipc_extended_rkey_t *key,
+                                    CUdevice cu_dev);
+#endif
 
 
 /**
