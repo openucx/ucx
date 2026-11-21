@@ -157,8 +157,16 @@ typedef struct ucp_context_config {
     int                                    adaptive_progress;
     /** Eager-am multi-lane support */
     unsigned                               max_eager_lanes;
+    /** Configured rendezvous multi-lane limit: a number or auto */
+    unsigned long                          max_rndv_lanes_config;
+    /** Rendezvous multi-lane limit when max_rndv_lanes_config is auto */
+    unsigned                               max_rndv_lanes_fallback;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
+    /** Configured RMA multi-lane limit: a number or auto */
+    unsigned long                          max_rma_lanes_config;
+    /** RMA multi-lane limit when max_rma_lanes_config is auto */
+    unsigned                               max_rma_lanes_fallback;
     /** RMA multi-lane support */
     unsigned                               max_rma_lanes;
     /** Minimum allowed chunk size when splitting rndv message over multiple
@@ -811,6 +819,18 @@ ucp_context_is_token_failover(ucp_context_h context)
 
     return (failover_mode == UCP_FAILOVER_MODE_TOKEN) ||
            (failover_mode == UCP_FAILOVER_MODE_AUTO);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_max_rndv_lanes_is_auto(ucp_context_h context)
+{
+    return context->config.ext.max_rndv_lanes_config == UCS_ULUNITS_AUTO;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_max_rma_lanes_is_auto(ucp_context_h context)
+{
+    return context->config.ext.max_rma_lanes_config == UCS_ULUNITS_AUTO;
 }
 
 static UCS_F_ALWAYS_INLINE int
