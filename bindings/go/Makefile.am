@@ -3,11 +3,11 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_GO
-
 EXTRA_DIST = \
 	src \
 	tests
+
+if HAVE_GO
 
 GOOBJDIR=$(abs_top_builddir)/bindings/go/$(objdir)
 CGOCFLAGS=-I$(abs_top_builddir)/src -I$(abs_top_srcdir)/src

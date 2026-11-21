@@ -34,6 +34,16 @@ if HAVE_SHMEMCC
 noinst_PROGRAMS      += shmem_pingpong
 endif
 
+noinst_HEADERS        = \
+    test_cuda_check_def.h \
+    test_cuda_common.h \
+    test_lib_check_def.h \
+    test_mpi_tags_def.h \
+    test_ucp.h \
+    test_ucx_check_def.h
+
+EXTRA_DIST            = ompi.supp
+
 AM_CPPFLAGS           = \
     $(BASE_CPPFLAGS) \
     -DUCS_LIB_DIR="$(abs_top_builddir)/src/ucs/.libs" \

@@ -15,7 +15,8 @@ C++11 on top of GoogleTest.
 
 ## Adding or Editing Tests
 
-- Add new gtest source files to `test/gtest/Makefile.am`.
+- Add new gtest source files to `test/gtest/Makefile.am`, and new headers to
+  its `noinst_HEADERS`, so that `make dist` ships them.
 - Add or adjust tests for behavior changes. Regression tests should fail
   without the fix whenever practical.
 - Keep tests close to the layer being changed. A UCP behavior change usually
