@@ -31,6 +31,7 @@ jobs:
         IS_GPU: ${{ slice.gpu }}
         RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
         RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+        RAPIDS_DEPENDENCIES: ${{ coalesce(slice.rapids_dependencies, 'latest') }}
         CONDA_CHANNEL_DIR: $(Build.ArtifactStagingDirectory)/conda-channel
       steps:
         - checkout: self
