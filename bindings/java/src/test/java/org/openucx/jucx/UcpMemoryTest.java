@@ -53,6 +53,21 @@ public class UcpMemoryTest extends UcxTest {
     }
 
     @Test
+    public void testMmapInvalidParams() {
+        UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
+
+        try {
+            context.memoryMap(new UcpMemMapParams());
+            fail("memoryMap without length did not throw");
+        } catch (UcxException exception) {
+            assertEquals(exception.getStatus(),
+                         UcsConstants.STATUS.UCS_ERR_INVALID_PARAM);
+        }
+
+        context.close();
+    }
+
+    @Test
     public void testGetRkey() {
         UcpContext context = new UcpContext(new UcpParams().requestRmaFeature());
         ByteBuffer buf = ByteBuffer.allocateDirect(MEM_SIZE);
