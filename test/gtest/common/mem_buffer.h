@@ -99,6 +99,9 @@ public:
     /* Set the current CUDA device */
     static void set_device(int device);
 
+    /* Return the number of CUDA devices whose primary context is active */
+    static int get_active_primary_ctx_count();
+
     /* If the current CUDA device is not the one set by set_device_context(),
      * fail the current test and restore the device */
     static void check_and_restore_device_context();
