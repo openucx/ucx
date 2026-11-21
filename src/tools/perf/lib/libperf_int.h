@@ -304,6 +304,8 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
                                    const ucx_perf_params_t *params);
 ucs_status_t
 ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
+ucs_status_t
+ucx_perf_test_exchange_status(ucx_perf_context_t *perf, ucs_status_t status);
 
 /**
  * Get the total length of the message size given by parameters

@@ -1074,7 +1074,7 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t *perf)
     ucp_perf_release_requests_in_progress(perf, reqs, num_in_prog);
 }
 
-static ucs_status_t
+ucs_status_t
 ucx_perf_test_exchange_status(ucx_perf_context_t *perf, ucs_status_t status)
 {
     unsigned group_size  = rte_call(perf, group_size);
@@ -1089,9 +1089,10 @@ ucx_perf_test_exchange_status(ucx_perf_context_t *perf, ucs_status_t status)
     rte_call(perf, post_vec, &vec, 1, &req);
     rte_call(perf, exchange_vec, req);
 
+    /* An error wins over UCS_INPROGRESS, so that all peers stop */
     for (i = 0; i < group_size; ++i) {
         rte_call(perf, recv, i, &status, sizeof(status), req);
-        if (status != UCS_OK) {
+        if (UCS_STATUS_IS_ERR(status) || (collective_status == UCS_OK)) {
             collective_status = status;
         }
     }
@@ -1727,6 +1728,7 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
                           ucs_time_from_sec(params->warmup_time);
     ucx_perf_counter_t warmup_iter, total_warmup_iter;
     ucs_status_t status, stop_status;
+    unsigned i;
 
     /* Perform no more than 'params->warmup_iter' iterations but try to not
        exceed 'params->warmup_time' */
@@ -1737,22 +1739,34 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
         perf->report_interval = ULONG_MAX;
 
         status = ucx_perf_funcs[params->api].run(perf);
-        if (status != UCS_OK) {
-            return status;
-        }
-
         ucx_perf_funcs[params->api].barrier(perf);
         ucx_perf_test_prepare_new_run(perf, params);
 
         /* Stop when reaching the deadline */
         stop_status = (ucs_get_time() > deadline) ? UCS_OK : UCS_INPROGRESS;
+        if (status != UCS_OK) {
+            /* Stop all peers on an error */
+            stop_status = status;
+        }
 
         /* Synchronize on whether to continue or stop the warmup phase */
 #if _OPENMP
+        if (params->thread_count > 1) {
+            /* One thread exchanges the status, let it see the other threads */
+            perf->ucp.tctx[omp_get_thread_num()].status = stop_status;
+        }
 #  pragma omp barrier
 #  pragma omp single copyprivate(status)
 #endif
         {
+            if (params->thread_count > 1) {
+                for (i = 0; i < params->thread_count; ++i) {
+                    if (UCS_STATUS_IS_ERR(perf->ucp.tctx[i].status)) {
+                        stop_status = perf->ucp.tctx[i].status;
+                    }
+                }
+            }
+
             status = ucx_perf_test_exchange_status(perf, stop_status);
         }
 #if _OPENMP
@@ -2328,9 +2342,10 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
             goto out_cleanup;
         }
 
-        /* Run test */
+        /* Run test, and fail it on all peers if it failed on any of them */
         status = ucx_perf_funcs[params->api].run(perf);
         ucx_perf_funcs[params->api].barrier(perf);
+        status = ucx_perf_test_exchange_status(perf, status);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
             perf->params.report_func(perf->params.rte_group, result,
