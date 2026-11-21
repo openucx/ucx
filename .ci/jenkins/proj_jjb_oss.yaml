@@ -122,6 +122,14 @@
       - "{jjb_proj}"
 
 - project:
+    name: ucx-basic-compile
+    jjb_proj: "ucx-basic-compile-oss"
+    jjb_conf_file: ".ci/pipeline/basic_compile_matrix.yaml"
+    jjb_description: "UCX Basic compile gate (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
     name: ucx-static-checks
     jjb_proj: "ucx-static-checks-oss"
     jjb_conf_file: ".ci/pipeline/static_checks_matrix.yaml"
