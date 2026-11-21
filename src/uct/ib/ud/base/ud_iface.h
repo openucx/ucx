@@ -60,6 +60,7 @@ enum {
 typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
+    double                        iface_overhead;
     double                        linger_timeout;
     double                        peer_timeout;
     double                        min_poke_time;
@@ -203,6 +204,7 @@ struct uct_ud_iface {
         unsigned               timer_sweep_count;
     } tx;
     struct {
+        double               iface_overhead;
         ucs_time_t           linger_timeout;
         ucs_time_t           peer_timeout;
         ucs_time_t           keepalive_interval;
