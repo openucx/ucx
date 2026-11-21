@@ -16,8 +16,9 @@
 
 #include "gdaki_dev.h"
 
-#define UCT_DEVICE_CUDA_NAME     "cuda"
-#define UCT_DEVICE_CUDA_NAME_LEN 4
+#define UCT_DEVICE_CUDA_NAME      "cuda"
+#define UCT_DEVICE_CUDA_NAME_LEN  4
+#define UCT_RC_GDAKI_MAX_CHANNELS 256
 
 typedef struct {
     uct_ib_mlx5_cq_t   cq;
@@ -47,6 +48,10 @@ typedef struct uct_rc_gdaki_iface {
     uint64_t                   *atomic_buff;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
+    uint32_t                   qpn_base;
+    uint32_t                   qpn_segment_size;
+    unsigned                   named_qp_retry_count;
+    uint32_t                   *named_qp_offsets;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
     uct_rc_gdaki_devx_uar_t    *uar_wrap;

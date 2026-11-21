@@ -230,6 +230,9 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCI         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCI),
     UCT_IB_MLX5_MD_FLAG_DEVX_CQ          = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(CQ),
+
+    /* Device supports creation of QPs with a requested QPN */
+    UCT_IB_MLX5_MD_FLAG_QP_BY_NAME       = UCS_BIT(26),
 };
 
 enum {
@@ -666,6 +669,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
     uct_ib_mlx5_bf_copy_mode_t  bf_copy_mode;
     uint32_t                    uidx;
+    uint32_t                    input_qpn;
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;

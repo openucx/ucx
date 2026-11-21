@@ -172,6 +172,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     }
 
     UCT_IB_MLX5DV_SET(create_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_QP);
+    UCT_IB_MLX5DV_SET(create_qp_in, in, input_qpn, attr->input_qpn);
     qpc = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, in, qpc);
     if (attr->super.qp_type == UCT_IB_QPT_DCI) {
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_DCI);
@@ -230,9 +231,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
                           UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
     }
 
-    qp->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
-                                               sizeof(in), out, sizeof(out),
-                                               "QP", UCS_LOG_LEVEL_ERROR);
+    qp->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                               out, sizeof(out), "QP",
+                                               (attr->input_qpn != 0) ?
+                                                       UCS_LOG_LEVEL_DEBUG :
+                                                       UCS_LOG_LEVEL_ERROR);
     if (!qp->devx.obj) {
         status = UCS_ERR_IO_ERROR;
         goto err_uar;

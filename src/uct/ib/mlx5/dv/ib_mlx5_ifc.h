@@ -297,7 +297,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    bf[0x1];
     uint8_t    driver_version[0x1];
     uint8_t    pad_tx_eth_packet[0x1];
-    uint8_t    reserved_at_263[0x8];
+    uint8_t    reserved_at_263[0x2];
+    uint8_t    qp_by_name[0x1];
+    uint8_t    reserved_at_266[0x5];
     uint8_t    log_bf_reg_size[0x5];
     uint8_t    reserved_at_270[0x6];
     uint8_t    lag_dct[0x2];
@@ -1566,7 +1568,9 @@ struct uct_ib_mlx5_create_qp_in_bits {
     uint8_t         reserved_at_20[0x10];
     uint8_t         op_mod[0x10];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x8];
+    uint8_t         input_qpn[0x18];
+    uint8_t         reserved_at_60[0x20];
 
     uint8_t         opt_param_mask[0x20];
 
