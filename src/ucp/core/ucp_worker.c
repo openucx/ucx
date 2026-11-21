@@ -2586,6 +2586,45 @@ static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
             ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
 }
 
+ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
+                                        ucp_worker_cfg_index_t rkey_cfg_index,
+                                        ucp_worker_cfg_index_t ep_cfg_index,
+                                        ucp_worker_cfg_index_t *new_cfg_index)
+{
+    const ucp_rkey_config_t *old_config =
+            ucp_worker_rkey_config(worker, rkey_cfg_index);
+    const ucp_ep_config_key_t *old_key =
+            &ucs_array_elem(&worker->ep_config,
+                            old_config->key.ep_cfg_index).key;
+    const ucp_ep_config_key_t *new_key =
+            &ucs_array_elem(&worker->ep_config, ep_cfg_index).key;
+    ucp_rkey_config_key_t key = old_config->key;
+    ucs_sys_dev_distance_t distances[UCP_MAX_LANES];
+    ucp_lane_index_t lane, old_lane;
+
+    if (key.ep_cfg_index == ep_cfg_index) {
+        *new_cfg_index = rkey_cfg_index;
+        return UCS_OK;
+    }
+
+    /* Lane indices may change during recovery. Distances belong to remote
+     * devices, so retain them by device rather than by lane position. */
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
+        distances[lane] = ucs_topo_default_distance;
+        for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
+            if (new_key->lanes[lane].dst_sys_dev ==
+                old_key->lanes[old_lane].dst_sys_dev) {
+                distances[lane] = old_config->lanes_distance[old_lane];
+                break;
+            }
+        }
+    }
+
+    key.ep_cfg_index = ep_cfg_index;
+    return ucp_worker_rkey_config_get(worker, &key, distances, new_cfg_index);
+}
+
+
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,

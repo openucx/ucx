@@ -17,6 +17,7 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/wireup/wireup_ep.h>
@@ -62,7 +63,7 @@ public:
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
-        // reduce UD testing time 
+        // reduce UD testing time
         modify_config("KEEPALIVE_INTERVAL", "0.3s");
     }
 
@@ -1511,3 +1512,179 @@ UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_force_close)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, tcp, "tcp")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rc, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rcx, "rc_x")
+
+/* Native failover selection is the next step. These cases post transport
+ * batches directly and reuse the established FT connection/recovery setup. */
+class test_ucp_sgl_restart : public test_ucp_fault_tolerance_tf {
+public:
+    static void get_base_variants(std::vector<ucp_test_variant> &variants)
+    {
+        const char *names[] = {"native_token", "native_sw", "sw_token"};
+        for (unsigned i = 0; i < ucs_static_array_size(names); ++i) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA | UCP_FEATURE_AM,
+                                   i, names[i]);
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_memtypes(variants, get_base_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+    }
+
+    void init() override
+    {
+        modify_config("MAX_RMA_LANES", "2");
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("FAILOVER_MODE", get_variant_value() == 1 ? "sw" : "token");
+        modify_config("PROTOS", get_variant_value() == 2 ?
+                      "put/sgl/offload_sw,put/offload/zcopy,reconfig" :
+                      "put/sgl/offload,put/offload/zcopy,reconfig");
+        test_ucp_fault_tolerance_tf::init();
+        flush_workers();
+    }
+
+    enum scenario_t {
+        LANE_FAILURE, PENDING_FAILURE, FORCE_CLOSE, DEFERRED_RESET
+    };
+
+    void test_restart(scenario_t scenario)
+    {
+        const bool pending = scenario != LANE_FAILURE;
+        const bool close   = scenario == FORCE_CLOSE;
+        ucp_ep_h ep = get_ucp_ep_for_err_injection(FAILURE_SIDE_INITIATOR);
+        auto lanes = get_lanes(TEST_OP_PUT);
+        auto mem_type = static_cast<ucs_memory_type_t>(get_variant_value(1));
+        sgl_ctx ctx;
+        std::vector<size_t> sizes = pending ? std::vector<size_t>(2048, 4096) :
+                std::vector<size_t>{4096, 4096, 12288, 8192, 20480};
+        test_ucp_memheap::init_sgl_ctx(ctx, sizes, mem_type, mem_type);
+        for (size_t i = 0; i < sizes.size(); ++i) {
+            ctx.src[i].memset(i % 251 + 1);
+            ctx.dst[i].memset(0);
+        }
+        ctx.lengths[1] = ctx.remote_lengths[1] = 0;
+        ucp_dt_local_sgl_t local = {};
+        local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                           UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        if (!pending) {
+            local.field_mask |= UCP_DT_LOCAL_SGL_FIELD_MEMHS;
+        }
+        local.buffers = ctx.buffers.data();
+        local.lengths = ctx.lengths.data();
+        local.memhs   = ctx.memhs.data();
+        ucp_dt_remote_sgl_t remote = {};
+        remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                              UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                              UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        remote.remote_addrs = ctx.remote_addrs.data();
+        remote.lengths      = ctx.remote_lengths.data();
+        remote.rkeys        = ctx.rkeys.data();
+        unsigned completions = 0;
+        ucp_request_param_t param = {};
+        param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE |
+                                UCP_OP_ATTR_FIELD_CALLBACK |
+                                UCP_OP_ATTR_FIELD_USER_DATA |
+                                UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.datatype        = ucp_dt_make_sgl();
+        param.remote_datatype = ucp_dt_make_sgl();
+        param.remote          = &remote;
+        param.user_data       = &completions;
+        param.cb.send         = [](void*, ucs_status_t, void *arg) {
+            ++*static_cast<unsigned*>(arg);
+        };
+        auto generation = ep->ext->lane_generation;
+        ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, lanes[0]), nullptr));
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        auto request = ucp_put_nbx(ep, &local, sizes.size(),
+                                   UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                   &param);
+        ASSERT_FALSE(UCS_PTR_IS_ERR(request)) <<
+                ucs_status_string(UCS_PTR_STATUS(request));
+        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+        auto *req = static_cast<ucp_request_t*>(request) - 1;
+        if (pending) {
+            EXPECT_LT(req->send.state.dt_iter.offset, sizes.size());
+            EXPECT_GT(req->send.state.uct_comp.count, 1);
+        }
+        if (scenario == DEFERRED_RESET) {
+            /* Model a posted batch whose completion arrives after recovery. */
+            ++req->send.state.uct_comp.count;
+            auto *memhs = req->send.state.dt_iter.type.sgl.memhs;
+            uct_ep_pending_purge(ucp_ep_get_lane(ep, req->send.lane),
+                    [](uct_pending_req_t *pending, void *arg) {
+                        EXPECT_EQ(static_cast<uct_pending_req_t*>(arg), pending);
+                    }, &req->send.uct);
+            auto status = req->send.proto_config->proto->reset(req);
+            EXPECT_EQ(UCS_ERR_CANCELED, status);
+            EXPECT_EQ(memhs, req->send.state.dt_iter.type.sgl.memhs);
+            if (status != UCS_ERR_CANCELED) {
+                /* Drain the posting reference even when reset is broken. */
+                uct_invoke_completion(&req->send.state.uct_comp,
+                                     UCS_ERR_CANCELED);
+            }
+            wait_for_cond([ep, generation]() {
+                return (ep->ext->lane_generation != generation) &&
+                       (ucp_ep_get_failed_lanes(ep) == 0) &&
+                       (ucp_ep_recovery_arg(ep) == nullptr);
+            }, [this]() { short_progress_loop(); });
+            EXPECT_EQ(0u, completions);
+            EXPECT_EQ(1, req->send.state.uct_comp.count);
+            EXPECT_EQ(UCS_ERR_CANCELED, req->send.state.uct_comp.status);
+            if (completions == 0) {
+                uct_invoke_completion(&req->send.state.uct_comp, UCS_OK);
+            }
+        }
+        if (close) {
+            request_wait(sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                                 UCP_EP_CLOSE_FLAG_FORCE));
+            EXPECT_NE(UCS_OK, ucp_request_check_status(request));
+        } else {
+            /* NIXL posts a flush immediately after the SGL and sends its
+             * notification from the flush callback. */
+            ucp_request_param_t flush_param = {};
+            request_wait(ucp_ep_flush_nbx(ep, &flush_param));
+            for (size_t i = 0; i < sizes.size(); ++i) {
+                std::vector<char> actual(sizes[i]);
+                mem_buffer::copy_from(actual.data(), ctx.dst[i].ptr(),
+                                      actual.size(), mem_type);
+                EXPECT_EQ(std::vector<char>(actual.size(),
+                                            i == 1 ? 0 : i % 251 + 1), actual);
+            }
+        }
+        auto status = request_progress(request, entities());
+        if (status == UCS_INPROGRESS) {
+            request_wait(sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                                 UCP_EP_CLOSE_FLAG_FORCE));
+        }
+        ucp_request_release(request);
+        ASSERT_NE(UCS_INPROGRESS, status);
+        ASSERT_EQ(1u, completions);
+        if (close) {
+            EXPECT_NE(UCS_OK, status);
+            return;
+        }
+        ASSERT_UCS_OK(status);
+    }
+};
+
+UCS_TEST_P(test_ucp_sgl_restart, lane_failure) {
+    test_restart(LANE_FAILURE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, pending_failure) {
+    test_restart(PENDING_FAILURE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, force_close) {
+    test_restart(FORCE_CLOSE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, reset_waits_for_completion) {
+    test_restart(DEFERRED_RESET);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sgl_restart, rcx, "rc_x")

@@ -36,6 +36,23 @@ public:
                                       ucp_rkey_h rkey, void *arg);
 
 protected:
+    struct sgl_ctx {
+        std::vector<mapped_buffer>           src;
+        std::vector<mapped_buffer>           dst;
+        std::vector<ucs::handle<ucp_rkey_h>> rkey_handles;
+        std::vector<void*>                   buffers;
+        std::vector<uint64_t>                remote_addrs;
+        std::vector<size_t>                  lengths;
+        std::vector<size_t>                  remote_lengths;
+        std::vector<ucp_mem_h>               memhs;
+        std::vector<ucp_rkey_h>              rkeys;
+        uint64_t                             null_local_arrays  = 0;
+        uint64_t                             null_remote_arrays = 0;
+    };
+
+    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+                       ucs_memory_type_t src_type, ucs_memory_type_t dst_type);
+
     virtual void init();
 
     /* Factory for the buffers used by @ref test_xfer. Subclasses can override

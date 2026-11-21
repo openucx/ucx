@@ -550,6 +550,44 @@ UCS_TEST_P(test_ucp_proto, rkey_config_stable_after_growth)
     EXPECT_EQ(first_config, ucp_worker_rkey_config(worker(), first_index));
 }
 
+UCS_TEST_P(test_ucp_proto, reconfigure_rkey_distances)
+{
+    ucp_ep_config_key_t ep_key =
+            ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index).key;
+    ucp_rkey_config_key_t key  = create_rkey_config_key(0);
+    ucs_sys_dev_distance_t distances[UCP_MAX_LANES];
+    ucp_worker_cfg_index_t old_ep, new_ep, old_rkey, new_rkey;
+    ucp_lane_index_t lane;
+
+    if (ep_key.num_lanes < 2) {
+        UCS_TEST_SKIP_R("requires two lanes");
+    }
+
+    /* Distinct remote devices and distances expose lane-position reuse. */
+    for (lane = 0; lane < ep_key.num_lanes; ++lane) {
+        ep_key.lanes[lane].dst_sys_dev = lane;
+        distances[lane]               = ucs_topo_default_distance;
+        distances[lane].latency      = (lane + 1) * 1e-6;
+    }
+    ASSERT_UCS_OK(ucp_worker_get_ep_config(worker(), &ep_key, 0, &old_ep));
+    key.ep_cfg_index = old_ep;
+    key.sys_dev      = 0;
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker(), &key, distances,
+                                              &old_rkey));
+    std::swap(ep_key.lanes[0].dst_sys_dev, ep_key.lanes[1].dst_sys_dev);
+    ASSERT_UCS_OK(ucp_worker_get_ep_config(worker(), &ep_key, 0, &new_ep));
+
+    ASSERT_NE(nullptr, ucp_proto_select_get(worker(), new_ep, old_rkey,
+                                             &new_rkey));
+    const ucp_rkey_config_t *config = ucp_worker_rkey_config(worker(), new_rkey);
+    EXPECT_EQ(new_ep, config->key.ep_cfg_index);
+    EXPECT_EQ(distances[1].latency, config->lanes_distance[0].latency);
+    EXPECT_EQ(distances[0].latency, config->lanes_distance[1].latency);
+    ASSERT_UCS_OK(ucp_worker_reconfigure_rkey(worker(), new_rkey, new_ep,
+                                               &old_rkey));
+    EXPECT_EQ(new_rkey, old_rkey);
+}
+
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
