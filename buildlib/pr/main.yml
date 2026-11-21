@@ -350,15 +350,6 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         container: centos7_cuda11
-        ucx_targets:
-          ucx_1_15:
-            ucx_tag: v1.15.x
-          ucx_1_16:
-            ucx_tag: v1.16.x
-          ucx_1_17:
-            ucx_tag: v1.17.x
-          ucx_1_18:
-            ucx_tag: v1.18.x
     - template: wire_compat.yml
       parameters:
         name: new

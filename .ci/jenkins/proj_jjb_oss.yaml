@@ -176,3 +176,11 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-wirecompat-gpu
+    jjb_proj: "ucx-test-wirecompat-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_wirecompat_gpu_matrix.yaml"
+    jjb_description: "UCX GPU wire compatibility tests on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
