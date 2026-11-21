@@ -600,6 +600,12 @@ typedef struct ucp_ep_ext {
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
     ucs_hlist_head_t              proto_reqs;
+    /* Put and get requests which were added to a lane pending queue, and the
+     * flush requests submitted after them which wait for their completion, in
+     * the order they were added. Such a request may still send fragments on
+     * lanes which a later flush has already flushed, also after a restart
+     * selects a multi-lane protocol */
+    ucs_hlist_head_t              pending_rma_reqs;
 #if UCS_ENABLE_ASSERT
     ucs_time_t                    ka_last_round; /* Time of last KA round done */
 #endif
@@ -835,6 +841,10 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
  * @a lane_mask are initially flushed. If the endpoint topology changes while
  * the flush is active, current live lanes are added conservatively.
  *
+ * Unlike @ref ucp_ep_flush_internal, it does not wait for the pending RMA
+ * requests of the endpoint, only for the operations which were already posted
+ * on the lanes, unless a lane failure restarts the flush.
+ *
  * Device visibility state is shared by all lanes of the endpoint. A partial
  * flush can clear this state while an excluded lane still has writes in
  * flight, causing a later flush to skip the visibility work for those writes.
@@ -970,6 +980,10 @@ void ucp_ep_flush_completion(uct_completion_t *self);
 void ucp_ep_flush_mem_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
+
+void ucp_ep_pending_rma_reqs_add(ucp_request_t *req);
+
+void ucp_ep_pending_rma_reqs_remove(ucp_request_t *req);
 
 void
 ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,

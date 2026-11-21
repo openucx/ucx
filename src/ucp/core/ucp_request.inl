@@ -285,6 +285,10 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_PENDING_RMA)) {
+        ucp_ep_pending_rma_reqs_remove(req);
+    }
+
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_client_connect_progress'/'ucp_cm_server_conn_request_progress'
      */
@@ -882,6 +886,12 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
     ucp_request_ptr_map_status_check(status, "put", ep, req);
 
     if (status == UCS_OK) {
+        /* A request which was queued before selecting this protocol may still
+         * be in the pending RMA requests list */
+        if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_PENDING_RMA)) {
+            ucp_ep_pending_rma_reqs_remove(req);
+        }
+
         ucs_hlist_add_tail(&ep->ext->proto_reqs, &req->send.list);
     }
 }

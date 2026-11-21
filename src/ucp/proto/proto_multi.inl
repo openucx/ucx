@@ -152,6 +152,7 @@ ucp_proto_multi_no_resource(ucp_request_t *req, ucp_lane_index_t lane)
 
     ucs_assert(status == UCS_OK);
     req->send.lane = lane;
+    ucp_request_pending_rma_add(req);
 
     /* Remove the request from current pending queue because it was added to
      * other lane's pending queue.
