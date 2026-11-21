@@ -11,6 +11,7 @@
 #include "proto_common.h"
 
 #include <ucp/core/ucp_gpu_nic_assignment.h>
+#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/datatype_iter.h>
 
 
@@ -61,6 +62,9 @@ typedef struct ucp_proto_send_multi {
  */
 typedef struct {
     ucp_proto_common_lane_priv_t super;
+
+    /* Operation- and topology-limited bandwidth of the lane path */
+    float                        bandwidth;
 
     /* Maximal fragment size on this lane */
     size_t                       max_frag;
@@ -206,6 +210,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
 
 size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv);
+
+
+/* Scale the lane fragment by measured path bandwidth; NULL skips the lane */
+const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
+        ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv, ucp_ep_path_bw_op_t op,
+        ucp_proto_multi_lane_priv_t *adjusted);
 
 
 void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);

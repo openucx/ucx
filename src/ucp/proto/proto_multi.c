@@ -22,6 +22,153 @@
 #include <ucs/sys/topo/base/topo.h>
 
 
+/* Maximal bandwidth-to-fragment-size ratio, which is used to adjust fragment
+ * sizes so they are proportional to bandwidth ratio and also do not exceed
+ * maximal supported size */
+static UCS_F_ALWAYS_INLINE double
+ucp_proto_multi_max_frag_ratio(double max_frag_ratio, double bandwidth,
+                               size_t max_frag)
+{
+    return ucs_max(max_frag_ratio, bandwidth / max_frag);
+}
+
+/* Maximal fragment size according to lane relative bandwidth. Due to
+ * floating-point accuracy, it may be too large, so it is limited by the
+ * maximal supported size */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_multi_lane_max_frag(double bandwidth, double max_frag_ratio,
+                              size_t max_frag)
+{
+    size_t lane_max_frag = ucs_double_to_sizet(bandwidth / max_frag_ratio,
+                                               max_frag);
+
+    ucs_assertv(lane_max_frag > 0,
+                "bandwidth=%f max_frag_ratio=%f max_frag=%zu", bandwidth,
+                max_frag_ratio, max_frag);
+    return lane_max_frag;
+}
+
+/* Static share of the lane, scaled down by the ratio of the sample of its path
+ * to the path estimate */
+static UCS_F_ALWAYS_INLINE double
+ucp_proto_rma_lane_share(const ucp_ep_path_bw_t *state, ucp_ep_path_bw_op_t op,
+                         const ucp_proto_multi_lane_priv_t *lpriv)
+{
+    ucp_lane_index_t lane = lpriv->super.lane;
+
+    if (state->bandwidth[lane][op] == UCP_EP_PATH_BW_INVALID) {
+        return lpriv->weight;
+    }
+
+    return lpriv->weight *
+           ucs_min(state->bandwidth[lane][op] / lpriv->bandwidth, 1.0);
+}
+
+/* Split the message by the static shares of the lanes, scaled by the samples;
+ * the fragment helpers need only shares proportional to the bandwidth */
+static const ucp_proto_multi_lane_priv_t *
+ucp_proto_rma_split_lane(const ucp_proto_multi_priv_t *mpriv,
+                         const ucp_ep_path_bw_t *state, ucp_ep_path_bw_op_t op,
+                         size_t length,
+                         const ucp_proto_multi_lane_priv_t *lpriv,
+                         ucp_proto_multi_lane_priv_t *adjusted)
+{
+    size_t min_frag       = ucs_max(mpriv->min_frag, UCP_MIN_BCOPY);
+    double total          = 0;
+    double kept           = 0;
+    double max_frag_ratio = 0;
+    int degraded          = 0;
+    const ucp_proto_multi_lane_priv_t *candidate;
+    double share, selected, min_share;
+    ucp_lane_index_t i;
+
+    for (i = 0; i < mpriv->num_lanes; ++i) {
+        candidate      = &mpriv->lanes[i];
+        share          = ucp_proto_rma_lane_share(state, op, candidate);
+        degraded      |= share < candidate->weight;
+        total         += share;
+        max_frag_ratio = ucp_proto_multi_max_frag_ratio(max_frag_ratio, share,
+                                                        candidate->max_frag);
+    }
+
+    if (!degraded || (total == 0)) {
+        return lpriv;
+    }
+
+    /* Skip a lane whose share of the message or fragment per round is smaller
+     * than the minimal fragment, since a fragment on a nearly stalled path
+     * would delay the completion of every request */
+    min_share = ucs_max((total * min_frag) / length, min_frag * max_frag_ratio);
+    for (i = 0; i < mpriv->num_lanes; ++i) {
+        share = ucp_proto_rma_lane_share(state, op, &mpriv->lanes[i]);
+        if (share >= min_share) {
+            kept += share;
+        }
+    }
+
+    /* At least one lane must carry the data */
+    if (kept == 0) {
+        return lpriv;
+    }
+
+    selected = ucp_proto_rma_lane_share(state, op, lpriv);
+    if (selected < min_share) {
+        return NULL;
+    }
+
+    /* RMA advances the iterator only after a successful post. A local copy can
+     * change the next fragment while posted descriptors stay intact. */
+    *adjusted          = *lpriv;
+    adjusted->max_frag = ucp_proto_multi_lane_max_frag(selected, max_frag_ratio,
+                                                       lpriv->max_frag);
+    /* Shares of nearly stalled paths are far below one, so give the weight
+     * helper the fraction of the lane in units of the weight range */
+    adjusted->weight   = ucs_proto_multi_calc_weight(
+            (selected / kept) * UCP_PROTO_MULTI_WEIGHT_MAX,
+            UCP_PROTO_MULTI_WEIGHT_MAX);
+    return adjusted;
+}
+
+const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
+        ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv, ucp_ep_path_bw_op_t op,
+        ucp_proto_multi_lane_priv_t *adjusted)
+{
+    ucp_ep_h ep                          = req->send.ep;
+    khash_t(ucp_worker_ep_path_bw) *hash = &ep->worker->ep_path_bw;
+    const ucp_ep_path_bw_t *state;
+    size_t length;
+    khiter_t it;
+
+    if (mpriv->num_lanes < 2) {
+        return lpriv;
+    }
+
+    it = kh_get(ucp_worker_ep_path_bw, hash, ep);
+    if ((it == kh_end(hash)) ||
+        !ucp_worker_ep_path_bw_is_current(ep, kh_value(hash, it))) {
+        /* No samples of the current lanes: use the static split, and do not
+         * look up the samples until path events bring new ones. The send of
+         * a single-thread worker does not hold the async lock. */
+        UCS_ASYNC_BLOCK(&ep->worker->async);
+        ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_PATH_DEGRADED);
+        UCS_ASYNC_UNBLOCK(&ep->worker->async);
+        return lpriv;
+    }
+
+    state  = kh_value(hash, it);
+    length = (req->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) ?
+             req->send.rma.sgl.length : req->send.state.dt_iter.length;
+    if ((state->cfg_index != req->send.proto_config->ep_cfg_index) ||
+        (length == 0)) {
+        return lpriv;
+    }
+
+    return ucp_proto_rma_split_lane(mpriv, state, op, length, lpriv,
+                                    adjusted);
+}
+
+
 /* The assignment covers the bandwidth lanes, which wireup selects per NIC */
 static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
 {
@@ -733,11 +880,9 @@ ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
                   UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
 
-        /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
-           adjust fragment sizes so they are proportional to bandwidth ratio and
-           also do not exceed maximal supported size */
-        max_frag_ratio = ucs_max(max_frag_ratio,
-                                 lane_perf->bandwidth / lane_perf->max_frag);
+        max_frag_ratio = ucp_proto_multi_max_frag_ratio(max_frag_ratio,
+                                                        lane_perf->bandwidth,
+                                                        lane_perf->max_frag);
 
         min_bandwidth = ucs_min(min_bandwidth, lane_perf->bandwidth);
 
@@ -800,14 +945,14 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
 
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
+        /* Path samples are compared with the bandwidth of one path, which the
+         * system distances limit like the bandwidth of the lane */
+        lpriv->bandwidth = ucs_min(lane_perf->path_bandwidth,
+                                   lane_perf->bandwidth);
 
-        /* Calculate maximal fragment size according to lane relative bandwidth.
-           Due to floating-point accuracy, max_frag may be too large. */
-        max_frag = ucs_double_to_sizet(lane_perf->bandwidth / max_frag_ratio,
-                                       lane_perf->max_frag);
-
-        /* Make sure fragment is not zero */
-        ucs_assert(max_frag > 0);
+        max_frag = ucp_proto_multi_lane_max_frag(lane_perf->bandwidth,
+                                                 max_frag_ratio,
+                                                 lane_perf->max_frag);
 
         /* Min chunk is scaled, but must be within HW limits.
            Min chunk cannot be less than UCP_MIN_BCOPY, as it's not worth to
@@ -820,11 +965,8 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         lpriv->max_frag = max_frag;
         perf->max_frag += max_frag;
 
-        /* Calculate lane weight as a fixed-point fraction */
         lpriv->weight = ucs_proto_multi_calc_weight(lane_perf->bandwidth,
                                                     perf->bandwidth);
-        ucs_assert(lpriv->weight > 0);
-        ucs_assert(lpriv->weight <= UCP_PROTO_MULTI_WEIGHT_MAX);
 
         /* Calculate minimal message length according to lane's relative weight:
            When the message length is scaled by this lane's weight, it must not

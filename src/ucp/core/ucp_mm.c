@@ -445,6 +445,57 @@ static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
+static int ucp_memh_memtype_map_is_used(ucp_mem_h memh)
+{
+    /* Imported memhs are not registered, and without detect MDs any memory is
+     * detected as host, which other contexts in the process would trust */
+    return ucs_memtype_map_is_enabled() &&
+           (memh->context->num_mem_type_detect_mds > 0) &&
+           !(memh->flags & UCP_MEMH_FLAG_IMPORTED);
+}
+
+/* Add the memory of a user memory handle to the memtype map, if the map is used
+ * instead of the event-driven memtype cache */
+static void
+ucp_memh_memtype_map_register(ucp_mem_h memh)
+{
+    ucp_memory_info_t mem_info;
+
+    ucs_assertv(!(memh->flags & UCP_MEMH_FLAG_IMPORTED),
+                "memh %p address %p length %zu flags 0x%x mem_type %s", memh,
+                ucp_memh_address(memh), ucp_memh_length(memh), memh->flags,
+                ucs_memory_type_names[memh->mem_type]);
+
+    if (!ucp_memh_memtype_map_is_used(memh)) {
+        return;
+    }
+
+    if (memh->alloc_method != UCT_ALLOC_METHOD_LAST) {
+        /* The allocator reports the type of the memory it created */
+        mem_info = ucp_memory_info_from_memh(memh);
+    } else {
+        /* Cache the actual memory type, not the user hint */
+        ucp_memory_detect(memh->context, ucp_memh_address(memh),
+                          ucp_memh_length(memh), &mem_info);
+    }
+
+    ucs_memtype_map_register(ucp_memh_address(memh), ucp_memh_length(memh),
+                             mem_info.type, mem_info.sys_dev,
+                             mem_info.flags);
+    memh->flags |= UCP_MEMH_FLAG_MEMTYPE_MAP;
+}
+
+static void ucp_memh_memtype_map_unregister(ucp_mem_h memh)
+{
+    /* Do not evaluate the configuration again, it could have changed since the
+     * memory was registered */
+    if (memh->flags & UCP_MEMH_FLAG_MEMTYPE_MAP) {
+        ucs_memtype_map_unregister(ucp_memh_address(memh),
+                                   ucp_memh_length(memh));
+        memh->flags &= ~UCP_MEMH_FLAG_MEMTYPE_MAP;
+    }
+}
+
 static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 {
     uct_allocated_memory_t mem;
@@ -453,6 +504,8 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_trace("memh %p: cleanup", memh);
 
     ucs_assert(ucp_memh_is_user_memh(memh));
+
+    ucp_memh_memtype_map_unregister(memh);
 
     mem.address = ucp_memh_address(memh);
     mem.length  = ucp_memh_length(memh);
@@ -572,8 +625,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t md_map_registered      = 0;
     ucp_md_map_t dmabuf_md_map          = 0;
+    uct_md_mem_reg_params_t reg_params  = {0};
     ucp_md_map_t reg_md_map;
-    uct_md_mem_reg_params_t reg_params;
     uct_md_mem_reg_params_t md_reg_params;
     uct_md_mem_attr_t mem_attr;
     ucp_md_index_t md_index;
@@ -969,6 +1022,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     ucs_assert(ucp_memh_is_user_memh(memh));
+    ucp_memh_memtype_map_register(memh);
     return UCS_OK;
 
 err_put_rcache:

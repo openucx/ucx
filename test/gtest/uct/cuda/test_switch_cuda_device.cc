@@ -170,8 +170,8 @@ void test_another_thread::detect_mem_type(ucs_memory_type_t mem_type) const
     const size_t size = 16;
     T buffer(size, mem_type);
 
-    ucs_memory_type_t detected_mem_type;
-    ucs_status_t status;
+    ucs_memory_type_t detected_mem_type = UCS_MEMORY_TYPE_UNKNOWN;
+    ucs_status_t status                 = UCS_ERR_LAST;
     std::thread([&]() {
         status = uct_md_detect_memory_type(this->m_md, buffer.ptr(), size,
                                            &detected_mem_type);

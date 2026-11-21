@@ -1,0 +1,588 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Dependency list for https://github.com/rapidsai/dependency-file-generator
+files:
+  all:
+    output: conda
+    matrix:
+      cuda: ["12.9", "13.4"]
+      arch: [x86_64, aarch64]
+    includes:
+      - build_cpp
+      - build_python_ucxx
+      - checks
+      - cuda
+      - cuda_version
+      - dev
+      - docs
+      - py_version
+      - rapids_build_setuptools
+      - rapids_build_skbuild
+      - run_python_ucxx
+      - test_cpp
+      - test_python_common
+      - test_python_ucxx
+      - depends_on_cupy
+      - depends_on_numba_cuda
+      - depends_on_ucx_run
+  test_cpp:
+    output: none
+    includes:
+      - cuda_version
+      - test_cpp
+      - depends_on_libucxx
+      - depends_on_libucxx_examples
+      - depends_on_libucxx_tests
+  test_python:
+    output: none
+    includes:
+      - cuda_version
+      - py_version
+      - test_python_common
+      - test_python_ucxx
+      - depends_on_cupy
+      - depends_on_libucxx
+      - depends_on_numba_cuda
+      - depends_on_ucxx
+      - depends_on_ucxx_tests
+  checks:
+    output: none
+    includes:
+      - checks
+      - py_version
+  docs:
+    output: none
+    includes:
+      - docs
+      - py_version
+      - depends_on_libucxx
+      - depends_on_ucxx
+  py_build_libucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/libucxx
+    extras:
+      table: build-system
+    includes:
+      - rapids_build_skbuild
+  py_rapids_build_libucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/libucxx
+    extras:
+      table: tool.rapids-build-backend
+      key: requires
+    includes:
+      - build_cpp
+      - depends_on_ucx_build
+  py_run_libucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/libucxx
+    extras:
+      table: project
+    includes:
+      - depends_on_ucx_run
+  py_build_ucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/ucxx
+    extras:
+      table: build-system
+    includes:
+      - rapids_build_skbuild
+  py_rapids_build_ucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/ucxx
+    extras:
+      table: tool.rapids-build-backend
+      key: requires
+    includes:
+      - build_python_ucxx
+      - depends_on_libucxx
+  py_run_ucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/ucxx
+    extras:
+      table: project
+    includes:
+      - run_python_ucxx
+      - depends_on_libucxx
+  py_test_ucxx:
+    output: pyproject
+    matrix:
+      use_cuda_wheels: ["true"]
+      cuda_suffixed: ["false"]
+    pyproject_dir: python/ucxx
+    extras:
+      table: project.optional-dependencies
+      key: test
+    includes:
+      - depends_on_cupy
+      - depends_on_numba_cuda
+      - test_python_common
+      - test_python_ucxx
+channels:
+  - rapidsai-nightly
+  - rapidsai
+  - conda-forge
+dependencies:
+  build_cpp:
+    common:
+      - output_types: conda
+        packages:
+          - c-compiler
+          - cxx-compiler
+          - &cmake_ver cmake>=4.0,<4.5
+          - ninja
+      - output_types: [requirements, constraints, pyproject]
+        packages:
+          - *cmake_ver
+          - ninja
+  build_python_ucxx:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - *cmake_ver
+          - cython>=3.2.2
+          - ninja
+  rapids_build_skbuild:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - &rapids_build_backend rapids-build-backend>=0.4.0,<0.5.0
+      - output_types: [conda, constraints]
+        packages:
+          - scikit-build-core>=0.11.0
+      - output_types: [requirements, pyproject]
+        packages:
+          - scikit-build-core[pyproject]>=0.11.0
+  rapids_build_setuptools:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - *rapids_build_backend
+          - setuptools>=77.0.0
+  checks:
+    common:
+      - output_types: [conda, requirements, constraints]
+        packages:
+          - pre-commit
+      - output_types: [conda]
+        packages:
+          - &doxygen doxygen=1.18.0 # pre-commit hook needs a specific version.
+  # 'cuda_version' intentionally does not contain fallback entries... we want
+  # a loud error if an unsupported 'cuda' value is passed
+  cuda_version:
+    specific:
+      - output_types: conda
+        matrices:
+          - matrix:
+              cuda: "12.2"
+            packages:
+              - cuda-version=12.2
+          - matrix:
+              cuda: "12.5"
+            packages:
+              - cuda-version=12.5
+          - matrix:
+              cuda: "12.8"
+            packages:
+              - cuda-version=12.8
+          - matrix:
+              cuda: "12.9"
+            packages:
+              - cuda-version=12.9
+          - matrix:
+              cuda: "13.0"
+            packages:
+              - cuda-version=13.0
+          - matrix:
+              cuda: "13.1"
+            packages:
+              - cuda-version=13.1
+          - matrix:
+              cuda: "13.2"
+            packages:
+              - cuda-version=13.2
+          - matrix:
+              cuda: "13.3"
+            packages:
+              - cuda-version=13.3
+          - matrix:
+              cuda: "13.4"
+            packages:
+              - cuda-version=13.4
+      - output_types: [requirements, constraints]
+        matrices:
+          # if use_cuda_wheels=false is provided, do not add dependencies on any CUDA wheels
+          # (e.g. for DLFW and pip devcontainers)
+          - matrix:
+              use_cuda_wheels: "false"
+            packages:
+          - matrix:
+              arch: aarch64
+              cuda: "12.2"
+              use_cuda_wheels: "true"
+            packages:
+              # some components (like nvidia-cublas-cu12 and nvidia-cuda-nvcc-cu12) didn't have
+              # aarch64 wheels until CTK 12.3, so allow a slightly looser bound here
+              - cuda-toolkit>=12.2,<12.4
+          - matrix:
+              cuda: "12.2"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==12.2.*
+          - matrix:
+              cuda: "12.5"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==12.5.*
+          - matrix:
+              cuda: "12.8"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==12.8.*
+          - matrix:
+              cuda: "12.9"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==12.9.*
+          - matrix:
+              cuda: "13.0"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==13.0.*
+          - matrix:
+              cuda: "13.1"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==13.1.*
+          - matrix:
+              cuda: "13.2"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==13.2.*
+          - matrix:
+              cuda: "13.3"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==13.3.*
+          - matrix:
+              cuda: "13.4"
+              use_cuda_wheels: "true"
+            packages:
+              - cuda-toolkit==13.4.*
+  cuda:
+    common:
+      - output_types: [conda]
+        packages:
+          - cuda-cudart-dev
+          - cuda-nvcc
+  dev:
+    common:
+      - output_types: [conda]
+        packages:
+          # These packages are useful for development but not otherwise required to build/run
+          # RAPIDS
+          - pip
+          # UCX Build
+          - libtool
+          - automake
+          - autoconf
+          # UCXX Build
+          - pkg-config
+          # Docs Build
+          - *doxygen
+  docs:
+    common:
+      - output_types: [conda]
+        packages:
+          - *doxygen
+          - make
+          # Minimum version for safe parallel writing again.
+          # https://github.com/pydata/pydata-sphinx-theme/pull/1859
+          # https://github.com/pydata/pydata-sphinx-theme/releases/tag/v0.15.4
+          - pydata-sphinx-theme>=0.15.4
+          # Needed for safe parallel writes as with the pydata-sphinx-theme pin above
+          # https://github.com/sphinx-doc/sphinx/issues/12409
+          # https://github.com/sphinx-doc/sphinx/pull/12888
+          # https://github.com/sphinx-doc/sphinx/releases/tag/v8.1.0
+          - sphinx>=8.1.0
+  py_version:
+    specific:
+      - output_types: conda
+        matrices:
+          - matrix:
+              py: "3.12"
+            packages:
+              - python=3.12
+          - matrix:
+              py: "3.13"
+            packages:
+              - python=3.13
+          - matrix:
+              py: "3.14"
+            packages:
+              - python=3.14
+          - matrix:
+            packages:
+              - python>=3.12
+  run_python_ucxx:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - numpy>=2.0,<3.0
+          # 'nvidia-ml-py' provides the 'pynvml' module
+          - nvidia-ml-py>=12
+          - cuda-core>=1.0,<2
+    specific:
+      - output_types: pyproject
+        matrices:
+          # 'cuda.core' imports 'cuda.bindings', which the cuda-core wheel does
+          # not require by itself; the conda package does
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - cuda-bindings==12.*
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - cuda-bindings==13.*
+          - matrix:
+            packages:
+  test_cpp:
+    common:
+      - output_types: conda
+        packages:
+          - *cmake_ver
+          - &gdb gdb  # Used for timeout_with_stack.py
+          - &psutil psutil  # Used for timeout_with_stack.py
+  test_python_common:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - pytest
+          - pytest-rerunfailures!=16.0.0  # See https://github.com/pytest-dev/pytest-rerunfailures/issues/302
+          - *psutil  # Used for timeout_with_stack.py
+      - output_types: [conda]
+        packages:
+          - *gdb  # Used for timeout_with_stack.py
+    specific:
+      - output_types: [conda, requirements, constraints, pyproject]
+        matrices:
+          - matrix:
+              dependencies: "oldest"
+            packages:
+              # cuda-core 1.0.0 cannot import with CUDA 13.0.x bindings.
+              - cuda-core==1.0.1
+              - numpy==2.0.*
+          - matrix:
+            packages:
+  test_python_ucxx:
+    common:
+      - output_types: [conda, requirements, constraints, pyproject]
+        packages:
+          - cloudpickle
+          - pytest-asyncio>=1.0.0
+          - pytest-xdist
+  depends_on_cupy:
+    common:
+      - output_types: conda
+        packages:
+          - cupy>=14.0.1,!=14.1.0
+    specific:
+      - output_types: constraints
+        matrices:
+          - matrix:
+              cuda: "12.*"
+            packages:
+              - &cupy_cu12 cupy-cuda12x>=14.0.1,!=14.1.0
+          # fallback to CUDA 13 versions if 'cuda' is '13.*' or not provided
+          - matrix:
+            packages:
+              - &cupy_cu13 cupy-cuda13x>=14.0.1,!=14.1.0
+      - output_types: [requirements, pyproject]
+        matrices:
+          - matrix:
+              cuda: "12.*"
+              use_cuda_wheels: "false"
+            packages:
+              - *cupy_cu12
+          - matrix:
+              cuda: "13.*"
+              use_cuda_wheels: "false"
+            packages:
+              - *cupy_cu13
+          - matrix:
+              cuda: "12.*"
+              use_cuda_wheels: "true"
+            packages:
+              - cupy-cuda12x[ctk]>=14.0.1,!=14.1.0
+          # fallback to CUDA 13 versions if 'cuda' is '13.*' or not provided
+          - matrix:
+              use_cuda_wheels: "true"
+            packages:
+              - cupy-cuda13x[ctk]>=14.0.1,!=14.1.0
+  depends_on_numba_cuda:
+    common:
+      - output_types: [conda]
+        packages:
+          - &numba_cuda numba-cuda>=0.30.2
+    specific:
+      - output_types: pyproject
+        matrices:
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - numba-cuda[cu12]>=0.30.2
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - numba-cuda[cu13]>=0.30.2
+          # fallback to numba-cuda with no extra CUDA packages if 'cuda_suffixed' isn't true
+          - matrix:
+            packages:
+              - *numba_cuda
+  depends_on_libucxx:
+    common:
+      - output_types: conda
+        packages:
+          - &libucxx_unsuffixed libucxx==0.53.*,>=0.0.0a0
+    specific:
+      - output_types: [requirements, constraints, pyproject]
+        matrices:
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucxx-cu12==0.53.*,>=0.0.0a0
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucxx-cu13==0.53.*,>=0.0.0a0
+          - matrix:
+              cuda_suffixed: "false"
+            packages:
+              - *libucxx_unsuffixed
+  depends_on_libucxx_examples:
+    common:
+      - output_types: conda
+        packages:
+          - libucxx-examples==0.53.*,>=0.0.0a0
+  depends_on_libucxx_tests:
+    common:
+      - output_types: conda
+        packages:
+          - libucxx-tests==0.53.*,>=0.0.0a0
+  depends_on_ucxx:
+    common:
+      - output_types: conda
+        packages:
+          - &ucxx_unsuffixed ucxx==0.53.*,>=0.0.0a0
+    specific:
+      - output_types: [requirements, constraints, pyproject]
+        matrices:
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - ucxx-cu12==0.53.*,>=0.0.0a0
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - ucxx-cu13==0.53.*,>=0.0.0a0
+          - matrix:
+              cuda_suffixed: "false"
+            packages:
+              - *ucxx_unsuffixed
+  depends_on_ucxx_tests:
+    common:
+      - output_types: conda
+        packages:
+          - ucxx-tests==0.53.*,>=0.0.0a0
+  # The 'no_libucx: "true"' entries below omit UCX entirely, for building/testing against a
+  # UCX installation not provided by conda or wheels. Enabled in ci/ scripts with
+  # UCXX_NO_LIBUCX=true; see ci/README.md for requirements and known limitations.
+  depends_on_ucx_build:
+    specific:
+      - output_types: [conda]
+        matrices:
+          - matrix:
+              no_libucx: "true"
+            packages:
+          - matrix:
+            packages:
+              - ucx==1.20.0
+      # very tight >=x.x.x,<x.x.(x+1) on these wheel dependencies, instead of '==',
+      # to allow for installation of post release like 1.20.0.post1
+      - output_types: [requirements, constraints, pyproject]
+        matrices:
+          - matrix:
+              no_libucx: "true"
+            packages:
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucx-cu12>=1.20.0,<1.20.1
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucx-cu13>=1.20.0,<1.20.1
+          - matrix:
+            packages:
+              - libucx>=1.20.0,<1.20.1
+  # UCX 1.22.0 is excluded: it can segfault inside libcuda in
+  # cuMemGetHandleForAddressRange. Fixed on UCX main (openucx/ucx#11922).
+  # See https://github.com/rapidsai/ucxx/issues/783
+  depends_on_ucx_run:
+    specific:
+      - output_types: [conda]
+        matrices:
+          - matrix:
+              no_libucx: "true"
+            packages:
+          - matrix:
+            packages:
+              - ucx>=1.20.0,<1.23,!=1.22.0
+      - output_types: [requirements, constraints, pyproject]
+        matrices:
+          - matrix:
+              no_libucx: "true"
+            packages:
+          - matrix:
+              cuda: "12.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucx-cu12>=1.20.0,<1.23,!=1.22.0
+          - matrix:
+              cuda: "13.*"
+              cuda_suffixed: "true"
+            packages:
+              - libucx-cu13>=1.20.0,<1.23,!=1.22.0
+          - matrix:
+            packages:
+              - libucx>=1.20.0,<1.23,!=1.22.0

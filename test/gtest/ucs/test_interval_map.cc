@@ -219,6 +219,32 @@ UCS_TEST_F(test_interval_map, duplicates) {
     EXPECT_EQ(NULL, find(100, 200));
 }
 
+UCS_TEST_F(test_interval_map, extract_first) {
+    ucs_interval_map_node_t *node;
+
+    EXPECT_EQ(NULL, ucs_interval_map_extract_first(&m_map));
+
+    /* Overlapping, nested and duplicate intervals, inserted out of order */
+    insert(0, 300, 400);
+    insert(1, 100, 200);
+    insert(2, 150, 350);
+    insert(3, 100, 200);
+    insert(4, 50, 500);
+    validate(5);
+
+    std::vector<uint64_t> starts;
+    size_t remaining = 5;
+    while ((node = ucs_interval_map_extract_first(&m_map)) != NULL) {
+        starts.push_back(node->start);
+        m_entries[ucs_container_of(node, entry, node)->id].live = false;
+        validate(--remaining);
+    }
+
+    EXPECT_EQ(std::vector<uint64_t>({50, 100, 100, 150, 300}), starts);
+    EXPECT_EQ(0u, ucs_interval_map_count(&m_map));
+    EXPECT_EQ(NULL, ucs_interval_map_extract_first(&m_map));
+}
+
 UCS_TEST_F(test_interval_map, foreach_overlapping) {
     insert(0, 100, 200);
     insert(1, 150, 250);

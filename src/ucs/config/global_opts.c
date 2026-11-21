@@ -166,8 +166,15 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
   {"MEMTYPE_CACHE", "try",
-   "Enable memory type (cuda/rocm) cache",
-   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_TERNARY},
+   "Enable memory type cache:\n"
+   " n   - disabled.\n"
+   " try - enabled only when UCM memory type events are available.\n"
+   " y   - use UCM events when available. If memory events are disabled\n"
+   "       (UCX_MEM_EVENTS=n), cache only memory mapped by ucp_mem_map() or\n"
+   "       allocated by UCX. Mapped memory must remain allocated until\n"
+   "       ucp_mem_unmap().",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
+   UCS_CONFIG_TYPE_TERNARY},
 
  {"ASYNC_MAX_EVENTS", "1024",
   "The configuration parameter is deprecated.\n"
