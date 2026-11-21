@@ -1761,12 +1761,24 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
     double bw_gbps, effective_bw, link_utilization;
     const ucs_topo_pci_info_t *p;
+    char physfn_path[PATH_MAX];
     char pci_width_str[16];
     char pci_speed_str[16];
     ucs_status_t status;
     unsigned width;
     char gts[16];
     size_t i;
+
+    /* VFs share the physical link and may not report its speed or width. */
+    if (sysfs_path != NULL) {
+        ucs_snprintf_safe(physfn_path, sizeof(physfn_path), "%s/physfn",
+                          sysfs_path);
+        if (access(physfn_path, F_OK) == 0) {
+            ucs_debug("%s: using the physical function link at '%s'", dev_name,
+                      physfn_path);
+            sysfs_path = physfn_path;
+        }
+    }
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, pci_width_file_name,
                                      pci_width_str, sizeof(pci_width_str),

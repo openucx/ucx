@@ -376,7 +376,8 @@
                 <resource>
                   <directory>${ucs.lib.path}</directory>
                   <includes>
-                    <include>**/*.so</include>
+                    <!-- Keep modules in the build tree with their SONAME symlinks. -->
+                    <include>*.so</include>
                   </includes>
                 </resource>
                 <resource>
