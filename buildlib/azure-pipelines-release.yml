@@ -94,6 +94,15 @@ stages:
             clean: true
             retryCountOnTaskFailure: 5
 
+          # Runs first: a failure here leaves Launch unset, so nothing is built
+          - bash: |
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_release_version $(Build.SourceBranchName)
+            displayName: Check tag version
+            condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+
           - bash: |
               set -eE
               source ./buildlib/az-helpers.sh
