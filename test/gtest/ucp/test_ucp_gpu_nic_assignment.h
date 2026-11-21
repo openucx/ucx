@@ -28,6 +28,19 @@ enum {
     GPU_NIC_ASSIGNMENT_MODE_SHARED
 };
 
+/* Active messages the worker received on interfaces it did not progress, which
+ * it handles only after an interface event wakes it up */
+static inline unsigned worker_proxy_recv_count(ucp_worker_h worker)
+{
+    unsigned count = 0;
+
+    for (ucp_rsc_index_t i = 0; i < worker->num_ifaces; ++i) {
+        count += worker->ifaces[i]->proxy_recv_count;
+    }
+
+    return count;
+}
+
 /* UCX_GPU_NIC_ASSIGNMENT_MODE values that set explicit assignment modes */
 static const char *gpu_nic_assignment_modes[] = {
     "flip",
