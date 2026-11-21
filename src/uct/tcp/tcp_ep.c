@@ -1683,7 +1683,8 @@ static unsigned uct_tcp_ep_progress_magic_number_rx(void *arg)
     return 1;
 
 err:
-    uct_tcp_ep_destroy_internal(&ep->super.super);
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX));
+    uct_tcp_ep_set_failed(ep, UCS_ERR_CONNECTION_RESET);
     return 0;
 }
 
