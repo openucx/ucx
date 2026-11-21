@@ -18,6 +18,8 @@ extern "C" {
 #include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
+#include <ucp/wireup/wireup.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
@@ -940,6 +942,36 @@ protected:
                         threshold->proto_config.priv)
                         ->remote_proto_config;
     }
+
+    /* Add an RMA mock interface whose port speed is set by set_port_speed() */
+    void add_port_speed_mock_iface(const std::string &dev_name,
+                                   double bandwidth, double latency)
+    {
+        m_port_speed[dev_name] = bandwidth;
+        add_mock_iface(
+                dev_name,
+                [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+                    iface_attr.cap.get.min_zcopy = 0;
+                    iface_attr.bandwidth.shared  = bandwidth;
+                    iface_attr.latency.c         = latency;
+                    iface_attr.latency.m         = 1e-9;
+                },
+                [this, dev_name](uct_perf_attr_t &perf_attr) {
+                    perf_attr.bandwidth.shared = m_port_speed[dev_name];
+                    perf_attr.path_bandwidth   = perf_attr.bandwidth;
+                });
+    }
+
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    void set_port_speed(const std::string &dev_name, double port_speed)
+    {
+        m_port_speed[dev_name] = port_speed;
+        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
+        while (progress());
+    }
+#endif
+
+    std::map<std::string, double> m_port_speed;
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -5002,36 +5034,9 @@ public:
 
     virtual void init() override
     {
-        m_port_speed["mock_0:1"] = 28e9;
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.get.min_zcopy = 0;
-            iface_attr.bandwidth.shared  = 28e9;
-            iface_attr.latency.c         = 600e-9;
-            iface_attr.latency.m         = 1e-9;
-        }, [this](uct_perf_attr_t &perf_attr) {
-            perf_attr.bandwidth.shared = this->m_port_speed["mock_0:1"];
-            perf_attr.path_bandwidth   = perf_attr.bandwidth;
-        });
-
-        m_port_speed["mock_1:1"] = 24e9;
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.get.min_zcopy = 0;
-            iface_attr.bandwidth.shared  = 24e9;
-            iface_attr.latency.c         = 500e-9;
-            iface_attr.latency.m         = 1e-9;
-        }, [this](uct_perf_attr_t &perf_attr) {
-            perf_attr.bandwidth.shared = this->m_port_speed["mock_1:1"];
-            perf_attr.path_bandwidth   = perf_attr.bandwidth;
-        });
+        add_port_speed_mock_iface("mock_0:1", 28e9, 600e-9);
+        add_port_speed_mock_iface("mock_1:1", 24e9, 500e-9);
         test_ucp_proto_mock::init();
-    }
-
-    void set_port_speed(const std::string &iface_name, double port_speed)
-    {
-        m_port_speed[iface_name] = port_speed;
-
-        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
-        while (progress());
     }
 
     void test_port_speed(std::function<ucp_worker_cfg_index_t()> send,
@@ -5100,9 +5105,6 @@ public:
         EXPECT_EQ(ucs_array_length(&worker->rkey_config), rkey_config_count);
         EXPECT_EQ(worker->ep_config.length, ep_config_count);
     }
-
-protected:
-    std::map<std::string, double> m_port_speed;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
@@ -5259,3 +5261,307 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change_stats, rcx,
 #endif // ENABLE_STATS
 
 #endif // HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+
+/*
+ * The configuration of a remote key of memory on a system device, like GPU
+ * memory, keeps the distance of each lane from that device. Here the remote
+ * memory is host memory on a fake system device, which a topology provider
+ * puts at a different distance from each mocked device.
+ */
+class test_ucp_proto_mock_rcx_rkey_reconfig : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_rkey_reconfig() : m_topo_pushed(false), m_seed(0)
+    {
+        mock_transport("rc_mlx5");
+        /* Token failover reposts a failed fragment instead of restarting the
+         * request */
+        modify_config("FAILOVER_MODE", "sw");
+    }
+
+    virtual void init() override
+    {
+        const ucs_sys_topo_ops_t topo_ops = {
+            .get_distance                   = get_distance,
+            .get_memory_distance            = get_memory_distance,
+            .get_memory_distance_for_cpuset = get_memory_distance_for_cpuset
+        };
+        const ucs_sys_bus_id_t mem_bus_id = {
+            .domain   = 0xfffa,
+            .bus      = 0xfa,
+            .slot     = 0x1f,
+            .function = 0
+        };
+
+        add_port_speed_mock_iface("mock_0:1", 28e9, 600e-9);
+        add_port_speed_mock_iface("mock_1:1", 24e9, 500e-9);
+        test_ucp_proto_mock::init();
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&mem_bus_id,
+                                                     &s_mem_sys_dev));
+        s_mem_distance[get_mock_sys_dev_by_name("mock_0:1")] = {200e-9, 4e9};
+        s_mem_distance[get_mock_sys_dev_by_name("mock_1:1")] = {400e-9, 8e9};
+        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&topo_ops));
+        m_topo_pushed = true;
+    }
+
+    virtual void cleanup() override
+    {
+        if (m_topo_pushed) {
+            ucs_sys_topo_provider_pop();
+        }
+
+        s_mem_distance.clear();
+        s_mem_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        test_ucp_proto_mock::cleanup();
+    }
+
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_proto_mock::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+        params.err_handler.cb  = err_cb;
+        params.err_handler.arg = nullptr;
+        return params;
+    }
+
+protected:
+    /* Run @a op_id, call @a reconfig and run @a op_id again: on the new
+     * endpoint configuration, or, if @a restart, restarted on it */
+    void test_reconfig(ucp_operation_id_t op_id,
+                       const std::function<void()> &reconfig, bool restart)
+    {
+        mem_buffer lbuf(256 * UCS_KBYTE, UCS_MEMORY_TYPE_HOST);
+        mem_buffer rbuf(lbuf.size(), UCS_MEMORY_TYPE_HOST);
+        auto memh = mem_map(receiver(), rbuf);
+
+        memh->sys_dev = s_mem_sys_dev;
+
+        auto rkey_packed          = rkey_pack(receiver(), memh);
+        auto rkey                 = rkey_unpack(sender().ep(), rkey_packed);
+        const auto rkey_cfg_index = rkey->cfg_index;
+        const auto ep_cfg_index   = ep_config_index(sender());
+
+        do_rma(op_id, lbuf, rbuf, rkey);
+        check_lanes_distance(rkey_cfg_index);
+
+        reconfig();
+        do_rma(op_id, lbuf, rbuf, rkey);
+        EXPECT_NE(ep_cfg_index, ep_config_index(sender()));
+        /* Only an operation posted on the new configuration updates the rkey */
+        EXPECT_EQ(restart, rkey->cfg_index == rkey_cfg_index);
+        check_lanes_distance(rkey_cfg_index);
+    }
+
+    /* Move an RMA lane other than the AM lane to the error state, and wait
+     * until the endpoint fails it over if @a wait */
+    void fail_rma_lane(bool wait)
+    {
+        const uct_ep_invalidate_params_t params = {};
+        ucp_ep_h ep                             = sender().ep();
+        const ucp_ep_config_key_t *key          = &ucp_ep_config(ep)->key;
+        ucp_lane_index_t lane                   = UCP_NULL_LANE;
+        const ucp_lane_index_t *rma_lane;
+        uct_ep_h uct_ep;
+
+        ucs_carray_for_each(rma_lane, key->rma_bw_lanes, UCP_MAX_LANES) {
+            if ((*rma_lane != UCP_NULL_LANE) && (*rma_lane != key->am_lane)) {
+                lane = *rma_lane;
+                break;
+            }
+        }
+
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ASSERT_FALSE(ucp_wireup_ep_test(uct_ep));
+        ASSERT_UCS_OK(uct_ep_invalidate(uct_ep, &params));
+        if (wait) {
+            wait_for_cond([&]() { return is_lane_failed(lane); },
+                          [this]() { progress(); });
+            ASSERT_TRUE(is_lane_failed(lane));
+        }
+    }
+
+private:
+    void do_rma(ucp_operation_id_t op_id, mem_buffer &lbuf, mem_buffer &rbuf,
+                ucp_rkey_h rkey)
+    {
+        ucp_request_param_t param;
+        ucs_status_ptr_t sptr;
+
+        param.op_attr_mask = 0;
+        ++m_seed;
+        if (op_id == UCP_OP_ID_PUT) {
+            lbuf.pattern_fill(m_seed);
+            sptr = ucp_put_nbx(sender().ep(), lbuf.ptr(), lbuf.size(),
+                               (uint64_t)rbuf.ptr(), rkey, &param);
+        } else {
+            rbuf.pattern_fill(m_seed);
+            sptr = ucp_get_nbx(sender().ep(), lbuf.ptr(), lbuf.size(),
+                               (uint64_t)rbuf.ptr(), rkey, &param);
+        }
+
+        ASSERT_UCS_OK(request_wait(sptr));
+        if (op_id == UCP_OP_ID_PUT) {
+            /* A put completes locally: flush to have the data at the target */
+            ASSERT_UCS_OK(
+                    request_wait(ucp_ep_flush_nbx(sender().ep(), &param)));
+            rbuf.pattern_check(m_seed);
+        } else {
+            lbuf.pattern_check(m_seed);
+        }
+    }
+
+    /* Check the lane distances in the configuration of the remote key of
+     * @a rkey_cfg_index for the current endpoint configuration */
+    void check_lanes_distance(ucp_worker_cfg_index_t rkey_cfg_index)
+    {
+        ucp_worker_h worker       = sender().worker();
+        ucp_rkey_config_key_t key = ucp_worker_rkey_config(worker,
+                                                           rkey_cfg_index)->key;
+        const ucp_ep_config_key_t *ep_config_key;
+        const ucp_rkey_config_t *rkey_config;
+        ucs_sys_dev_distance_t expected;
+        sys_dev_set_t lane_sys_devs;
+        ucs_sys_device_t sys_dev;
+        ucp_lane_index_t lane;
+        khiter_t iter;
+
+        ASSERT_EQ(s_mem_sys_dev, key.sys_dev);
+
+        key.ep_cfg_index = ep_config_index(sender());
+        iter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash, key);
+        ASSERT_NE(kh_end(&worker->rkey_config_hash), iter)
+                << "no rkey configuration for ep configuration "
+                << key.ep_cfg_index;
+
+        rkey_config   = ucp_worker_rkey_config(
+                worker, kh_val(&worker->rkey_config_hash, iter));
+        ep_config_key = &ucp_worker_ep_config(worker, key.ep_cfg_index)->key;
+        for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
+            sys_dev  = ep_config_key->lanes[lane].dst_sys_dev;
+            expected = lane_distance(sys_dev);
+            lane_sys_devs.insert(sys_dev);
+            EXPECT_DOUBLE_EQ(expected.latency,
+                             rkey_config->lanes_distance[lane].latency)
+                    << "lane " << static_cast<int>(lane);
+            EXPECT_DOUBLE_EQ(expected.bandwidth,
+                             rkey_config->lanes_distance[lane].bandwidth)
+                    << "lane " << static_cast<int>(lane);
+        }
+
+        for (const auto &entry : s_mem_distance) {
+            EXPECT_EQ(1u, lane_sys_devs.count(entry.first))
+                    << "no lane to sys_dev " << static_cast<int>(entry.first);
+        }
+    }
+
+    bool is_lane_failed(ucp_lane_index_t lane)
+    {
+        return (ucp_ep_get_failed_lanes(sender().ep()) & UCS_BIT(lane)) != 0;
+    }
+
+    static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
+    {
+        ADD_FAILURE() << "endpoint " << ep << " failed: "
+                      << ucs_status_string(status);
+    }
+
+    /* Distance of a lane to @a sys_dev, as unpacked from the remote key */
+    static ucs_sys_dev_distance_t lane_distance(ucs_sys_device_t sys_dev)
+    {
+        ucs_sys_dev_distance_t distance;
+
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            return ucs_topo_default_distance;
+        }
+
+        get_distance(s_mem_sys_dev, sys_dev, &distance);
+        distance.latency   = ucp_wireup_fp8_pack_unpack_latency(
+                distance.latency);
+        distance.bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance.bandwidth);
+        return distance;
+    }
+
+    static ucs_status_t get_distance(ucs_sys_device_t device1,
+                                     ucs_sys_device_t device2,
+                                     ucs_sys_dev_distance_t *distance)
+    {
+        ucs_sys_device_t device = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        if (device1 == s_mem_sys_dev) {
+            device = device2;
+        } else if (device2 == s_mem_sys_dev) {
+            device = device1;
+        }
+
+        auto iter = s_mem_distance.find(device);
+        *distance = (iter == s_mem_distance.end()) ? ucs_topo_default_distance :
+                                                     iter->second;
+        return UCS_OK;
+    }
+
+    static void
+    get_memory_distance(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+    }
+
+    static void
+    get_memory_distance_for_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
+                                   ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+    }
+
+    bool     m_topo_pushed;
+    uint64_t m_seed;
+
+    static ucs_sys_device_t                                   s_mem_sys_dev;
+    static std::map<ucs_sys_device_t, ucs_sys_dev_distance_t> s_mem_distance;
+};
+
+ucs_sys_device_t test_ucp_proto_mock_rcx_rkey_reconfig::s_mem_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
+std::map<ucs_sys_device_t, ucs_sys_dev_distance_t>
+        test_ucp_proto_mock_rcx_rkey_reconfig::s_mem_distance;
+
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, put_after_speed_change,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_reconfig(UCP_OP_ID_PUT,
+                  [this]() { set_port_speed("mock_0:1", 14e9); }, false);
+}
+#endif
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, put_after_failover,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_reconfig(UCP_OP_ID_PUT, [this]() { fail_rma_lane(true); }, false);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, get_after_failover,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_reconfig(UCP_OP_ID_GET, [this]() { fail_rma_lane(true); }, false);
+}
+
+/* With no progress since the lane failed, the operation sends a fragment on
+ * it, which fails */
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, put_restart,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_reconfig(UCP_OP_ID_PUT, [this]() { fail_rma_lane(false); }, true);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, get_restart,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    test_reconfig(UCP_OP_ID_GET, [this]() { fail_rma_lane(false); }, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_rkey_reconfig, rcx,
+                              "rc_x")

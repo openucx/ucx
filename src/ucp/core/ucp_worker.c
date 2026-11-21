@@ -2703,6 +2703,62 @@ err:
     return status;
 }
 
+ucs_status_t
+ucp_worker_rkey_config_switch_ep(ucp_worker_h worker,
+                                 ucp_worker_cfg_index_t rkey_cfg_index,
+                                 ucp_worker_cfg_index_t ep_cfg_index,
+                                 ucp_worker_cfg_index_t *cfg_index_p)
+{
+    const ucp_rkey_config_t *rkey_config = ucp_worker_rkey_config(
+            worker, rkey_cfg_index);
+    ucp_rkey_config_key_t key            = rkey_config->key;
+    const ucp_ep_config_key_t *old_key, *new_key;
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucp_lane_index_t lane, old_lane;
+    khiter_t khiter;
+
+    if (key.ep_cfg_index == ep_cfg_index) {
+        *cfg_index_p = rkey_cfg_index;
+        return UCS_OK;
+    }
+
+    old_key          = &ucp_worker_ep_config(worker, key.ep_cfg_index)->key;
+    key.ep_cfg_index = ep_cfg_index;
+    khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash, key);
+    if (khiter != kh_end(&worker->rkey_config_hash)) {
+        *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
+        return UCS_OK;
+    }
+
+    if (key.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return ucp_worker_add_rkey_config(worker, &key, NULL, cfg_index_p);
+    }
+
+    /* A lane takes the distance of an old lane to the same remote device, as
+     * ucp_rkey_unpack_lanes_distance() sets it. Prefer the same local
+     * resource: an rkey configuration made for rndv protocol estimation has
+     * the distances of local devices. */
+    new_key = &ucp_worker_ep_config(worker, ep_cfg_index)->key;
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
+        lanes_distance[lane] = ucs_topo_default_distance;
+        for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
+            if (old_key->lanes[old_lane].dst_sys_dev !=
+                new_key->lanes[lane].dst_sys_dev) {
+                continue;
+            }
+
+            lanes_distance[lane] = rkey_config->lanes_distance[old_lane];
+            if (old_key->lanes[old_lane].rsc_index ==
+                new_key->lanes[lane].rsc_index) {
+                break;
+            }
+        }
+    }
+
+    return ucp_worker_add_rkey_config(worker, &key, lanes_distance,
+                                      cfg_index_p);
+}
+
 static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
     worker->keepalive.timerfd     = -1;
