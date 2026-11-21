@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1366,8 +1366,12 @@ extern uct_tl_t UCT_TL_NAME(ud_mlx5);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
 
+UCT_IB_MLX5_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_DEFINE)
+
 void UCS_F_CTOR uct_mlx5_init(void)
 {
+    UCT_IB_MLX5_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_LOAD, mlx5dv_query_device)
+
 #if defined (HAVE_MLX5_DV)
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(dv).list);
 #endif

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term "Broadcom"
 * refers to Broadcom Inc. and/or its subsidiaries.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
@@ -1581,8 +1581,13 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
     uint64_t port_speed;
     int ret;
 
-    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
-                               &port_speed);
+    if (UCT_IB_OPTIONAL_FUNC(ibv_query_port_speed) == NULL) {
+        return 0.0;
+    }
+
+    ret = UCT_IB_OPTIONAL_FUNC(ibv_query_port_speed)(dev->ibv_context,
+                                                     iface->config.port_num,
+                                                     &port_speed);
     if (ret != 0) {
         log_level = ((errno == EOPNOTSUPP) ||
                      (errno == EPROTONOSUPPORT) ||

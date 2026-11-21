@@ -35,7 +35,7 @@
 ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
-#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+#if UCT_IB_MLX5_HAVE_DIRECT_NIC
     struct ibv_context *ctx     = dev->ibv_context;
     ucs_sys_device_t sys_dev_ib = dev->sys_dev;
     char sys_path[PATH_MAX];
@@ -56,7 +56,20 @@ uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
         goto out;
     }
 
-    ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
+    if ((UCT_IB_OPTIONAL_FUNC(mlx5dv_get_data_direct_sysfs_path) == NULL) ||
+        (UCT_IB_OPTIONAL_FUNC(mlx5dv_reg_dmabuf_mr) == NULL)) {
+        ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() %s, "
+                  "mlx5dv_reg_dmabuf_mr() %s",
+                  uct_ib_device_name(dev),
+                  (UCT_IB_OPTIONAL_FUNC(mlx5dv_get_data_direct_sysfs_path) !=
+                   NULL) ? "found" : "missing",
+                  (UCT_IB_OPTIONAL_FUNC(mlx5dv_reg_dmabuf_mr) != NULL) ?
+                          "found" : "missing");
+        goto out_not_supported;
+    }
+
+    ret = UCT_IB_OPTIONAL_FUNC(mlx5dv_get_data_direct_sysfs_path)(
+            ctx, sys_path, sizeof(sys_path));
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
                   uct_ib_device_name(dev), ret);
@@ -82,7 +95,8 @@ out_not_supported:
 out:
 #else
     ucs_debug("%s: direct NIC is disabled because declaration of "
-              "mlx5dv_get_data_direct_sysfs_path was not found",
+              "mlx5dv_get_data_direct_sysfs_path or mlx5dv_reg_dmabuf_mr was "
+              "not found",
               uct_ib_device_name(dev));
 #endif
     return UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -782,12 +796,13 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
                               const uct_md_mem_reg_params_t *params,
                               uint64_t access_flags)
 {
-#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
+#if UCT_IB_MLX5_HAVE_DIRECT_NIC
     int dmabuf_fd;
     size_t dmabuf_offset;
     struct ibv_mr *mr;
     ucs_time_t UCS_V_UNUSED start_time;
 
+    /* Known only when both optional Direct NIC functions were found */
     if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return NULL;
     }
@@ -803,11 +818,11 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
     access_flags  = uct_ib_md_access_flags(&md->super, access_flags);
     start_time    = ucs_get_time();
 
-    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd, 0,
-                                 length + dmabuf_offset,
-                                 (uintptr_t)address - dmabuf_offset, dmabuf_fd,
-                                 access_flags,
-                                 MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
+    mr = UCS_PROFILE_NAMED_CALL_ALWAYS(
+            "mlx5dv_reg_dmabuf_mr", UCT_IB_OPTIONAL_FUNC(mlx5dv_reg_dmabuf_mr),
+            md->super.pd, 0, length + dmabuf_offset,
+            (uintptr_t)address - dmabuf_offset, dmabuf_fd, access_flags,
+            MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
     if (mr == NULL) {
         ucs_debug("mlx5dv_reg_dmabuf_mr() failed: %m");
         return NULL;

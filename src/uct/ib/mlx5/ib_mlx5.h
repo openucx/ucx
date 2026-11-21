@@ -1400,6 +1400,20 @@ static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
     return uct_ib_device_name(&md->super.dev);
 }
 
+/* libmlx5 functions added after rdma-core 50. Direct NIC needs both. */
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH && \
+    HAVE_DECL_MLX5DV_REG_DMABUF_MR
+#  define UCT_IB_MLX5_HAVE_DIRECT_NIC 1
+#  define UCT_IB_MLX5_OPTIONAL_FUNCS(_macro, ...) \
+      _macro(mlx5dv_get_data_direct_sysfs_path, ##__VA_ARGS__) \
+      _macro(mlx5dv_reg_dmabuf_mr, ##__VA_ARGS__)
+#else
+#  define UCT_IB_MLX5_HAVE_DIRECT_NIC 0
+#  define UCT_IB_MLX5_OPTIONAL_FUNCS(_macro, ...)
+#endif
+
+UCT_IB_MLX5_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_DECLARE)
+
 ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled);
 
