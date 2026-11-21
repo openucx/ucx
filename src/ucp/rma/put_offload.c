@@ -18,8 +18,6 @@
 #include <ucp/proto/proto_single.inl>
 
 
-extern ucp_proto_t ucp_put_am_bcopy_proto;
-
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
@@ -428,7 +426,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_func(
-            req, lpriv, next_iter, ucp_proto_put_sgl_offload_post);
+            req, lpriv, 0, next_iter, ucp_proto_put_sgl_offload_post, NULL);
 }
 
 static ucs_status_t
@@ -515,7 +513,8 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_frags(
-            req, lpriv, 1, next_iter, ucp_proto_put_sgl_offload_sw_post);
+            req, lpriv, 1, 0, next_iter, ucp_proto_put_sgl_offload_sw_post,
+            NULL);
 }
 
 static ucs_status_t
@@ -545,7 +544,7 @@ ucp_proto_t ucp_put_sgl_offload_sw_proto = {
     .reset          = ucp_proto_offload_zcopy_reset
 };
 
-static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)
+static void ucp_proto_rma_sgl_contig_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -555,7 +554,7 @@ static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)
     ucp_request_complete_send(req, self->status);
 }
 
-static void ucp_proto_put_sgl_contig_elem_complete(void *request,
+static void ucp_proto_rma_sgl_contig_elem_complete(void *request,
                                                    ucs_status_t status,
                                                    void *user_data)
 {
@@ -567,7 +566,7 @@ static void ucp_proto_put_sgl_contig_elem_complete(void *request,
 }
 
 static ucs_status_t
-ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
+ucp_proto_rma_sgl_contig_send_elem(ucp_request_t *req, size_t index,
                                    size_t elem_offset, uint32_t fence_flag)
 {
     ucp_ep_h ep                  = req->send.ep;
@@ -584,7 +583,7 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
                         (ucp_proto_select_op_attr_unpack(
                                  req->send.proto_config->select_param.op_attr) &
                          UCP_PROTO_SELECT_OP_ATTR_MASK),
-        .cb.send      = ucp_proto_put_sgl_contig_elem_complete,
+        .cb.send      = ucp_proto_rma_sgl_contig_elem_complete,
         .user_data    = req
     };
     ucp_request_t *elem_req;
@@ -595,19 +594,20 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
         return UCS_ERR_NO_MEMORY;
     }
 
-    elem_req->send.rma.rkey        = rkey;
-    elem_req->send.rma.remote_addr = req->send.rma.sgl.remote_addrs[index] +
-                                     elem_offset;
+    elem_req->send.rma.rkey             = rkey;
+    elem_req->send.rma.remote_addr      = req->send.rma.sgl.remote_addrs[index] +
+                                          elem_offset;
+    elem_req->send.state.completed_size = 0;
 
     if (dt_iter->type.sgl.memhs != NULL) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
         param.memh          = dt_iter->type.sgl.memhs[index];
     }
 
-    sptr = ucp_proto_request_send_op_rma(ep, rkey, elem_req, fence_flag,
-                                         UCP_OP_ID_PUT, buffer, length,
-                                         ucp_dt_make_contig(1), length, &param,
-                                         0, 0);
+    sptr = ucp_proto_request_send_op_rma(
+            ep, rkey, elem_req, fence_flag,
+            ucp_proto_select_op_id(&req->send.proto_config->select_param),
+            buffer, length, ucp_dt_make_contig(1), length, &param, 0, 0);
     if (UCS_PTR_IS_PTR(sptr)) {
         ++req->send.state.uct_comp.count;
         return UCS_OK;
@@ -616,7 +616,7 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     return UCS_PTR_STATUS(sptr);
 }
 
-static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
+ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req    = ucs_container_of(self, ucp_request_t,
                                              send.uct);
@@ -628,7 +628,7 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
     size_t index;
 
     ucp_proto_completion_init(&req->send.state.uct_comp,
-                              ucp_proto_put_sgl_contig_completion);
+                              ucp_proto_rma_sgl_contig_completion);
 
     for (index = req->send.state.dt_iter.offset; index < count;
          ++index, elem_offset = 0) {
@@ -636,7 +636,7 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
             continue;
         }
 
-        status = ucp_proto_put_sgl_contig_send_elem(req, index, elem_offset,
+        status = ucp_proto_rma_sgl_contig_send_elem(req, index, elem_offset,
                                                     fence_flag);
         if (status != UCS_OK) {
             break;
@@ -654,7 +654,7 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
 }
 
 static void
-ucp_proto_put_sgl_contig_add_variant(
+ucp_proto_rma_sgl_contig_add_variant(
         const ucp_proto_init_params_t *init_params,
         ucp_proto_init_elem_t *proto)
 {
@@ -678,7 +678,7 @@ ucp_proto_put_sgl_contig_add_variant(
                                0, perf, NULL, 0);
 }
 
-static int ucp_proto_put_sgl_contig_has_native(
+static int ucp_proto_rma_sgl_contig_has_native(
         const ucp_proto_init_params_t *init_params)
 {
     const ucp_proto_select_init_protocols_t *protos = init_params->ctx;
@@ -695,9 +695,12 @@ static int ucp_proto_put_sgl_contig_has_native(
 }
 
 /* Fallback for memory without a direct SGL path: send each element as a
- * contiguous PUT, which can use any contig PUT protocol (e.g. put/rndv) */
-static void
-ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
+ * contiguous operation, which can use any contig protocol (e.g. rndv). The
+ * software emulation of the contig operation is not used, since the SGL
+ * operation has its own emulation. */
+void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
+                                    ucp_operation_id_t op_id,
+                                    const ucp_proto_t *emulation_proto)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_proto_select_init_protocols_t *proto_init;
@@ -706,15 +709,15 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_init_elem_t *proto;
     ucp_memory_info_t mem_info;
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         (select_param->dt_class != UCP_DATATYPE_SGL) ||
         (init_params->rkey_config_key == NULL) ||
-        ucp_proto_put_sgl_contig_has_native(init_params)) {
+        ucp_proto_rma_sgl_contig_has_native(init_params)) {
         return;
     }
 
     mem_info = ucp_proto_common_select_param_mem_info(select_param);
-    ucp_proto_select_param_init(&contig_sel_param, UCP_OP_ID_PUT,
+    ucp_proto_select_param_init(&contig_sel_param, op_id,
                                 ucp_proto_select_op_attr_unpack(
                                         select_param->op_attr),
                                 0, UCP_DATATYPE_CONTIG, &mem_info, 1);
@@ -728,12 +731,19 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
     /* Elements are selected again at send time, variants only model their
      * perf */
     ucs_array_for_each(proto, &proto_init->protocols) {
-        if ((ucp_protocols[proto->proto_id] != &ucp_put_am_bcopy_proto) &&
+        if ((ucp_protocols[proto->proto_id] != emulation_proto) &&
             !(ucp_proto_id_field(proto->proto_id, flags) &
               UCP_PROTO_FLAG_INVALID)) {
-            ucp_proto_put_sgl_contig_add_variant(init_params, proto);
+            ucp_proto_rma_sgl_contig_add_variant(init_params, proto);
         }
     }
+}
+
+static void
+ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_rma_sgl_contig_probe(init_params, UCP_OP_ID_PUT,
+                                   &ucp_put_am_bcopy_proto);
 }
 
 ucp_proto_t ucp_put_sgl_contig_proto = {
@@ -744,7 +754,7 @@ ucp_proto_t ucp_put_sgl_contig_proto = {
     .dt_mask     = UCS_BIT(UCP_DATATYPE_SGL),
     .probe       = ucp_proto_put_sgl_contig_probe,
     .query       = ucp_proto_default_query,
-    .progress    = {ucp_proto_put_sgl_contig_progress},
+    .progress    = {ucp_proto_rma_sgl_contig_progress},
     .abort       = ucp_proto_request_zcopy_abort,
     .reset       = (ucp_request_reset_func_t)
                    ucp_proto_reset_fatal_not_implemented

@@ -8,6 +8,7 @@
 #define UCP_RMA_H_
 
 #include <ucp/core/ucp_types.h>
+#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.h>
 #include <uct/api/uct.h>
 
@@ -84,6 +85,21 @@ extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
 extern const ucp_amo_proto_t *ucp_amo_proto_list[];
+
+
+extern ucp_proto_t ucp_put_am_bcopy_proto;
+extern ucp_proto_t ucp_get_am_bcopy_proto;
+
+
+/**
+ * Common implementation of the SGL protocols which send each element as a
+ * contiguous operation of the same type
+ */
+ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self);
+
+void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
+                                    ucp_operation_id_t op_id,
+                                    const ucp_proto_t *emulation_proto);
 
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
