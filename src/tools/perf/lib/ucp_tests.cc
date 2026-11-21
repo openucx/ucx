@@ -1194,7 +1194,7 @@ private:
     {
         void *buffer = NULL;
 
-        buffer = malloc(buffer_length);
+        buffer = calloc(1, buffer_length);
         if (buffer == NULL) {
             ucs_error("failed to allocate validation buffer of %zu bytes",
                       buffer_length);
