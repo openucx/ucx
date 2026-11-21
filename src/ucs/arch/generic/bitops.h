@@ -1,11 +1,12 @@
 /**
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Na Zhang, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
-#ifndef UCS_ARCH_RV64_BITOPS_H_
-#define UCS_ARCH_RV64_BITOPS_H_
+#ifndef UCS_GENERIC_BITOPS_H_
+#define UCS_GENERIC_BITOPS_H_
 
 #include <ucs/sys/compiler_def.h>
 #include <stdint.h>
