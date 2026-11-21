@@ -1108,6 +1108,10 @@ ucp_worker_ep_path_bw_update(ucp_ep_h ep, const ucp_worker_iface_t *wiface,
                   bandwidth);
         ucp_worker_ep_path_bw_set(state, lane, UCP_EP_PATH_BW_OP_PUT,
                                   bandwidth, path_bandwidth);
+        /* Get is balanced by the samples of put.
+         * TODO: measure the bandwidth of get, and balance get by it */
+        state->bandwidth[lane][UCP_EP_PATH_BW_OP_GET] =
+                state->bandwidth[lane][UCP_EP_PATH_BW_OP_PUT];
     }
 
     if (state == NULL) {

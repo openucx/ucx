@@ -65,10 +65,11 @@ static UCS_F_ALWAYS_INLINE const ucp_proto_multi_lane_priv_t *
 ucp_proto_rma_lane_priv(ucp_request_t *req,
                         const ucp_proto_multi_priv_t *mpriv,
                         const ucp_proto_multi_lane_priv_t *lpriv,
+                        ucp_ep_path_bw_op_t op,
                         ucp_proto_multi_lane_priv_t *adjusted)
 {
     if (ucs_unlikely(req->send.ep->flags & UCP_EP_FLAG_PATH_DEGRADED)) {
-        return ucp_proto_rma_adjust_lane(req, mpriv, lpriv, adjusted);
+        return ucp_proto_rma_adjust_lane(req, mpriv, lpriv, op, adjusted);
     }
 
     return lpriv;
