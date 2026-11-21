@@ -251,18 +251,23 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 
     ucs_trace_func("ep=%p", ep);
 
+    /* No TX window during the purge: a completion callback that sends on this
+     * EP gets UCS_ERR_NO_RESOURCE instead of adding a packet which this purge
+     * would not release */
+    uct_ud_ep_tx_stop(ep);
     uct_ud_iface_dispatch_async_comps(iface, ep);
 
-    /* reset the maximal TX psn value to the default, since we should be able
-     * to do TX operation after purging of the EP and uct_ep_flush(LOCAL)
-     * operation has to return UCS_OK */
-    uct_ud_ep_reset_max_psn(ep);
     uct_ud_ep_purge_outstanding(ep);
     uct_ud_ep_ctl_op_del(ep, ep->tx.pending.ops);
     ucs_arbiter_group_desched(&iface->tx.pending_q, &ep->tx.pending.group);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     uct_ud_ep_window_release(ep, status, 0);
     ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+
+    /* reset the maximal TX psn value to the default, since we should be able
+     * to do TX operation after purging of the EP and uct_ep_flush(LOCAL)
+     * operation has to return UCS_OK */
+    uct_ud_ep_reset_max_psn(ep);
 }
 
 static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
