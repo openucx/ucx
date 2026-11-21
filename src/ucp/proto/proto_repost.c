@@ -40,104 +40,6 @@ typedef struct {
 } ucp_proto_repost_pack_t;
 
 
-typedef struct {
-    uct_completion_t comp;
-    ucp_request_t    *origin;
-    size_t           first_index; /* SIZE_MAX for an explicit index list */
-    size_t           count;
-    size_t           indices[UCP_MAX_IOV];
-} ucp_proto_repost_sgl_t;
-
-
-static void ucp_proto_repost_sgl_complete(uct_completion_t *comp)
-{
-    ucp_proto_repost_sgl_t *batch = ucs_container_of(comp,
-                                                     ucp_proto_repost_sgl_t,
-                                                     comp);
-    uct_completion_t *origin      = &batch->origin->send.state.uct_comp;
-    ucs_status_t status           = comp->status;
-
-    ucs_mpool_put_inline(batch);
-    ucp_invoke_uct_completion(origin, status);
-}
-
-ucs_status_t ucp_proto_repost_init_mpool(ucp_worker_h worker)
-{
-    static ucs_mpool_ops_t ops = {
-        .chunk_alloc   = ucs_mpool_chunk_malloc,
-        .chunk_release = ucs_mpool_chunk_free
-    };
-    ucs_mpool_params_t params;
-
-    ucs_mpool_params_reset(&params);
-    params.elem_size       = sizeof(ucp_proto_repost_sgl_t);
-    params.elems_per_chunk = 128;
-    params.ops             = &ops;
-    params.name            = "ucp_sgl_repost";
-    return ucs_mpool_init(&params, &worker->sgl_repost_mp);
-}
-
-static uct_completion_t *
-ucp_proto_repost_sgl_completion(ucp_request_t *origin, const size_t *indices,
-                                size_t count)
-{
-    ucp_worker_h worker = origin->send.ep->worker;
-    ucp_proto_repost_sgl_t *batch;
-
-    batch = ucs_mpool_get_inline(&worker->sgl_repost_mp);
-    if (batch == NULL) {
-        return NULL;
-    }
-
-    batch->origin      = origin;
-    batch->first_index = (indices == NULL) ? origin->send.state.dt_iter.offset :
-                                             SIZE_MAX;
-    batch->count       = count;
-    if (indices != NULL) {
-        ucs_assert(count <= ucs_static_array_size(batch->indices));
-        memcpy(batch->indices, indices, count * sizeof(*indices));
-    }
-    batch->comp.func   = ucp_proto_repost_sgl_complete;
-    batch->comp.count  = 1;
-    batch->comp.status = UCS_OK;
-    return &batch->comp;
-}
-
-static void ucp_proto_repost_sgl_release(uct_completion_t *comp)
-{
-    ucs_mpool_put_inline(ucs_container_of(comp, ucp_proto_repost_sgl_t, comp));
-}
-
-
-ucs_status_t ucp_proto_repost_sgl_zcopy(
-        ucp_request_t *origin, uct_ep_h ep, uct_ep_operation_t operation,
-        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
-        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
-        const size_t *indices)
-{
-    uct_completion_t *comp;
-    ucs_status_t status;
-
-    comp = ucp_proto_repost_sgl_completion(origin, indices, count);
-    if (comp == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-    ucs_assert((operation == UCT_EP_OP_PUT_ZCOPY) ||
-               (operation == UCT_EP_OP_GET_ZCOPY));
-    if (operation == UCT_EP_OP_PUT_ZCOPY) {
-        status = uct_ep_put_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
-                                      rkeys, NULL, NULL, count, comp);
-    } else {
-        status = uct_ep_get_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
-                                      rkeys, NULL, NULL, count, comp);
-    }
-    if (status != UCS_INPROGRESS) {
-        ucp_proto_repost_sgl_release(comp);
-    }
-    return status;
-}
-
-
 static size_t ucp_proto_repost_pack(void *dest, void *arg)
 {
     ucp_proto_repost_pack_t *pack = arg;
@@ -374,123 +276,9 @@ static ucp_request_t *ucp_proto_repost_origin_req(const ucp_request_t *req)
     }
 
     ucs_assert(origin->func != ucp_ep_flush_mem_completion);
-    if (origin->func == ucp_proto_repost_sgl_complete) {
-        return ucs_container_of(origin, ucp_proto_repost_sgl_t, comp)->origin;
-    }
     origin_req = ucs_container_of(origin, ucp_request_t, send.state.uct_comp);
     ucs_assert(origin_req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
     return origin_req;
-}
-
-static int ucp_proto_repost_sgl_contains(const ucp_request_t *origin,
-                                         const uct_ep_op_info_t *info,
-                                         size_t index, size_t offset)
-{
-    const ucp_datatype_iter_t *iter = &origin->send.state.dt_iter;
-    const uct_iov_t *iov            = info->rma.payload.zcopy.iov;
-    size_t length                   = iter->type.sgl.lengths[index];
-    size_t i;
-
-    if (offset > length) {
-        return 0;
-    }
-    for (i = 0; i < info->rma.payload.zcopy.iovcnt; ++i) {
-        if ((iov[i].count != 1) || (iov[i].length > (length - offset)) ||
-            (iov[i].buffer !=
-             UCS_PTR_BYTE_OFFSET(iter->type.sgl.buffers[index], offset))) {
-            return 0;
-        }
-        offset += iov[i].length;
-    }
-    return 1;
-}
-
-static ucs_status_t
-ucp_proto_repost_sgl_index(ucp_request_t *req, size_t *index_p)
-{
-    ucp_request_t *origin  = ucp_proto_repost_origin_req(req);
-    uct_ep_op_info_t *info = req->send.repost.info;
-    uct_completion_t *comp = ucp_proto_repost_origin_comp(req);
-    ucp_proto_repost_sgl_t *batch;
-    size_t index, offset, found = SIZE_MAX;
-    uintptr_t address, base;
-    uint64_t remote;
-
-    if ((info->operation != UCT_EP_OP_PUT_ZCOPY) &&
-        (info->operation != UCT_EP_OP_GET_ZCOPY)) {
-        ucs_debug("repost %p: SGL replay requires a zcopy operation", req);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if ((origin == NULL) || (comp == NULL)) {
-        ucs_debug("repost %p: missing original SGL request or completion", req);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (comp->func == ucp_proto_repost_sgl_complete) {
-        batch = ucs_container_of(comp, ucp_proto_repost_sgl_t, comp);
-        if (!(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL_INDEX) ||
-            (info->sgl_index >= batch->count)) {
-            ucs_debug("repost %p: missing or invalid SGL batch index (count %zu)",
-                      req, batch->count);
-            return UCS_ERR_INVALID_PARAM;
-        }
-        index = (batch->first_index != SIZE_MAX) ?
-                batch->first_index + info->sgl_index :
-                batch->indices[info->sgl_index];
-        if (index >= origin->send.state.dt_iter.length) {
-            ucs_debug("repost %p: SGL element %zu exceeds count %zu", req, index,
-                      origin->send.state.dt_iter.length);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        offset = 0;
-        if (info->rma.payload.zcopy.iovcnt != 0) {
-            address = (uintptr_t)info->rma.payload.zcopy.iov[0].buffer;
-            base = (uintptr_t)origin->send.state.dt_iter.type.sgl.buffers[index];
-            if (address < base) {
-                ucs_debug("repost %p: fragment precedes SGL element %zu", req,
-                          index);
-                return UCS_ERR_INVALID_PARAM;
-            }
-            offset = address - base;
-        }
-        if (!ucp_proto_repost_sgl_contains(origin, info, index, offset)) {
-            ucs_debug("repost %p: fragment exceeds SGL element %zu at offset %zu",
-                      req, index, offset);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        /* WQE addresses can include a transport alias, e.g. for fenced PUT.
-         * The UCP element and local IOV retain the logical destination. */
-        info->rma.remote_addr = origin->send.rma.sgl.remote_addrs[index] +
-                                offset;
-        *index_p              = index;
-        return UCS_OK;
-    }
-
-    /* Legacy single-fragment submissions have no batch metadata. Accept only
-     * an unambiguous match; selecting the first overlapping range is unsafe. */
-    for (index = 0; index < origin->send.state.dt_iter.length; ++index) {
-        remote = origin->send.rma.sgl.remote_addrs[index];
-        if ((info->rma.remote_addr < remote) ||
-            !ucp_proto_repost_sgl_contains(origin, info, index,
-                                           info->rma.remote_addr - remote)) {
-            continue;
-        }
-        if (found != SIZE_MAX) {
-            ucs_debug("repost %p: ambiguous SGL elements %zu and %zu", req,
-                      found, index);
-            return UCS_ERR_INVALID_PARAM;
-        }
-        found = index;
-    }
-    if (found == SIZE_MAX) {
-        ucs_debug("repost %p: fragment does not match any SGL element", req);
-        return UCS_ERR_INVALID_PARAM;
-    }
-    *index_p = found;
-    return UCS_OK;
 }
 
 static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
@@ -511,14 +299,13 @@ static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
 
 static ucs_status_t
 ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
-                         uct_rkey_t *tl_rkey_p, size_t *sgl_index_p)
+                         uct_rkey_t *tl_rkey_p)
 {
     const uct_ep_op_info_t *info = req->send.repost.info;
     ucp_request_t *origin;
     ucp_md_index_t dst_md_index;
     ucp_rkey_h rkey;
     unsigned rkey_index;
-    ucs_status_t status;
 
     if (ucp_proto_repost_origin_comp(req) == NULL) {
         *tl_rkey_p = info->rma.rkey;
@@ -530,15 +317,7 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
         return UCS_ERR_UNREACHABLE;
     }
 
-    if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
-        status = ucp_proto_repost_sgl_index(req, sgl_index_p);
-        if (status != UCS_OK) {
-            return status;
-        }
-        rkey = origin->send.rma.sgl.rkeys[*sgl_index_p];
-    } else {
-        rkey = ucp_proto_repost_origin_rkey(origin);
-    }
+    rkey = ucp_proto_repost_origin_rkey(origin);
     if (rkey == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
@@ -556,8 +335,7 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
 
 /* Copied zcopy IOV still holds the failed device memory handle. */
 static ucs_status_t
-ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane,
-                            size_t sgl_index)
+ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
 {
     uct_ep_op_info_t *op_info = req->send.repost.info;
     ucp_request_t *origin     = ucp_proto_repost_origin_req(req);
@@ -567,22 +345,12 @@ ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane,
     uct_iov_t *iov;
     size_t i;
 
-    if (origin == NULL) {
+    if ((origin == NULL) ||
+        (origin->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNREACHABLE;
     }
 
-    if (op_info->rma.payload.zcopy.iovcnt == 0) {
-        return UCS_OK;
-    }
-
-    if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
-        memh = (origin->send.state.dt_iter.type.sgl.memhs == NULL) ? NULL :
-                origin->send.state.dt_iter.type.sgl.memhs[sgl_index];
-    } else if (origin->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
-        memh = origin->send.state.dt_iter.type.contig.memh;
-    } else {
-        return UCS_ERR_UNREACHABLE;
-    }
+    memh     = origin->send.state.dt_iter.type.contig.memh;
     md_index = ucp_ep_md_index(req->send.ep, lane);
     if ((memh == NULL) || !(memh->md_map & UCS_BIT(md_index))) {
         return UCS_ERR_UNREACHABLE;
@@ -637,7 +405,6 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
     const uct_ep_op_info_t *info         = req->send.repost.info;
     uct_rkey_t tl_rkey                   = UCT_INVALID_RKEY;
-    size_t sgl_index                     = 0;
     ucp_proto_repost_pack_t pack;
     uct_completion_t *comp;
     ucs_status_t status;
@@ -664,8 +431,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         (info->operation == UCT_EP_OP_PUT_ZCOPY) ||
         (info->operation == UCT_EP_OP_GET_BCOPY) ||
         (info->operation == UCT_EP_OP_GET_ZCOPY)) {
-        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey,
-                                          &sgl_index);
+        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey);
         if (status != UCS_OK) {
             ucp_proto_repost_abort(req, status);
             return UCS_OK;
@@ -699,7 +465,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane, sgl_index);
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
         if (status != UCS_OK) {
             break;
         }
@@ -715,7 +481,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
                                   info->rma.remote_addr, tl_rkey, comp);
         break;
     case UCT_EP_OP_GET_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane, sgl_index);
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
         if (status != UCS_OK) {
             break;
         }
@@ -825,6 +591,18 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
                       uct_ep_operation_names[op_info->operation]);
         ucp_proto_request_restart(req);
         return UCS_OK;
+    }
+
+    /* Cancel SGL fragments and let the original request restart after all
+     * posted batches have drained. No fragment descriptors need to be saved. */
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL) &&
+        (op_info->comp->func == ucp_proto_request_zcopy_completion)) {
+        req = ucs_container_of(op_info->comp, ucp_request_t,
+                               send.state.uct_comp);
+        if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
+            return UCS_ERR_CANCELED;
+        }
     }
 
     config = ucp_proto_repost_config(ep);

@@ -371,7 +371,6 @@ typedef struct ucp_worker {
     uint64_t                         client_id;           /* Worker client id for wireup */
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
-    ucs_mpool_t                      sgl_repost_mp;       /* SGL replay batches */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
@@ -493,6 +492,11 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                       const ucp_ep_config_key_t *key,
                                       unsigned ep_init_flags,
                                       ucp_worker_cfg_index_t *cfg_index_p);
+
+ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
+                                        ucp_worker_cfg_index_t rkey_cfg_index,
+                                        ucp_worker_cfg_index_t ep_cfg_index,
+                                        ucp_worker_cfg_index_t *new_cfg_index);
 
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,

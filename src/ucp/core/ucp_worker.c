@@ -17,7 +17,6 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
-#include <ucp/proto/proto_repost.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -2416,11 +2415,6 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_rkey_mp_cleanup;
     }
 
-    status = ucp_proto_repost_init_mpool(worker);
-    if (status != UCS_OK) {
-        goto err_reg_mp_cleanup;
-    }
-
     if (max_mp_entry_size > 0) {
         /* Create memory pool for incoming UCT messages without a UCT descriptor */
         status = ucs_mpool_set_init(&worker->am_mps,
@@ -2431,15 +2425,13 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
                                     0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                                     &ucp_am_mpool_ops, "ucp_am_bufs");
         if (status != UCS_OK) {
-            goto err_sgl_repost_mp_cleanup;
+            goto err_reg_mp_cleanup;
         }
         worker->flags |= UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
     }
 
     return UCS_OK;
 
-err_sgl_repost_mp_cleanup:
-    ucs_mpool_cleanup(&worker->sgl_repost_mp, 0);
 err_reg_mp_cleanup:
     ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_rkey_mp_cleanup:
@@ -2467,7 +2459,6 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->sgl_repost_mp, 1);
     if (worker->flags & UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED) {
         ucs_mpool_set_cleanup(&worker->am_mps, 1);
         worker->flags &= ~UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
@@ -2594,6 +2585,45 @@ static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
             key->md_map, key->ep_cfg_index, key->sys_dev,
             ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
 }
+
+ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
+                                        ucp_worker_cfg_index_t rkey_cfg_index,
+                                        ucp_worker_cfg_index_t ep_cfg_index,
+                                        ucp_worker_cfg_index_t *new_cfg_index)
+{
+    const ucp_rkey_config_t *old_config =
+            ucp_worker_rkey_config(worker, rkey_cfg_index);
+    const ucp_ep_config_key_t *old_key =
+            &ucs_array_elem(&worker->ep_config,
+                            old_config->key.ep_cfg_index).key;
+    const ucp_ep_config_key_t *new_key =
+            &ucs_array_elem(&worker->ep_config, ep_cfg_index).key;
+    ucp_rkey_config_key_t key = old_config->key;
+    ucs_sys_dev_distance_t distances[UCP_MAX_LANES];
+    ucp_lane_index_t lane, old_lane;
+
+    if (key.ep_cfg_index == ep_cfg_index) {
+        *new_cfg_index = rkey_cfg_index;
+        return UCS_OK;
+    }
+
+    /* Lane indices may change during recovery. Distances belong to remote
+     * devices, so retain them by device rather than by lane position. */
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
+        distances[lane] = ucs_topo_default_distance;
+        for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
+            if (new_key->lanes[lane].dst_sys_dev ==
+                old_key->lanes[old_lane].dst_sys_dev) {
+                distances[lane] = old_config->lanes_distance[old_lane];
+                break;
+            }
+        }
+    }
+
+    key.ep_cfg_index = ep_cfg_index;
+    return ucp_worker_rkey_config_get(worker, &key, distances, new_cfg_index);
+}
+
 
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,

@@ -328,13 +328,38 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
     return UCS_INPROGRESS;
 }
 
+static void ucp_ep_flush_schedule_restart(ucp_request_t *req)
+{
+    req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
+    ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q, req,
+                              ucp_ep_flush_failover_oneshot_cb, req);
+    ucp_worker_signal_internal(req->send.ep->worker);
+}
+
+static int ucp_ep_flush_defer_recovery(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    if (!(req->send.flush.uct_flags_orig & UCT_FLUSH_FLAG_CANCEL) &&
+        !(ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_FAILED)) &&
+        ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        (ucp_ep_recovery_arg(ep) != NULL)) {
+        /* Held operations can restart after the live lanes were flushed. */
+        ucp_ep_flush_schedule_restart(req);
+        return 1;
+    }
+
+    return 0;
+}
+
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
     ucs_status_t status;
 
     /* Check if flushed all lanes */
-    if (!ucp_ep_flush_is_completed(req)) {
+    if (!ucp_ep_flush_is_completed(req) ||
+        ucp_ep_flush_defer_recovery(req)) {
         return 0;
     }
 
@@ -511,6 +536,10 @@ static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg)
 
     ucp_trace_req(req, "flush restart");
     ucs_assert(req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING);
+    if (ucp_ep_flush_defer_recovery(req)) {
+        return 0;
+    }
+
     req->send.flush.lane_mask |= ucp_ep_get_live_lanes(req->send.ep);
     ucp_ep_flush_request_reset(req);
     ucp_ep_flush_progress(req);
@@ -550,11 +579,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
             ucp_trace_req(req,
                           "flush completion error: %s, scheduling failover "
                           "and restart", ucs_status_string(status));
-            req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
-            ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
-                                      req, ucp_ep_flush_failover_oneshot_cb,
-                                      req);
-            ucp_worker_signal_internal(req->send.ep->worker);
+            ucp_ep_flush_schedule_restart(req);
             return;
         }
 
@@ -657,7 +682,8 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
     ucp_request_set_send_callback_param(param, req, send);
     ucp_ep_flush_progress(req);
 
-    if (ucp_ep_flush_is_completed(req)) {
+    if (ucp_ep_flush_is_completed(req) &&
+        !ucp_ep_flush_defer_recovery(req)) {
         status = ucp_ep_flush_mem_start(req);
         if (status == UCS_OK) {
             status = req->status;

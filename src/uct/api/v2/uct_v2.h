@@ -1753,9 +1753,6 @@ typedef enum uct_ep_op_info_field {
 
     /** Enables @ref uct_ep_op_info_t::atomic. */
     UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(4),
-
-    /** Enables @ref uct_ep_op_info_t::sgl_index. */
-    UCT_EP_OP_INFO_FIELD_SGL_INDEX = UCS_BIT(5),
 } uct_ep_op_info_field_t;
 
 
@@ -1882,8 +1879,6 @@ typedef enum {
  * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY.
- *   @ref UCT_EP_OP_INFO_FIELD_SGL_INDEX optionally identifies the element
- *   within the SGL batch associated with @a comp.
  * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
@@ -1919,7 +1914,12 @@ typedef struct uct_ep_op_info {
      */
     uct_ep_operation_t operation;
 
-    /* Original completion. */
+    /**
+     * Original completion, when @ref UCT_EP_OP_INFO_FIELD_COMP is set. For an
+     * SGL batch, each reported element transfers one reference to the callback,
+     * which must complete it exactly once.
+     * The transport separately releases its original batch reference.
+     */
     uct_completion_t   *comp;
 
     union {
@@ -2006,13 +2006,6 @@ typedef struct uct_ep_op_info {
             size_t          size;
         } atomic;
     };
-
-    /**
-     * Index of this operation's element in the original UCT SGL submission.
-     * Valid with @ref UCT_EP_OP_INFO_FIELD_SGL_INDEX. The completion identifies
-     * the submission; addresses need not uniquely identify an element.
-     */
-    size_t sgl_index;
 } uct_ep_op_info_t;
 
 

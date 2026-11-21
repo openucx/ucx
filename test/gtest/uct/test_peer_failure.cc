@@ -1166,7 +1166,7 @@ protected:
                   completion_mode_t completion_mode = DEFERRED)
     {
         const unsigned count = 4;
-        const size_t stride  = 512;
+        const size_t stride  = 16 * UCS_KBYTE;
         const bool with_comp = completion_mode != NO_COMP;
         const auto operation = is_put ? UCT_EP_OP_PUT_ZCOPY :
                                        UCT_EP_OP_GET_ZCOPY;
@@ -1184,14 +1184,15 @@ protected:
         uct_rkey_t rkeys[count];
         for (unsigned i = 0; i < count; ++i) {
             buffers[i] = UCS_PTR_BYTE_OFFSET(local.ptr(), i * stride);
-            lengths[i] = (is_put && (i == 1)) ? 0 : 256;
+            lengths[i] = (is_put && (i == 1)) ? 0 :
+                         ((i == 0) && (delivered_prefix == 0)) ? 8193 : 256;
             memhs[i]   = local.memh();
             addrs[i]   = remote.addr() + i * stride;
             rkeys[i]   = remote.rkey();
-            mem_buffer::pattern_fill(buffers[i], 256, SEND_SEED + i);
+            mem_buffer::pattern_fill(buffers[i], lengths[i], SEND_SEED + i);
             mem_buffer::pattern_fill(UCS_PTR_BYTE_OFFSET(remote.ptr(),
                                                          i * stride),
-                                      256, RECV_SEED + i);
+                                      lengths[i], RECV_SEED + i);
         }
         struct replay_ctx {
             uct_completion_t comp;
@@ -1201,18 +1202,23 @@ protected:
             bool complete_inline;
             std::vector<uct_iov_t> iov;
             std::vector<uint64_t> addrs;
-            std::vector<size_t> indices;
         } ctx = {{[](uct_completion_t *comp) {
                       ++ucs_container_of(comp, replay_ctx, comp)->completions;
                   }, 1, UCS_OK}, 0, operation, with_comp,
-                    completion_mode == INLINE, {}, {}, {}};
+                    completion_mode == INLINE, {}, {}};
 
+        /* Start after unrelated SQ traffic; a multi-packet element above
+         * also makes WQE indices differ from PSN deltas. */
+        ASSERT_UCS_OK(uct_ep_put_short(m_sender->ep(0), local.ptr(), 1,
+                                       remote.addr() + count * stride - 1,
+                                       remote.rkey()));
+        flush();
         auto rx_token = get_rx_token();
         ASSERT_EQ(sizeof(uint32_t), rx_token.size());
         uint32_t psn;
         memcpy(&psn, rx_token.data(), sizeof(psn));
-        /* Every test element, including the empty one, consumes one PSN.
-         * Model a delivered prefix without racing the hardware. */
+        /* Prefix cases use single-packet elements, including the empty one.
+         * Model delivery without racing the hardware. */
         psn = htonl((ntohl(psn) + delivered_prefix) & UCS_MASK(24));
         memcpy(rx_token.data(), &psn, sizeof(psn));
 
@@ -1253,8 +1259,6 @@ protected:
             ASSERT_LE(info->rma.payload.zcopy.iovcnt, 1u);
             ctx.iov.push_back(info->rma.payload.zcopy.iovcnt ?
                               info->rma.payload.zcopy.iov[0] : uct_iov_t{});
-            ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL_INDEX);
-            ctx.indices.push_back(info->sgl_index);
             ctx.addrs.push_back(info->rma.remote_addr);
         };
         if (with_rx_token) {
@@ -1272,7 +1276,6 @@ protected:
         }
         for (unsigned i = first; i < count; ++i) {
             auto &iov = ctx.iov[i - first];
-            EXPECT_EQ(i, ctx.indices[i - first]);
             ASSERT_EQ(addrs[i], ctx.addrs[i - first]);
             ASSERT_EQ(lengths[i], iov.length);
             if (lengths[i] > 0) {

@@ -15,7 +15,6 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
-#include <ucp/proto/proto_repost.h>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -387,14 +386,17 @@ static void
 ucp_proto_put_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_put_offload_zcopy_probe_param(
-            init_params, 30, 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY);
+            init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+            UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_post(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
-        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
-        const size_t *elem_indices)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_offload_post(ucp_request_t *req,
+                               const ucp_proto_multi_lane_priv_t *lpriv,
+                               void *const *buffers, const size_t *lengths,
+                               uct_mem_h const *memhs,
+                               const uint64_t *remote_addrs,
+                               uct_rkey_t const *rkeys, size_t count)
 {
     ucp_ep_t *ep    = req->send.ep;
     uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
@@ -412,32 +414,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_post(
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_repost_post(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
-        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count,
-        const size_t *elem_indices)
-{
-    ucp_ep_t *ep    = req->send.ep;
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
-    ucs_status_t status;
-
-    status = ucp_proto_repost_sgl_zcopy(
-            req, uct_ep, UCT_EP_OP_PUT_ZCOPY, buffers, lengths, memhs,
-            remote_addrs, rkeys, count, elem_indices);
-    if (!UCS_STATUS_IS_ERR(status)) {
-        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
-                                                  rkeys[0], uct_ep,
-                                                  remote_addrs[0]);
-    }
-
-    return status;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_send_common(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift,
-        ucp_proto_rma_sgl_post_func_t post_func)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
+                                    const ucp_proto_multi_lane_priv_t *lpriv,
+                                    ucp_datatype_iter_t *next_iter,
+                                    ucp_lane_index_t *lane_shift)
 {
     ucp_proto_multi_lane_priv_t adjusted;
 
@@ -447,49 +428,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_send_common(
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
 
-    return ucp_proto_rma_sgl_offload_send_func(req, lpriv, next_iter,
-                                               post_func);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_send_func(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
-{
-    return ucp_proto_put_sgl_offload_send_common(
-            req, lpriv, next_iter, lane_shift, ucp_proto_put_sgl_offload_post);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_sgl_offload_repost_send(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
-{
-    return ucp_proto_put_sgl_offload_send_common(
-            req, lpriv, next_iter, lane_shift,
-            ucp_proto_put_sgl_offload_repost_post);
+    return ucp_proto_rma_sgl_offload_send_func(
+            req, lpriv, next_iter, ucp_proto_put_sgl_offload_post);
 }
 
 static ucs_status_t
-ucp_proto_put_sgl_offload_repost_progress(uct_pending_req_t *self)
+ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
-    /* coverity[tainted_data_downcast] */
-    return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_SGL),
-            ucp_proto_put_sgl_offload_repost_send,
-            ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_zcopy_completion);
-}
-
-static ucs_status_t ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
-    if (ucs_unlikely(ucp_ep_config(req->send.ep)->key.err_mode ==
-                     UCP_ERR_HANDLING_MODE_FAILOVER)) {
-        return ucp_proto_put_sgl_offload_repost_progress(self);
-    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
@@ -498,6 +444,20 @@ static ucs_status_t ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
             ucp_proto_put_sgl_offload_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
+}
+
+static ucs_status_t ucp_proto_put_sgl_offload_reset(ucp_request_t *req)
+{
+    if ((req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        (req->send.state.uct_comp.count != 0) &&
+        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        /* A pending request still owns its posting reference. Drop it and
+         * defer reset until every outstanding batch has completed. */
+        ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_ERR_CANCELED);
+        return UCS_ERR_CANCELED;
+    }
+
+    return ucp_proto_offload_zcopy_reset(req);
 }
 
 ucp_proto_t ucp_put_sgl_offload_proto = {
@@ -510,13 +470,14 @@ ucp_proto_t ucp_put_sgl_offload_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_sgl_offload_progress},
     .abort          = ucp_proto_request_zcopy_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_sgl_offload_reset
 };
 
 static void
 ucp_proto_put_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0);
+    ucp_proto_put_offload_zcopy_probe_param(
+            init_params, 20, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -525,8 +486,7 @@ ucp_proto_put_sgl_offload_sw_post(ucp_request_t *req,
                                   void *const *buffers, const size_t *lengths,
                                   uct_mem_h const *memhs,
                                   const uint64_t *remote_addrs,
-                                  uct_rkey_t const *rkeys, size_t count,
-                                  const size_t *elem_indices)
+                                  uct_rkey_t const *rkeys, size_t count)
 {
     ucp_ep_t *ep    = req->send.ep;
     uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
@@ -598,7 +558,7 @@ ucp_proto_t ucp_put_sgl_offload_sw_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_sgl_offload_sw_progress},
     .abort          = ucp_proto_request_zcopy_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_sgl_offload_reset
 };
 
 static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)

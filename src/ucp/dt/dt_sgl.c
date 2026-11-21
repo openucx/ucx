@@ -12,7 +12,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
-#include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 
 
 ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
@@ -39,6 +39,9 @@ ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
                                                size_t count)
 {
     ucp_rkey_h ref_rkey = rkeys[0];
+#if ENABLE_PARAMS_CHECK
+    ucp_rkey_config_key_t key, ref_key;
+#endif
     ucp_rkey_h rkey;
     size_t i;
 
@@ -65,6 +68,20 @@ ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
 #endif
 
         if (ucs_unlikely(rkey->cfg_index != ref_rkey->cfg_index)) {
+#if ENABLE_PARAMS_CHECK
+            /* Reconfiguration updates each rkey's cached EP independently. */
+            if ((rkey->cfg_index <
+                 ucs_array_length(&ref_rkey->ep->worker->rkey_config)) &&
+                (ref_rkey->cfg_index <
+                 ucs_array_length(&ref_rkey->ep->worker->rkey_config))) {
+                key     = ucp_rkey_config(ref_rkey->ep->worker, rkey)->key;
+                ref_key = ucp_rkey_config(ref_rkey->ep->worker, ref_rkey)->key;
+                key.ep_cfg_index = ref_key.ep_cfg_index;
+                if (ucp_rkey_config_is_equal(key, ref_key)) {
+                    continue;
+                }
+            }
+#endif
             ucs_error("sgl[%zu]: rkey %p has cfg_index %u, but sgl[0] rkey %p "
                       "has cfg_index %u, all rkeys must map to the same "
                       "remote endpoint configuration",
