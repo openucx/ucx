@@ -6,7 +6,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda rocm ze
+SUBDIRS = . cuda musa rocm ze
 
 lib_LTLIBRARIES    = libucm.la
 libucm_ladir       = $(includedir)/ucm

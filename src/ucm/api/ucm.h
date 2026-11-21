@@ -227,6 +227,7 @@ typedef struct ucm_global_config {
     double               bistro_grace_duration;       /* Grace duration for bistro patching
                                                        * in seconds */
     uint64_t             rocm_hook_modes;             /* Bitmap of allowed rocm hooks modes */
+    uint64_t             musa_hook_modes;             /* Bitmap of allowed musa hooks modes */
 } ucm_global_config_t;
 
 
