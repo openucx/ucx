@@ -1,0 +1,179 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-bf3-read-repro
+failFast: true
+timeout_minutes: 20
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
+
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
+runs_on_dockers:
+  - name: bf3
+    url: harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
+    arch: aarch64
+    nodeSelector: "kubernetes.io/hostname=yok-t-ipp-blossom-prod-bf3-02"
+    tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+    privileged: true
+    hostNetwork: true
+
+matrix:
+  axes:
+    arch: [aarch64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe raw DC READ completion
+    parallel: false
+    timeout: 18
+    run: |
+      set -euo pipefail
+      ulimit -c 0
+      unset LD_PRELOAD
+      test -w "${WORKSPACE}"
+      echo "Raw READ setup: missing tools or device access is a setup failure"
+      git rev-parse HEAD
+      uname -a
+      command -v ib_read_bw ibv_devinfo
+      ldd "$(command -v ib_read_bw)"
+      ibv_devinfo -d mlx5_0 -i 1 -v
+      python3 - <<'PY'
+      import ipaddress
+      import os
+      import re
+      import shlex
+      import shutil
+      import signal
+      import subprocess
+      import time
+      from contextlib import suppress
+      from pathlib import Path
+
+      for option, marker in (("-V", "Version"), ("--help", "--gid-index")):
+          result = subprocess.run(
+              ["ib_read_bw", option], text=True, stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT, timeout=15)
+          print("PREFLIGHT", option, "RC", result.returncode,
+                result.stdout, flush=True)
+          if result.returncode not in (0, 1) or marker not in result.stdout:
+              raise RuntimeError("ib_read_bw preflight failed")
+          if option == "--help":
+              help_text = result.stdout
+      if "--tclass" not in help_text:
+          raise RuntimeError("ib_read_bw cannot select the UCX traffic class")
+      no_reorder = (["--no_enhanced_reorder"]
+                    if "--no_enhanced_reorder" in help_text else [])
+      print("Enhanced-reorder disable switch:",
+            no_reorder or "unavailable; inspect runtime banner", flush=True)
+      gid_dir = Path("/sys/class/infiniband/mlx5_0/ports/1")
+      gid = (gid_dir / "gids/3").read_text().strip()
+      print("GID 3:", gid, "type:",
+            (gid_dir / "gid_attrs/types/3").read_text().strip(), flush=True)
+      if ipaddress.ip_address(gid) != ipaddress.ip_address("::ffff:10.244.252.101"):
+          raise RuntimeError("GID 3 differs from the UCX reproduction")
+      print("Limitations: perftest uses separate processes and its own aligned "
+            "MRs; it does not reproduce the UCX MR offset or two unequal "
+            "fragments", flush=True)
+      cpu_set = ",".join(map(str, sorted(os.sched_getaffinity(0))[:2]))
+      def listening(port):
+          return any(line.split()[1].endswith(":%04X" % port) and
+                     line.split()[3] == "0A" for line in
+                     Path("/proc/net/tcp").read_text().splitlines()[1:])
+
+      failed = False
+      for index, (transport, size) in enumerate(
+              (t, 1073741824) for t in ("DC",)):
+          port = 18523 + index
+          command = [
+              "taskset", "-c", cpu_set, "stdbuf", "-oL", "ib_read_bw",
+              "-d", "mlx5_0", "-i", "1", "-x", "3", "-c", transport,
+              "-q", "1", "-s", str(size), "-n", "5", "-t", "2",
+              "-o", "2", "-Q", "1", "-u", "18", "--tclass", "106",
+              "-p", str(port)
+          ] + no_reorder
+          peers, outputs = [], {}
+          started = time.monotonic()
+          deadline = started + 300
+          print("CASE", transport, size, shlex.join(command), flush=True)
+          try:
+              if listening(port):
+                  raise RuntimeError("TCP control port is already in use")
+              server = subprocess.Popen(
+                  command, text=True, stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT, start_new_session=True)
+              peers.append(("server", server))
+              ready = min(deadline, time.monotonic() + 20)
+              while server.poll() is None and time.monotonic() < ready:
+                  if listening(port):
+                      break
+                  time.sleep(0.1)
+              else:
+                  raise RuntimeError("server did not listen; setup failed")
+              client = subprocess.Popen(
+                  command + ["127.0.0.1"], text=True, stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT, start_new_session=True)
+              peers.append(("client", client))
+              for name, proc in reversed(peers):
+                  outputs[name] = proc.communicate(
+                      timeout=max(0.1, deadline - time.monotonic()))[0]
+                  if proc.returncode != 0:
+                      raise RuntimeError(name + " failed")
+              for output in outputs.values():
+                  if not re.search(r"Connection type\s*:\s*" + transport +
+                                   r"\b", output):
+                      raise RuntimeError("missing transport confirmation")
+                  if not re.search(r"GID index\s*:\s*3\b", output):
+                      raise RuntimeError("missing GID confirmation")
+                  if not re.search(r"^\s*%d\s+5\s+" % size,
+                                   output, re.MULTILINE):
+                      raise RuntimeError("missing completed READ result row")
+                  if re.search(r"Using Enhanced Reorder\s*:\s*ON\b", output):
+                      raise RuntimeError("enhanced reorder differs from UCX")
+          except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+              failed = True
+              print("CASE FAILED", transport, size, error, flush=True)
+              for name, proc in peers:
+                  if proc.poll() is not None:
+                      continue
+                  with suppress(OSError):
+                      print("WAIT CHANNEL", name,
+                            Path("/proc/%d/wchan" % proc.pid).read_text(), flush=True)
+                  if shutil.which("gdb"):
+                      try:
+                          trace = subprocess.run(
+                              ["timeout", "--kill-after=2s", "10s", "gdb", "-nx",
+                               "-iex", "set debuginfod enabled off",
+                               "-batch", "-ex", "set pagination off",
+                               "-ex", "set backtrace limit 64",
+                               "-ex", "info proc mappings", "-ex", "x/24i $pc-32",
+                               "-ex", "thread apply all bt full", "-p", str(proc.pid)],
+                              text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, timeout=15)
+                          print("BACKTRACE", name, trace.returncode,
+                                trace.stdout, flush=True)
+                      except (OSError, subprocess.SubprocessError) as trace_error:
+                          print("BACKTRACE FAILED", name, trace_error,
+                                getattr(trace_error, "output", None), flush=True)
+                  else:
+                      print("GDB unavailable", name, flush=True)
+          finally:
+              for name, proc in peers:
+                  with suppress(ProcessLookupError):
+                      if proc.poll() is None:
+                          os.killpg(proc.pid, signal.SIGKILL)
+              for name, proc in peers:
+                  if name not in outputs:
+                      outputs[name] = proc.communicate()[0]
+                  print("PEER", name, "RC", proc.returncode, outputs[name], flush=True)
+              print("CASE ELAPSED", transport, size,
+                    time.monotonic() - started, flush=True)
+      raise SystemExit(1 if failed else 0)
+      PY
