@@ -2682,6 +2682,15 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         lanes |= failed & arg->sent_lanes;
     }
 
+    /* A lane whose probe is in flight has the peer address already, and
+     * recovers once the probe succeeds. Another request would make the
+     * peer, which may already use the lane, replace its endpoint. */
+    ucs_for_each_bit(lane, failed) {
+        if (ucp_ep_recovery_probe_status(&arg->probe[lane]) == UCS_INPROGRESS) {
+            lanes &= ~UCS_BIT(lane);
+        }
+    }
+
     if (lanes == 0) {
         /* Nothing new. The next round retries the lanes already sent. */
         arg->resend = 1;
