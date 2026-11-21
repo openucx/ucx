@@ -24,17 +24,29 @@ ucp_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
            rkey_config_key.flags;
 }
 
+/**
+ * @return Whether the remote key configuration keys are equal, except their
+ *         endpoint configurations.
+ */
 static UCS_F_ALWAYS_INLINE int
-ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
-                         ucp_rkey_config_key_t rkey_config_key2)
+ucp_rkey_config_is_equal_except_ep_cfg(ucp_rkey_config_key_t rkey_config_key1,
+                                       ucp_rkey_config_key_t rkey_config_key2)
 {
     return (rkey_config_key1.md_map == rkey_config_key2.md_map) &&
-           (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
            (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
            (rkey_config_key1.flags == rkey_config_key2.flags) &&
            (rkey_config_key1.unreachable_md_map ==
             rkey_config_key2.unreachable_md_map);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
+                         ucp_rkey_config_key_t rkey_config_key2)
+{
+    return (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
+           ucp_rkey_config_is_equal_except_ep_cfg(rkey_config_key1,
+                                                  rkey_config_key2);
 }
 
 /**
