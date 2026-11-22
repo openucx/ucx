@@ -153,8 +153,8 @@ static int uct_cuda_ipc_iface_fabric_reachable(
         const uct_cuda_ipc_device_addr_t *dev_addr, size_t dev_addr_len,
         const char *reason)
 {
-    int local_fabric_supported  = uct_cuda_ipc_md_fabric_supported(md);
-    int remote_fabric_supported =
+    const int local_fabric_supported  = uct_cuda_ipc_md_fabric_supported(md);
+    const int remote_fabric_supported =
             !!(uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
                UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
     const uct_cuda_ipc_imex_device_addr_t *imex_addr;
