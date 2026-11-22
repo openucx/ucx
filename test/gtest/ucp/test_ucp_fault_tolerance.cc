@@ -18,6 +18,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_repost.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -1407,6 +1408,77 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
+
+/* Token purge reports an AM short with the length that the failed lane took.
+ * The lane it is reposted on may take less as AM short, for example when only
+ * the failed lane has device memory. */
+class test_ucp_fault_tolerance_tf_repost : public test_ucp_fault_tolerance_tf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
+    }
+
+protected:
+    /* Largest AM short, with its header, that a lane of the endpoint takes */
+    static size_t max_am_short(ucp_ep_h ep)
+    {
+        size_t max_short = 0;
+        const uct_iface_attr_t *iface_attr;
+        ucp_lane_index_t lane;
+
+        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            iface_attr = ucp_ep_get_iface_attr(ep, lane);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+                max_short = std::max(max_short, iface_attr->cap.am.max_short);
+            }
+        }
+
+        return max_short;
+    }
+};
+
+UCS_TEST_P(test_ucp_fault_tolerance_tf_repost, am_short_above_max_short)
+{
+    ucp_ep_h ep              = sender().ep();
+    uct_ep_op_info_t op_info = {};
+    ucp_am_hdr_t am_hdr;
+    ucs_status_t status;
+
+    flush_workers();
+
+    /* One byte more than any lane of the endpoint takes as AM short */
+    const size_t length = max_am_short(ep) - sizeof(am_hdr) + 1;
+    mem_buffer sbuf(length, UCS_MEMORY_TYPE_HOST);
+    sbuf.pattern_fill(m_seed, length);
+
+    am_hdr.u64   = 0;
+    am_hdr.am_id = AM_ID;
+
+    op_info.field_mask             = UCT_EP_OP_INFO_FIELD_OPERATION |
+                                     UCT_EP_OP_INFO_FIELD_AM;
+    op_info.operation              = UCT_EP_OP_AM_SHORT;
+    op_info.am.field_mask          = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                                     UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+                                     UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+    op_info.am.am_id               = UCP_AM_ID_AM_SINGLE;
+    op_info.am.header.value        = am_hdr.u64;
+    op_info.am.payload.data.buffer = sbuf.ptr();
+    op_info.am.payload.data.length = length;
+
+    m_am_received = false;
+    UCS_ASYNC_BLOCK(&sender().worker()->async);
+    status = ucp_proto_repost_submit(ep, &op_info);
+    UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+    ASSERT_UCS_OK(status);
+
+    wait_for_value(&m_am_received, true);
+    ASSERT_TRUE(m_am_received) << "the reposted AM short was not received";
+    ASSERT_EQ(length, m_am_rbuf.size());
+    mem_buffer::pattern_check(m_am_rbuf.data(), length, m_seed);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf_repost, rcx, "rc_x")
 
 /* A send on a FAILOVER endpoint is canceled locally when the user closes the
  * endpoint or destroys the worker while the send is still pending or in flight.
