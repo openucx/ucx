@@ -806,8 +806,14 @@ public:
         ucs_array_length(&iface->tx.dci_pool[0].stack) = 0;
         iface->tx.dci_pool[0].stack_top                = 0;
 
-        uint8_t pool_index;
-        for (pool_index = 0; pool_index < iface->tx.num_dci_pools;
+        dispatch_pending(e);
+    }
+
+    virtual void dispatch_pending(entity *e) {
+        uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
+                                                    uct_dc_mlx5_iface_t);
+
+        for (uint8_t pool_index = 0; pool_index < iface->tx.num_dci_pools;
              ++pool_index) {
             uct_dc_mlx5_iface_progress_pending(iface, pool_index);
         }

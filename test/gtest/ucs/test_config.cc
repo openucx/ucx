@@ -715,6 +715,113 @@ UCS_TEST_F(test_config, set_get) {
     EXPECT_EQ(1, m_num_errors);
 }
 
+UCS_TEST_F(test_config, set_uint_trailing_chars) {
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    EXPECT_EQ(UCS_OK, opts.set("PRICE", "11 "));
+    EXPECT_EQ(11U, opts->price);
+    EXPECT_EQ(UCS_OK, opts.set("PRICE", "10"));
+    EXPECT_EQ(10U, opts->price);
+
+    {
+        scoped_log_handler log_handler_vars(config_error_suppress);
+        EXPECT_NE(UCS_OK, opts.set("PRICE", "0xa"));
+        EXPECT_NE(UCS_OK, opts.set("PRICE", "10abc"));
+    }
+
+    EXPECT_EQ(10U, opts->price);
+    EXPECT_EQ(std::string("10"), std::string(opts.get("PRICE")));
+    EXPECT_EQ(2, m_num_errors);
+}
+
+UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
+    static const char *uint_enum_names[] = {"first", "second", NULL};
+    unsigned long ulong_value;
+    ucs_range_spec_t range;
+    double double_value;
+    unsigned uint_value;
+    unsigned hex_value;
+    char hex_buf[16];
+    unsigned bitmask;
+    int int_value;
+    struct {
+        unsigned value;
+        unsigned next;
+    } hex_fields;
+
+    EXPECT_TRUE(ucs_config_sscanf_int("-0x10 ", &int_value, NULL));
+    EXPECT_EQ(-16, int_value);
+    EXPECT_FALSE(ucs_config_sscanf_int("5abc", &int_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_ulong("200", &ulong_value, NULL));
+    EXPECT_EQ(200UL, ulong_value);
+    EXPECT_FALSE(ucs_config_sscanf_ulong("0x10", &ulong_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_ulong("6abc", &ulong_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_double("1.5", &double_value, NULL));
+    EXPECT_EQ(1.5, double_value);
+    EXPECT_FALSE(ucs_config_sscanf_double("1.5abc", &double_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_ulunits("auto", &ulong_value, NULL));
+    EXPECT_EQ(UCS_ULUNITS_AUTO, ulong_value);
+    EXPECT_TRUE(ucs_config_sscanf_ulunits("16 ", &ulong_value, NULL));
+    EXPECT_EQ(16UL, ulong_value);
+    EXPECT_FALSE(ucs_config_sscanf_ulunits("16abc", &ulong_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_uint_enum("second", &uint_value,
+                                            uint_enum_names));
+    EXPECT_EQ(UCS_CONFIG_UINT_ENUM_INDEX(1), uint_value);
+    EXPECT_TRUE(ucs_config_sscanf_uint_enum("7", &uint_value, uint_enum_names));
+    EXPECT_EQ(7U, uint_value);
+    EXPECT_FALSE(
+            ucs_config_sscanf_uint_enum("7abc", &uint_value, uint_enum_names));
+
+    EXPECT_TRUE(ucs_config_sscanf_bitmask("4", &bitmask, NULL));
+    EXPECT_EQ(0xfU, bitmask);
+    EXPECT_FALSE(ucs_config_sscanf_bitmask("4abc", &bitmask, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_hex("0x8000", &hex_value, NULL));
+    EXPECT_EQ(0x8000U, hex_value);
+    EXPECT_FALSE(ucs_config_sscanf_hex("0x8000junk", &hex_value, NULL));
+
+    hex_fields.next = 1;
+    EXPECT_TRUE(ucs_config_sscanf_hex("auto", &hex_fields.value, NULL));
+    EXPECT_EQ(UCS_HEXUNITS_AUTO, hex_fields.value);
+    EXPECT_EQ(1U, hex_fields.next);
+    ucs_config_sprintf_hex(hex_buf, sizeof(hex_buf), &hex_fields.value, NULL);
+    EXPECT_STREQ(UCS_VALUE_AUTO_STR, hex_buf);
+
+    EXPECT_TRUE(ucs_config_sscanf_time("10", &double_value, NULL));
+    EXPECT_EQ(10.0, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("1s", &double_value, NULL));
+    EXPECT_EQ(1.0, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("1ms ", &double_value, NULL));
+    EXPECT_DOUBLE_EQ(1e-3, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("2s ", &double_value, NULL));
+    EXPECT_EQ(2.0, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("3 ", &double_value, NULL));
+    EXPECT_EQ(3.0, double_value);
+    EXPECT_FALSE(ucs_config_sscanf_time("1msjunk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_time("1ms junk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_time("1s junk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_time("10 ms", &double_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_bw("1024MBps ", &double_value, NULL));
+    EXPECT_EQ(1024.0 * UCS_MBYTE, double_value);
+    EXPECT_FALSE(ucs_config_sscanf_bw("1024MBps junk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_bw("1024 MBps", &double_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_range_spec("100", &range, NULL));
+    EXPECT_EQ(100U, range.first);
+    EXPECT_EQ(100U, range.last);
+    EXPECT_TRUE(ucs_config_sscanf_range_spec("100-200", &range, NULL));
+    EXPECT_EQ(100U, range.first);
+    EXPECT_EQ(200U, range.last);
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100junk", &range, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100junk-200", &range, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100-200junk", &range, NULL));
+}
+
 UCS_TEST_F(test_config, set_blob)
 {
     static const char ucs_cars_prefix[] = UCS_DEFAULT_ENV_PREFIX"CARS_";
@@ -1210,6 +1317,26 @@ UCS_TEST_F(test_config, test_config_file) {
 
     /* Overriding INI file by env vars */
     EXPECT_EQ(std::string("Ford"), std::string(opts->brand));
+}
+
+UCS_TEST_F(test_config, test_config_file_dump_comment_default) {
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1("UCX_BRAND", "Ford");
+
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+    const std::string dump = opts.dump(
+            (ucs_config_print_flags_t)(UCS_CONFIG_PRINT_CONFIG |
+                                       UCS_CONFIG_PRINT_COMMENT_DEFAULT));
+
+    /* Set only in the INI file */
+    EXPECT_NE(dump.find("\nUCX_PRICE=100\n"), std::string::npos) << dump;
+
+    /* Set in the INI file and overridden by env vars */
+    EXPECT_NE(dump.find("\nUCX_BRAND=Ford\n"), std::string::npos) << dump;
+
+    /* Not set */
+    EXPECT_NE(dump.find("\n# UCX_MODEL=Corvette\n"), std::string::npos)
+            << dump;
 }
 
 UCS_TEST_F(test_config, test_config_file_parse_files) {

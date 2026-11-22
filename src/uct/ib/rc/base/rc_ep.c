@@ -146,10 +146,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
-    self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
-    self->flags        = 0;
-    self->txqp_reserve = 0;
-    self->cq_reserve   = 0;
+    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags      = 0;
+    uct_rc_ep_reset_reserve(self);
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
@@ -425,8 +424,9 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 
     status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
-        ep->txqp_reserve = 0;
-        ep->cq_reserve   = 0;
+        /* Keep the reserve because other requests may still be queued, and new
+         * sends must not pass them. It is reset when the group is empty, on TX
+         * completion or purge. */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
@@ -512,6 +512,8 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
                             uct_rc_ep_arbiter_purge_cb, &args);
+
+    uct_rc_ep_reset_reserve(ep);
 }
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
@@ -541,8 +543,9 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if ((op->handler != (uct_rc_send_handler_t)ucs_mpool_put) &&
             (op->handler != uct_rc_ep_short_dm_desc_handler)) {
-            /* Allow from destroy flow: clean flush cancel and ep_check ops. */
+            /* Allow internal, flush cancel and ep_check ops in destroy flow. */
             if (warn &&
+                !(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE) &&
                 (op->handler != uct_rc_ep_flush_op_completion_handler) &&
                 (op->handler != uct_rc_ep_check_completion_handler)) {
                 ucs_warn("destroying txqp %p with uncompleted operation %p"

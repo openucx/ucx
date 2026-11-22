@@ -12,6 +12,8 @@ run-name: >
 on:
   issue_comment:
     types: [created]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
       inputs:
           platform:
@@ -20,6 +22,10 @@ on:
           args:
             description: 'argument'
             required: false
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
 jobs:
   Authorization:
     name: Authorization
@@ -28,7 +34,7 @@ jobs:
       args: ${{ env.args }}
 
     # This job only runs for pull request comments
-    if: github.event.comment.body == '/build'
+    if: github.event.comment.body == '/build' || github.event_name == 'pull_request_target'
     steps:
       - name: Check if comment is issued by authorized person
         run: blossom-ci
@@ -40,6 +46,7 @@ jobs:
   Vulnerability-scan:
     name: Vulnerability scan
     needs: [Authorization]
+    if: ${{ needs.Authorization.outputs.args != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

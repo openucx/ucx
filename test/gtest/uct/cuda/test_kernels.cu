@@ -9,6 +9,7 @@
 #endif
 
 #include "test_kernels.h"
+#include "test_kernels_uct.h"
 
 #include <uct/api/device/uct_device_impl.h>
 #include <common/cuda.h>
@@ -86,6 +87,19 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
     uct_atomic_kernel<<<1, 1>>>(ep, mem_elem, rva, add, status.device_ptr());
     synchronize();
     return *status;
+}
+
+/**
+ * Post several atomic operations, then flush the endpoint and verify
+ * everything completed. Reuses cuda_uct's parameterized flush kernel at
+ * thread level with a single thread/block, instead of duplicating it here.
+ */
+ucs_status_t launch_uct_flush(uct_device_ep_h ep,
+                              uct_device_mem_elem_t *mem_elem, uint64_t rva,
+                              uint64_t add, unsigned num_ops)
+{
+    return cuda_uct::launch_uct_flush(ep, mem_elem, rva, add, num_ops,
+                                      UCS_DEVICE_LEVEL_THREAD, 1, 1);
 }
 
 } // namespace ucx_cuda

@@ -27,6 +27,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo/base/topo_groups.h>
 #include <ucs/type/param.h>
 
 
@@ -130,6 +131,10 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Maximum memory for concurrent rndv fragments per worker (bytes) */
+    size_t                                 rndv_frag_worker_max_mem;
+    /** Fraction of rndv_frag_worker_max_mem which RTR fragments may use */
+    double                                 rndv_frag_rtr_ratio;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -259,6 +264,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** GPU-to-NIC assignment mode */
     ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
+    /** GPU-to-NIC assignment topology grouping criterion */
+    ucs_topo_group_by_t                    gpu_nic_assignment_group_by;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
@@ -731,7 +738,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    status = ucs_memtype_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
         if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
             ucs_trace_req("address %p length %zu: not found in memtype cache, "
@@ -796,6 +803,16 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
 }
 
+/* AUTO is rewritten to SW when indirect atomics are enabled. */
+static UCS_F_ALWAYS_INLINE int
+ucp_context_is_token_failover(ucp_context_h context)
+{
+    ucp_failover_mode_t failover_mode = context->config.ext.failover_mode;
+
+    return (failover_mode == UCP_FAILOVER_MODE_TOKEN) ||
+           (failover_mode == UCP_FAILOVER_MODE_AUTO);
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_context_print_transport_tables_enabled(ucp_context_h context)
 {
@@ -807,7 +824,6 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
 
     return value == UCS_CONFIG_ON;
 }
-
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,

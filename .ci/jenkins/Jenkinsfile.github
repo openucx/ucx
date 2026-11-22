@@ -32,12 +32,17 @@ try {
   throw ex
 } finally {
   if (params.githubData) {
+    def passed = currentBuild.resultIsBetterOrEqualTo('SUCCESS')
     githubHelper.updateCommitStatus(
       pipelineOverviewUrl,
       "CI completed",
-      currentBuild.resultIsBetterOrEqualTo('SUCCESS') ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
+      passed ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
       env.JOB_BASE_NAME
     )
-    githubHelper.uploadLogs(this, env.JOB_NAME, env.BUILD_NUMBER, null, null)
+    // Only the failed rows' logs, with internal hostnames hidden.
+    if (!passed) {
+      githubHelper.uploadParallelLogs(this, env.JOB_NAME, env.BUILD_NUMBER, null,
+          [/[\w.-]+\.nvidia\.com/, /[\w.-]+\.mellanox\.com/, /[\w.-]+\.mlnx\b/])
+    }
   }
 }

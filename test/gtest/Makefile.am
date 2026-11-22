@@ -182,6 +182,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_sockaddr.cc \
 	ucp/ucp_test.cc \
 	ucp/ucp_datatype.cc \
+	ucp/rndv_frag_mpools.cc \
 	\
 	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
@@ -215,6 +216,7 @@ gtest_SOURCES = \
 	ucs/test_topo.cc \
 	ucs/test_topo_groups.cc \
 	ucs/test_sock.cc \
+	ucs/test_netlink.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_usage_tracker.cc \
@@ -365,6 +367,7 @@ endif
 
 noinst_HEADERS = \
 	common/mem_buffer.h \
+	common/memtype_map_guard.h \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
@@ -385,6 +388,7 @@ noinst_HEADERS = \
 	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
+	ucp/test_ucp_wireup.h \
 	ucp/ucp_test.h \
 	ucp/ucp_datatype.h
 

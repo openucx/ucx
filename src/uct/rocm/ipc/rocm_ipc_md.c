@@ -10,6 +10,7 @@
 
 #include "rocm_ipc_md.h"
 #include "rocm_ipc_cache.h"
+#include "rocm_ipc_iface.h"
 
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
@@ -174,7 +175,7 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
 
 static void uct_rocm_ipc_md_mem_elem_release(uct_md_h md, void *release_handle)
 {
-    uct_rocm_ipc_cache_unpin(release_handle);
+    uct_rocm_ipc_cache_unpin(release_handle, 1);
 }
 
 static ucs_status_t
@@ -212,6 +213,10 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     return UCS_OK;
 }
 
+typedef struct {
+    int free_unused_mapping;
+} uct_rocm_ipc_rkey_handle_t;
+
 static ucs_status_t
 uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
                          const uct_rkey_unpack_params_t *params,
@@ -219,6 +224,11 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 {
     uct_rocm_ipc_key_t *packed = (uct_rocm_ipc_key_t *)rkey_buffer;
     uct_rocm_ipc_unpacked_rkey_t *unpacked;
+    uct_rocm_ipc_rkey_handle_t *rkey_handle;
+    uint64_t flags;
+    ucs_status_t status;
+
+    flags = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0);
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_rocm_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
@@ -226,11 +236,36 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
         return UCS_ERR_NO_MEMORY;
     }
 
+    rkey_handle = ucs_malloc(sizeof(*rkey_handle), "uct_rocm_ipc_rkey_handle");
+    if (rkey_handle == NULL) {
+        ucs_error("failed to allocate memory for uct_rocm_ipc_rkey_handle");
+        ucs_free(unpacked);
+        return UCS_ERR_NO_MEMORY;
+    }
+
     unpacked->super       = *packed;
     unpacked->region      = NULL;
     unpacked->mapped_addr = NULL;
-    *handle_p             = NULL;
-    *rkey_p               = (uintptr_t)unpacked;
+    rkey_handle->free_unused_mapping = !!(flags &
+            UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING);
+
+    /* Pin for the rkey lifetime so copies reuse one import. Release detaches
+     * it only when UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING is set, which is
+     * the window path that must drop the dma-buf before the next export.
+     * Rendezvous leaves the flag clear so the import stays cached. */
+    if (uct_rocm_ipc_cache_enabled()) {
+        status = uct_rocm_ipc_cache_map_memhandle(&unpacked->super,
+                                                  &unpacked->mapped_addr,
+                                                  &unpacked->region);
+        if (status != UCS_OK) {
+            ucs_free(rkey_handle);
+            ucs_free(unpacked);
+            return UCS_ERR_UNREACHABLE;
+        }
+    }
+
+    *handle_p = rkey_handle;
+    *rkey_p   = (uintptr_t)unpacked;
 
     return UCS_OK;
 }
@@ -241,11 +276,14 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
     uct_rocm_ipc_unpacked_rkey_t *unpacked =
             ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
                            uct_rocm_ipc_unpacked_rkey_t);
+    uct_rocm_ipc_rkey_handle_t *rkey_handle = handle;
 
-    ucs_assert(NULL == handle);
     if (unpacked->region != NULL) {
-        uct_rocm_ipc_cache_unpin(unpacked->region);
+        uct_rocm_ipc_cache_unpin(unpacked->region,
+                                 (rkey_handle != NULL) &&
+                                         rkey_handle->free_unused_mapping);
     }
+    ucs_free(rkey_handle);
     ucs_free(unpacked);
     return UCS_OK;
 }

@@ -226,10 +226,11 @@ static int run_ucx_client(ucp_worker_h ucp_worker,
                           ucp_address_t *local_addr, size_t local_addr_len,
                           ucp_address_t *peer_addr, size_t peer_addr_len)
 {
-    struct msg *msg = NULL;
-    size_t msg_len  = 0;
-    int ret         = -1;
-    ucp_request_param_t send_param, recv_param;
+    struct msg *msg                = NULL;
+    size_t msg_len                 = 0;
+    int ret                        = -1;
+    ucp_request_param_t send_param = {0};
+    ucp_request_param_t recv_param = {0};
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
@@ -356,11 +357,10 @@ err:
 
 static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
     void *request;
 
-    param.op_attr_mask = 0;
-    request            = ucp_ep_flush_nbx(ep, &param);
+    request = ucp_ep_flush_nbx(ep, &param);
     if (request == NULL) {
         return UCS_OK;
     } else if (UCS_PTR_IS_ERR(request)) {
@@ -378,10 +378,11 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
-    struct msg *msg             = NULL;
-    struct ucx_context *request = NULL;
-    size_t msg_len              = 0;
-    ucp_request_param_t send_param, recv_param;
+    struct msg *msg                = NULL;
+    struct ucx_context *request    = NULL;
+    size_t msg_len                 = 0;
+    ucp_request_param_t send_param = {0};
+    ucp_request_param_t recv_param = {0};
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;

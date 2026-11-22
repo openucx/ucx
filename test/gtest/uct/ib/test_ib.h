@@ -29,6 +29,8 @@ public:
     virtual void send_recv_short();
 
 protected:
+    void cleanup_entities();
+
     entity *m_e1, *m_e2;
     static size_t m_ib_am_handler_counter;
 };

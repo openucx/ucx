@@ -1,0 +1,2 @@
+# Disable file checks (otherwise every use of `gha-tools` will get flagged)
+disable=SC1091

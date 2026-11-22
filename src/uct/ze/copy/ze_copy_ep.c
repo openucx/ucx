@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intell Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -47,6 +47,8 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_ze_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ze_copy_iface_t);
     ucs_status_t status        = UCS_OK;
+    uct_ze_copy_queue_t *queue;
+    unsigned queue_index;
     ze_result_t ret;
     void *src, *dst;
 
@@ -61,33 +63,36 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         dst = iov->buffer;
     }
 
-    ret = zeCommandListAppendMemoryCopy(iface->ze_cmdl, dst, src, size, NULL, 0,
+    /* Getting the queue may grow the array, so take the element after it */
+    queue_index = uct_ze_copy_iface_get_queue(iface, src, dst);
+    queue       = &ucs_array_elem(&iface->queues, queue_index);
+
+    ret = zeCommandListAppendMemoryCopy(queue->cmdl, dst, src, size, NULL, 0,
                                         NULL);
     if (ret != ZE_RESULT_SUCCESS) {
         status = UCS_ERR_IO_ERROR;
         goto out_reset;
     }
 
-    ret = zeCommandListClose(iface->ze_cmdl);
+    ret = zeCommandListClose(queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
         status = UCS_ERR_IO_ERROR;
         goto out_reset;
     }
 
-    ret = zeCommandQueueExecuteCommandLists(iface->ze_cmdq, 1, &iface->ze_cmdl,
-                                            NULL);
+    ret = zeCommandQueueExecuteCommandLists(queue->cmdq, 1, &queue->cmdl, NULL);
     if (ret != ZE_RESULT_SUCCESS) {
         status = UCS_ERR_IO_ERROR;
         goto out_reset;
     }
 
-    ret = zeCommandQueueSynchronize(iface->ze_cmdq, UINT64_MAX);
+    ret = zeCommandQueueSynchronize(queue->cmdq, UINT64_MAX);
     if (ret != ZE_RESULT_SUCCESS) {
         status = UCS_ERR_IO_ERROR;
     }
 
 out_reset:
-    ret = zeCommandListReset(iface->ze_cmdl);
+    ret = zeCommandListReset(queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeCommandListReset failed: 0x%x", ret);
         if (status == UCS_OK) {

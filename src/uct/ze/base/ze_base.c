@@ -397,6 +397,15 @@ int uct_ze_base_get_num_devices(void)
     return uct_ze_base.num_devices;
 }
 
+int uct_ze_base_get_num_subdevices(void)
+{
+    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    return ze_num_subdevices;
+}
+
 ze_device_handle_t
 uct_ze_base_get_device_handle_from_subdevice(const uct_ze_subdevice_t *subdevice)
 {

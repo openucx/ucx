@@ -241,6 +241,23 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_bind_to_device(int fd, const char *if_name)
+{
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    int ret;
+
+    /* Binding a socket which is bound already requires CAP_NET_RAW, even to
+     * the same device */
+    ret = getsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, bound_if_name, &len);
+    if ((ret == 0) && !strcmp(bound_if_name, if_name)) {
+        return UCS_OK;
+    }
+
+    return ucs_socket_setopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name,
+                             strlen(if_name) + 1);
+}
+
 ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
                                void *optval, socklen_t optlen)
 {
@@ -460,9 +477,10 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind,
-                                    int reuse_addr, int *listen_fd)
+ucs_status_t ucs_socket_server_bind(const struct sockaddr *saddr,
+                                    socklen_t socklen, int silent_bind,
+                                    int reuse_addr, const char *bind_if_name,
+                                    int *fd_p)
 {
     int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -491,6 +509,13 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         }
     }
 
+    if (bind_if_name != NULL) {
+        status = ucs_socket_bind_to_device(fd, bind_if_name);
+        if (status != UCS_OK) {
+            goto err_close_socket;
+        }
+    }
+
     ret = bind(fd, saddr, socklen);
     if (ret < 0) {
         if ((errno == EADDRINUSE) && silent_bind) {
@@ -504,21 +529,28 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         goto err_close_socket;
     }
 
-    if (listen(fd, backlog) < 0) {
-        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m",
-                  fd, ucs_sockaddr_str(saddr, ip_port_str, sizeof(ip_port_str)),
-                  backlog);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_socket;
-    }
-
-    *listen_fd = fd;
+    *fd_p = fd;
     return UCS_OK;
 
 err_close_socket:
     ucs_close_fd(&fd);
 err:
     return status;
+}
+
+ucs_status_t ucs_socket_server_listen(int fd, int backlog)
+{
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (listen(fd, backlog) < 0) {
+        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m", fd,
+                  ucs_socket_getname_str(fd, ip_port_str,
+                                         sizeof(ip_port_str)),
+                  backlog);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }
 
 int ucs_socket_max_conn()
@@ -868,6 +900,7 @@ ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
     if (is_ipv6_str(ip_port_str)) {
         if (*ip_port_str == '[') {
             /* Parse [IPv6]:port (max IPv6 size is 39), skipping brackets */
+            /* coverity[check_return] */
             sscanf(ip_port_str, "%*[[]%39[^]]]:%6s", ip_str, port_str);
         } else {
             /* No brackets means no port specified for IPv6 address */
@@ -875,6 +908,7 @@ ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
         }
     } else {
         /* Parse IPv4 address (max size is 15) with optional port */
+        /* coverity[check_return] */
         sscanf(ip_port_str, "%15[^:]:%6s", ip_str, port_str);
     }
 
