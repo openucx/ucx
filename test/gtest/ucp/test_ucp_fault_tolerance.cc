@@ -1351,6 +1351,7 @@ void test_ucp_fault_tolerance::run_probe_in_flight_in_idle_round(
     ucp_ep_h holder_ep    = by_receiver ? receiver_ep : sender_ep;
     ucp_ep_h peer_ep      = by_receiver ? sender_ep : receiver_ep;
     ucp_lane_index_t lane = UCP_NULL_LANE;
+    ucp_ep_recovery_arg_t *arg;
     uct_ep_h peer_uct_ep;
     uint16_t request_id;
 
@@ -1416,16 +1417,29 @@ void test_ucp_fault_tolerance::run_probe_in_flight_in_idle_round(
             }
         }
 
+        /* The hold mock takes the first probe of the worker */
+        wait_for_cond([]() { return m_held_probe_comp != NULL; },
+                      [this]() { short_progress_loop(); });
+        arg = ucp_ep_recovery_arg(holder_ep);
+        ASSERT_TRUE((arg != NULL) &&
+                    (m_held_probe_comp == &arg->probe[lane].comp))
+                << "no probe of the lane in flight";
+
+        /* In a slow run the reply can come after the next round of the
+         * sender, which sends another request. The reply then answers that
+         * request, and the case under test does not happen. */
+        if (!by_receiver && (holder_ep->ext->tf_request_id != request_id)) {
+            UCS_TEST_SKIP_R("the reply came after another request");
+        }
+
         wait_for_cond([&]() {
             uct_ep_h uct_ep = ucp_ep_get_lane(peer_ep, lane);
 
-            return (m_held_probe_comp != NULL) &&
-                   !(ucp_ep_get_failed_lanes(peer_ep) & UCS_BIT(lane)) &&
+            return !(ucp_ep_get_failed_lanes(peer_ep) & UCS_BIT(lane)) &&
                    !ucp_wireup_ep_test(uct_ep) && !ucp_is_uct_ep_failed(uct_ep);
         }, [this]() { short_progress_loop(); });
     }
 
-    ASSERT_TRUE(m_held_probe_comp != NULL) << "no probe in flight";
     ASSERT_FALSE(ucp_ep_get_failed_lanes(peer_ep) & UCS_BIT(lane))
             << "the peer did not recover the lane";
     peer_uct_ep = ucp_ep_get_lane(peer_ep, lane);
