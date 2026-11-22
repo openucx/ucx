@@ -5,6 +5,7 @@
  */
 
 #include <common/mem_buffer.h>
+#include <common/memtype_map_guard.h>
 #include <common/test.h>
 
 #include <ucs/debug/memtrack_int.h>
@@ -22,6 +23,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/base/uct_component.h>
+#include <uct/musa/base/musa_base.h>
 }
 
 extern "C" uct_component_t uct_musa_component;
@@ -266,4 +268,81 @@ UCS_TEST_F(test_musa_copy_md, dmabuf_non_page_allocations)
             close(attr.dmabuf_fd);
         }
     }
+}
+
+class test_musa_copy_md_memtype_map : public test_musa_copy_md {
+protected:
+    void init() override
+    {
+        modify_config("MEMTYPE_CACHE", "y");
+        m_guard.enable();
+        test_musa_copy_md::init();
+    }
+
+    memtype_map_guard m_guard;
+};
+
+UCS_TEST_F(test_musa_copy_md_memtype_map, host_registration)
+{
+    mem_buffer buffer(4096, UCS_MEMORY_TYPE_HOST);
+    void *query_ptr = UCS_PTR_BYTE_OFFSET(buffer.ptr(), 128);
+    uct_musa_pointer_info_t info;
+
+    ucs_memtype_map_register(buffer.ptr(), buffer.size(), UCS_MEMORY_TYPE_HOST,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+    ucs::handle<void*, size_t> map_registration(
+            buffer.ptr(), [](void *address, size_t size) {
+        ucs_memtype_map_unregister(address, size);
+    }, buffer.size());
+
+    ASSERT_TRUE(ucs_memtype_map_is_enabled());
+    ASSERT_UCS_OK(uct_musa_base_query_copy_pointer(query_ptr, 256, &info));
+    EXPECT_EQ(UCT_MUSA_POINTER_HOST, info.kind);
+    EXPECT_EQ(-1, info.device);
+    EXPECT_EQ(query_ptr, info.base_address);
+    EXPECT_EQ(256u, info.alloc_length);
+}
+
+UCS_TEST_F(test_musa_copy_md_memtype_map, device_miss_uses_driver)
+{
+    mem_buffer buffer(4096, UCS_MEMORY_TYPE_MUSA);
+    uct_musa_pointer_info_t info;
+
+    ASSERT_TRUE(ucs_memtype_map_is_enabled());
+    ASSERT_UCS_OK(uct_musa_base_query_copy_pointer(buffer.ptr(), buffer.size(),
+                                                  &info));
+    EXPECT_EQ(UCT_MUSA_POINTER_DEVICE, info.kind);
+    EXPECT_EQ(buffer.ptr(), info.base_address);
+    EXPECT_EQ(buffer.size(), info.alloc_length);
+}
+
+UCS_TEST_F(test_musa_copy_md_memtype_map, device_hit_uses_sys_dev)
+{
+    mem_buffer buffer(4096, UCS_MEMORY_TYPE_MUSA);
+    void *query_ptr = UCS_PTR_BYTE_OFFSET(buffer.ptr(), 128);
+    const size_t query_length = 256;
+    uct_musa_pointer_info_t driver_info;
+    uct_musa_pointer_info_t info;
+
+    ASSERT_UCS_OK(uct_musa_base_query_pointer(query_ptr, query_length,
+                                              &driver_info));
+    if (driver_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        UCS_TEST_SKIP_R("MUSA device has no system device identifier");
+    }
+
+    ucs_memtype_map_register(buffer.ptr(), buffer.size(), UCS_MEMORY_TYPE_MUSA,
+                             driver_info.sys_dev, UCS_MEM_FLAG_REGISTRABLE);
+    ucs::handle<void*, size_t> map_registration(
+            buffer.ptr(), [](void *address, size_t size) {
+        ucs_memtype_map_unregister(address, size);
+    }, buffer.size());
+
+    ASSERT_UCS_OK(uct_musa_base_query_copy_pointer(query_ptr, query_length,
+                                                  &info));
+    EXPECT_EQ(UCT_MUSA_POINTER_DEVICE, info.kind);
+    EXPECT_EQ(driver_info.device, info.device);
+    EXPECT_EQ(driver_info.sys_dev, info.sys_dev);
+    EXPECT_EQ(query_ptr, info.base_address);
+    EXPECT_EQ(query_length, info.alloc_length);
 }

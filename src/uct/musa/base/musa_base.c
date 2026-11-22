@@ -239,8 +239,12 @@ uct_musa_base_query_devices(uct_md_h md,
 ucs_status_t
 uct_musa_base_get_current_device(int *device_p)
 {
-    return uct_musa_base_status(musaGetDevice(device_p),
-                                UCS_LOG_LEVEL_ERROR, "musaGetDevice");
+    /* This is a probe: callers treat a failure as "no current device" and
+     * fall back to selecting the device explicitly (or skip the operation
+     * during cleanup), so it must not be reported as an error. The path
+     * which does propagate the failure logs it explicitly. */
+    return uct_musa_base_status(musaGetDevice(device_p), UCS_LOG_LEVEL_DEBUG,
+                                "musaGetDevice");
 }
 
 ucs_status_t uct_musa_base_set_device(int device)

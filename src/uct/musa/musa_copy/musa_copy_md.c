@@ -184,6 +184,8 @@ static ucs_status_t uct_musa_md_ensure_context(void)
      * application context and initialize the runtime only if none exists. */
     status = uct_musa_base_get_current_device(&device);
     if (status != UCS_OK) {
+        ucs_error("failed to query the current MUSA device: %s",
+                  ucs_status_string(status));
         return status;
     }
 

@@ -75,7 +75,9 @@ uct_musa_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
                                                        current_device,
                                                        device_rsc->device);
     if (switched_device &&
-        (uct_musa_base_set_device(device_rsc->device) != UCS_OK)) {
+        (uct_musa_base_status(musaSetDevice(device_rsc->device),
+                              UCS_LOG_LEVEL_WARN,
+                              "musaSetDevice") != UCS_OK)) {
         return;
     }
 
@@ -701,7 +703,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
 
         have_current_device =
                 (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-        if (uct_musa_base_set_device(device_rsc->device) != UCS_OK) {
+        if (uct_musa_base_status(musaSetDevice(device_rsc->device),
+                                 UCS_LOG_LEVEL_WARN,
+                                 "musaSetDevice") != UCS_OK) {
             if (!ucs_queue_is_empty(&device_rsc->active_queue)) {
                 ucs_fatal("cannot drain outstanding MUSA copies on device %d",
                           device_rsc->device);

@@ -125,394 +125,133 @@ static size_t ucm_musa_mem_size(void *address)
     return length;
 }
 
-static musaError_t ucm_musaMalloc(void **address, size_t size)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    status = ucm_orig_musaMalloc(address, size);
-    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
+/* Create MUSA memory allocation replacement functions */
+#define UCM_MUSA_ALLOC_FUNC(_name, _retval, _success, _size, _ptr_type, _ref, \
+                            ...) \
+    static _retval ucm_##_name(_ptr_type _ref ptr_arg, \
+                               UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        _retval status; \
+        \
+        ucm_event_enter(); \
+        status = ucm_orig_##_name(ptr_arg, \
+                                  UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        if ((status == (_success)) && (ptr_arg != NULL) && \
+            (*ptr_arg != (_ptr_type)0)) { \
+            ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*ptr_arg, (_size), \
+                                        UCS_MEMORY_TYPE_UNKNOWN, \
+                                        UCS_MEM_FLAG_REGISTRABLE); \
+        } \
+        ucm_event_leave(); \
+        return status; \
     }
-    ucm_event_leave();
-    return status;
-}
 
-static musaError_t ucm_musaFree(void *address)
-{
-    musaError_t status;
-    size_t length;
-
-    ucm_event_enter();
-    length = ucm_musa_mem_size(address);
-    if (address != NULL) {
-        ucm_dispatch_mem_type_free(address, length, UCS_MEMORY_TYPE_MUSA);
+/* Create MUSA memory release replacement functions */
+#define UCM_MUSA_FREE_FUNC(_name, _retval, _ptr_type, _mem_type, _size, ...) \
+    static _retval ucm_##_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        _retval status; \
+        \
+        ucm_event_enter(); \
+        if (arg0 != (_ptr_type)0) { \
+            ucm_dispatch_mem_type_free((void *)(uintptr_t)arg0, (_size), \
+                                       _mem_type); \
+        } \
+        status = ucm_orig_##_name(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        ucm_event_leave(); \
+        return status; \
     }
-    status = ucm_orig_musaFree(address);
-    ucm_event_leave();
-    return status;
-}
 
-static musaError_t
-ucm_musaMallocManaged(void **address, size_t size, unsigned flags)
-{
-    musaError_t status;
+UCM_MUSA_ALLOC_FUNC(musaMalloc, musaError_t, musaSuccess, arg0, void*, *,
+                    size_t)
+UCM_MUSA_FREE_FUNC(musaFree, musaError_t, void*, UCS_MEMORY_TYPE_MUSA,
+                   ucm_musa_mem_size((void *)(uintptr_t)arg0), void*)
+UCM_MUSA_ALLOC_FUNC(musaMallocManaged, musaError_t, musaSuccess, arg0, void*,
+                    *, size_t, unsigned)
+UCM_MUSA_FREE_FUNC(musaFreeHost, musaError_t, void*, UCS_MEMORY_TYPE_HOST, 1,
+                   void*)
+#ifdef HAVE_MUSA_MEM_ALLOC_V2
+UCM_MUSA_ALLOC_FUNC(musaMallocPitch, musaError_t, musaSuccess, (*arg0) * arg2,
+                    void*, *, size_t*, size_t, size_t)
+#endif
+#ifdef HAVE_MUSA_MEM_POOL_ALLOC
+UCM_MUSA_ALLOC_FUNC(musaMallocAsync, musaError_t, musaSuccess, arg0, void*, *,
+                    size_t, musaStream_t)
+UCM_MUSA_ALLOC_FUNC(musaMallocFromPoolAsync, musaError_t, musaSuccess, arg0,
+                    void*, *, size_t, musaMemPool_t, musaStream_t)
+UCM_MUSA_FREE_FUNC(musaFreeAsync, musaError_t, void*, UCS_MEMORY_TYPE_MUSA,
+                   ucm_musa_mem_size((void *)(uintptr_t)arg0), void*,
+                   musaStream_t)
+#endif
 
-    ucm_event_enter();
-    status = ucm_orig_musaMallocManaged(address, size, flags);
-    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static musaError_t ucm_musaFreeHost(void *address)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    if (address != NULL) {
-        ucm_dispatch_mem_type_free(address, 1, UCS_MEMORY_TYPE_HOST);
-    }
-    status = ucm_orig_musaFreeHost(address);
-    ucm_event_leave();
-    return status;
-}
+UCM_MUSA_ALLOC_FUNC(muMemAlloc, MUresult, MUSA_SUCCESS, arg0, MUdeviceptr, *,
+                    size_t)
+UCM_MUSA_ALLOC_FUNC(muMemAllocPitch, MUresult, MUSA_SUCCESS, (*arg0) * arg2,
+                    MUdeviceptr, *, size_t*, size_t, size_t, unsigned)
+UCM_MUSA_FREE_FUNC(muMemFree, MUresult, MUdeviceptr, UCS_MEMORY_TYPE_MUSA,
+                   ucm_musa_mem_size((void *)(uintptr_t)arg0), MUdeviceptr)
 
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
-static musaError_t
-ucm_musaMallocPitch(void **address, size_t *pitch, size_t width, size_t height)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    status = ucm_orig_musaMallocPitch(address, pitch, width, height);
-    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_mem_type_alloc(*address, (*pitch) * height,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
+UCM_MUSA_ALLOC_FUNC(muMemAlloc_v2, MUresult, MUSA_SUCCESS, arg0, MUdeviceptr,
+                    *, size_t)
+UCM_MUSA_ALLOC_FUNC(muMemAllocManaged, MUresult, MUSA_SUCCESS, arg0,
+                    MUdeviceptr, *, size_t, unsigned)
+UCM_MUSA_ALLOC_FUNC(muMemAllocPitch_v2, MUresult, MUSA_SUCCESS,
+                    (*arg0) * arg2, MUdeviceptr, *, size_t*, size_t, size_t,
+                    unsigned)
+UCM_MUSA_FREE_FUNC(muMemFree_v2, MUresult, MUdeviceptr, UCS_MEMORY_TYPE_MUSA,
+                   ucm_musa_mem_size((void *)(uintptr_t)arg0), MUdeviceptr)
 #endif
 
 #ifdef HAVE_MUSA_MEM_POOL_ALLOC
-static musaError_t
-ucm_musaMallocAsync(void **address, size_t size, musaStream_t stream)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    status = ucm_orig_musaMallocAsync(address, size, stream);
-    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static musaError_t
-ucm_musaMallocFromPoolAsync(void **address, size_t size, musaMemPool_t pool,
-                            musaStream_t stream)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    status = ucm_orig_musaMallocFromPoolAsync(address, size, pool, stream);
-    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static musaError_t
-ucm_musaFreeAsync(void *address, musaStream_t stream)
-{
-    musaError_t status;
-    size_t length;
-
-    ucm_event_enter();
-    length = ucm_musa_mem_size(address);
-    if (address != NULL) {
-        ucm_dispatch_mem_type_free(address, length, UCS_MEMORY_TYPE_MUSA);
-    }
-    status = ucm_orig_musaFreeAsync(address, stream);
-    ucm_event_leave();
-    return status;
-}
+UCM_MUSA_ALLOC_FUNC(muMemAllocAsync, MUresult, MUSA_SUCCESS, arg0, MUdeviceptr,
+                    *, size_t, MUstream)
+UCM_MUSA_ALLOC_FUNC(muMemAllocFromPoolAsync, MUresult, MUSA_SUCCESS, arg0,
+                    MUdeviceptr, *, size_t, MUmemoryPool, MUstream)
+UCM_MUSA_FREE_FUNC(muMemFreeAsync, MUresult, MUdeviceptr, UCS_MEMORY_TYPE_MUSA,
+                   ucm_musa_mem_size((void *)(uintptr_t)arg0), MUdeviceptr,
+                   MUstream)
 #endif
 
-static MUresult ucm_muMemAlloc(MUdeviceptr *address, size_t size)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAlloc(address, size);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult
-ucm_muMemAllocPitch(MUdeviceptr *address, size_t *pitch, size_t width,
-                    size_t height, unsigned element_size)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAllocPitch(address, pitch, width, height,
-                                      element_size);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address,
-                                    (*pitch) * height,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult ucm_muMemFree(MUdeviceptr address)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    if (address != 0) {
-        ucm_dispatch_mem_type_free(
-                (void *)(uintptr_t)address,
-                ucm_musa_mem_size((void *)(uintptr_t)address),
-                UCS_MEMORY_TYPE_MUSA);
-    }
-    status = ucm_orig_muMemFree(address);
-    ucm_event_leave();
-    return status;
-}
-
+static ucm_hook_func_t ucm_musa_driver_funcs[] = {
+    UCM_HOOK_FUNC_ENTRY(muMemAlloc),
+    UCM_HOOK_FUNC_ENTRY(muMemAllocPitch),
+    UCM_HOOK_FUNC_ENTRY(muMemFree),
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
-static MUresult ucm_muMemAlloc_v2(MUdeviceptr *address, size_t size)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAlloc_v2(address, size);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult
-ucm_muMemAllocManaged(MUdeviceptr *address, size_t size, unsigned flags)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAllocManaged(address, size, flags);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult
-ucm_muMemAllocPitch_v2(MUdeviceptr *address, size_t *pitch, size_t width,
-                       size_t height, unsigned element_size)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAllocPitch_v2(address, pitch, width, height,
-                                         element_size);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address,
-                                    (*pitch) * height,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult ucm_muMemFree_v2(MUdeviceptr address)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    if (address != 0) {
-        ucm_dispatch_mem_type_free(
-                (void *)(uintptr_t)address,
-                ucm_musa_mem_size((void *)(uintptr_t)address),
-                UCS_MEMORY_TYPE_MUSA);
-    }
-    status = ucm_orig_muMemFree_v2(address);
-    ucm_event_leave();
-    return status;
-}
-#endif
-
-#ifdef HAVE_MUSA_MEM_POOL_ALLOC
-static MUresult
-ucm_muMemAllocAsync(MUdeviceptr *address, size_t size, MUstream stream)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAllocAsync(address, size, stream);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult
-ucm_muMemAllocFromPoolAsync(MUdeviceptr *address, size_t size,
-                            MUmemoryPool pool, MUstream stream)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    status = ucm_orig_muMemAllocFromPoolAsync(address, size, pool, stream);
-    if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
-                                    UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE);
-    }
-    ucm_event_leave();
-    return status;
-}
-
-static MUresult ucm_muMemFreeAsync(MUdeviceptr address, MUstream stream)
-{
-    MUresult status;
-
-    ucm_event_enter();
-    if (address != 0) {
-        ucm_dispatch_mem_type_free(
-                (void *)(uintptr_t)address,
-                ucm_musa_mem_size((void *)(uintptr_t)address),
-                UCS_MEMORY_TYPE_MUSA);
-    }
-    status = ucm_orig_muMemFreeAsync(address, stream);
-    ucm_event_leave();
-    return status;
-}
-#endif
-
-typedef struct {
-    ucm_reloc_patch_t patch;
-    void              **orig_func_ptr;
-} ucm_musa_func_t;
-
-#define UCM_MUSA_FUNC_ENTRY(_func) \
-    {{#_func, ucm_override_##_func}, \
-      (void**)&ucm_orig_##_func}
-
-static ucm_musa_func_t ucm_musa_driver_funcs[] = {
-    UCM_MUSA_FUNC_ENTRY(muMemAlloc),
-    UCM_MUSA_FUNC_ENTRY(muMemAllocPitch),
-    UCM_MUSA_FUNC_ENTRY(muMemFree),
-#ifdef HAVE_MUSA_MEM_ALLOC_V2
-    UCM_MUSA_FUNC_ENTRY(muMemAlloc_v2),
-    UCM_MUSA_FUNC_ENTRY(muMemAllocManaged),
-    UCM_MUSA_FUNC_ENTRY(muMemAllocPitch_v2),
-    UCM_MUSA_FUNC_ENTRY(muMemFree_v2),
+    UCM_HOOK_FUNC_ENTRY(muMemAlloc_v2),
+    UCM_HOOK_FUNC_ENTRY(muMemAllocManaged),
+    UCM_HOOK_FUNC_ENTRY(muMemAllocPitch_v2),
+    UCM_HOOK_FUNC_ENTRY(muMemFree_v2),
 #endif
 #ifdef HAVE_MUSA_MEM_POOL_ALLOC
-    UCM_MUSA_FUNC_ENTRY(muMemAllocAsync),
-    UCM_MUSA_FUNC_ENTRY(muMemAllocFromPoolAsync),
-    UCM_MUSA_FUNC_ENTRY(muMemFreeAsync),
+    UCM_HOOK_FUNC_ENTRY(muMemAllocAsync),
+    UCM_HOOK_FUNC_ENTRY(muMemAllocFromPoolAsync),
+    UCM_HOOK_FUNC_ENTRY(muMemFreeAsync),
 #endif
-    {{NULL}, NULL}
+    {{NULL, NULL}, NULL}
 };
 
-static ucm_musa_func_t ucm_musa_runtime_funcs[] = {
-    UCM_MUSA_FUNC_ENTRY(musaMalloc),
-    UCM_MUSA_FUNC_ENTRY(musaFree),
-    UCM_MUSA_FUNC_ENTRY(musaMallocManaged),
-    UCM_MUSA_FUNC_ENTRY(musaFreeHost),
+static ucm_hook_func_t ucm_musa_runtime_funcs[] = {
+    UCM_HOOK_FUNC_ENTRY(musaMalloc),
+    UCM_HOOK_FUNC_ENTRY(musaFree),
+    UCM_HOOK_FUNC_ENTRY(musaMallocManaged),
+    UCM_HOOK_FUNC_ENTRY(musaFreeHost),
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
-    UCM_MUSA_FUNC_ENTRY(musaMallocPitch),
+    UCM_HOOK_FUNC_ENTRY(musaMallocPitch),
 #endif
 #ifdef HAVE_MUSA_MEM_POOL_ALLOC
-    UCM_MUSA_FUNC_ENTRY(musaMallocAsync),
-    UCM_MUSA_FUNC_ENTRY(musaMallocFromPoolAsync),
-    UCM_MUSA_FUNC_ENTRY(musaFreeAsync),
+    UCM_HOOK_FUNC_ENTRY(musaMallocAsync),
+    UCM_HOOK_FUNC_ENTRY(musaMallocFromPoolAsync),
+    UCM_HOOK_FUNC_ENTRY(musaFreeAsync),
 #endif
-    {{NULL}, NULL}
+    {{NULL, NULL}, NULL}
 };
-
-static ucs_status_t
-ucm_musa_install_hooks(ucm_musa_func_t *funcs, ucm_mmap_hook_mode_t mode,
-                       uint64_t *installed_p)
-{
-    ucm_musa_func_t *func;
-    void *func_ptr;
-    ucs_status_t status;
-    int count;
-
-    if (*installed_p & UCS_BIT(mode)) {
-        return UCS_OK;
-    }
-
-    if (!(ucm_global_opts.musa_hook_modes & UCS_BIT(mode))) {
-        ucm_debug("MUSA memory hooks mode %s is disabled",
-                  ucm_mmap_hook_modes[mode]);
-        return UCS_OK;
-    }
-
-    count = 0;
-    for (func = funcs; func->patch.symbol != NULL; ++func) {
-        func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
-        if (func_ptr == NULL) {
-            continue;
-        }
-
-        if (mode == UCM_MMAP_HOOK_BISTRO) {
-            status = ucm_bistro_patch(func_ptr, func->patch.value,
-                                      func->patch.symbol, func->orig_func_ptr,
-                                      NULL);
-        } else if (mode == UCM_MMAP_HOOK_RELOC) {
-            status = ucm_reloc_modify(&func->patch);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        if (status != UCS_OK) {
-            return status;
-        }
-        ++count;
-    }
-
-    *installed_p |= UCS_BIT(mode);
-    ucm_info("MUSA memory hooks mode %s: installed %d hooks",
-             ucm_mmap_hook_modes[mode], count);
-    return UCS_OK;
-}
 
 static ucs_status_t ucm_musamem_install(int events)
 {
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
-    static uint64_t installed_driver_hooks;
-    static uint64_t installed_runtime_hooks;
+    static int installed_driver_hooks;
+    static int installed_runtime_hooks;
     ucs_status_t bistro_status;
     ucs_status_t driver_reloc_status;
     ucs_status_t runtime_reloc_status;
@@ -528,23 +267,26 @@ static ucs_status_t ucm_musamem_install(int events)
     }
 
     pthread_mutex_lock(&install_mutex);
-    bistro_status = ucm_musa_install_hooks(ucm_musa_driver_funcs,
-                                           UCM_MMAP_HOOK_BISTRO,
-                                           &installed_driver_hooks);
+    bistro_status = ucm_install_hooks(ucm_musa_driver_funcs, "MUSA",
+                                      UCM_MMAP_HOOK_BISTRO,
+                                      ucm_global_opts.musa_hook_modes,
+                                      &installed_driver_hooks);
     if (bistro_status != UCS_OK) {
         ucm_debug("failed to install MUSA bistro hooks");
     }
 
-    driver_reloc_status = ucm_musa_install_hooks(ucm_musa_driver_funcs,
-                                                 UCM_MMAP_HOOK_RELOC,
-                                                 &installed_driver_hooks);
+    driver_reloc_status = ucm_install_hooks(ucm_musa_driver_funcs, "MUSA",
+                                            UCM_MMAP_HOOK_RELOC,
+                                            ucm_global_opts.musa_hook_modes,
+                                            &installed_driver_hooks);
     if (driver_reloc_status != UCS_OK) {
         ucm_debug("failed to install MUSA driver reloc hooks");
     }
 
-    runtime_reloc_status = ucm_musa_install_hooks(ucm_musa_runtime_funcs,
-                                                  UCM_MMAP_HOOK_RELOC,
-                                                  &installed_runtime_hooks);
+    runtime_reloc_status = ucm_install_hooks(ucm_musa_runtime_funcs, "MUSA",
+                                             UCM_MMAP_HOOK_RELOC,
+                                             ucm_global_opts.musa_hook_modes,
+                                             &installed_runtime_hooks);
     if (runtime_reloc_status != UCS_OK) {
         ucm_debug("failed to install MUSA runtime reloc hooks");
     }

@@ -57,6 +57,27 @@ public:
         }
     };
 
+    struct progress_completion {
+        uct_completion_t uct;
+        uct_worker_h     worker;
+        unsigned         calls;
+
+        progress_completion() : worker(NULL), calls(0)
+        {
+            uct.func   = complete;
+            uct.count  = 1;
+            uct.status = UCS_OK;
+        }
+
+        static void complete(uct_completion_t *comp)
+        {
+            progress_completion *self = ucs_container_of(
+                    comp, progress_completion, uct);
+            ++self->calls;
+            uct_worker_progress(self->worker);
+        }
+    };
+
     static std::vector<const resource*>
     enum_resources(const std::string &tl_name)
     {
@@ -265,3 +286,44 @@ UCS_TEST_SKIP_COND_P(test_musa_copy_limited_events,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_musa_copy_limited_events, musa_copy)
+
+class test_musa_copy_reentrant_progress : public test_musa_copy {
+protected:
+    void init() override
+    {
+        modify_config("MUSA_COPY_MAX_POLL", "1");
+        test_musa_copy::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_musa_copy_reentrant_progress,
+                     completion_calls_progress,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    enum { NUM_COPIES = 4 };
+    mapped_buffer sendbuf(4096, SEED1, sender(), 0, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer recvbuf(4096, SEED2, receiver(), 0, UCS_MEMORY_TYPE_MUSA);
+    uct_iov_t iov = {sendbuf.ptr(), sendbuf.length(), sendbuf.memh(), 0, 1};
+    progress_completion completions[NUM_COPIES];
+
+    for (auto &completion : completions) {
+        completion.worker = sender().worker();
+    }
+
+    ucs::handle<entity*> flush_guard(&sender(), [](entity *e) { e->flush(); });
+    for (auto &completion : completions) {
+        ASSERT_EQ(UCS_INPROGRESS,
+                  uct_ep_put_zcopy(sender_ep(), &iov, 1, recvbuf.addr(),
+                                   recvbuf.rkey(), &completion.uct));
+    }
+
+    flush();
+
+    for (const auto &completion : completions) {
+        EXPECT_EQ(1u, completion.calls);
+        EXPECT_EQ(UCS_OK, completion.uct.status);
+    }
+    recvbuf.pattern_check(SEED1);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_musa_copy_reentrant_progress, musa_copy)
