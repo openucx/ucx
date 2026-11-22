@@ -1619,8 +1619,11 @@ public:
 
         set_remote_sgl(remotebuf, failed_index, remote_addrs, rkeys);
 
+        m_tx_cqe_log.clear();
         {
             scoped_log_handler slh(wrap_errors_logger);
+            scoped_log_handler capture(tx_cqe_log_handler);
+            ucs::scoped_log_level trace_poll(UCS_LOG_LEVEL_TRACE_POLL);
 
             ASSERT_EQ(UCS_INPROGRESS,
                       post_sgl_zcopy(is_put_op, localbuf, remote_addrs, rkeys,
@@ -1628,6 +1631,22 @@ public:
             wait_for_flag(&comp.done);
             flush();
         }
+
+        std::ostringstream diagnostics;
+        diagnostics << (is_put_op ? "put" : "get") << " ep " << ep0()
+                    << " failed element " << failed_index
+                    << " empty element " << empty_index
+                    << " completion count " << comp.uct.count
+                    << " status " << ucs_status_string(comp.uct.status)
+                    << " error callbacks " << m_err_count;
+        for (const auto &failed_ep : m_failed_eps) {
+            diagnostics << "\nfailed ep " << failed_ep.first << " status "
+                        << ucs_status_string(failed_ep.second);
+        }
+        for (size_t i = 0; i < m_tx_cqe_log.size(); ++i) {
+            diagnostics << "\ntx cqe log[" << i << "]: " << m_tx_cqe_log[i];
+        }
+        SCOPED_TRACE(diagnostics.str());
 
         ASSERT_EQ(1u, comp.done);
         ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
@@ -1786,6 +1805,38 @@ public:
     }
 
 private:
+    static ucs_log_func_rc_t
+    tx_cqe_log_handler(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap)
+    {
+        if (!strcmp(function, "uct_rc_mlx5_iface_poll_tx") ||
+            !strcmp(function, "uct_ib_mlx5_completion_with_err")) {
+            va_list ap2;
+
+            va_copy(ap2, ap);
+            pthread_mutex_lock(&m_logger_mutex);
+            /* Bound diagnostics if progress keeps producing completions. The
+             * error formatter may log the same CQE twice, before and after
+             * looking up the endpoint. */
+            if (m_tx_cqe_log.size() < 64) {
+                m_tx_cqe_log.push_back(format_message(message, ap2));
+            } else if (m_tx_cqe_log.size() == 64) {
+                m_tx_cqe_log.push_back("tx cqe log truncated");
+            }
+            pthread_mutex_unlock(&m_logger_mutex);
+            va_end(ap2);
+        }
+
+        /* Hide unrelated messages enabled by the raised log level. Keep
+         * warnings and errors on the normal test logging path. */
+        return (level >= UCS_LOG_LEVEL_DIAG) ? UCS_LOG_FUNC_RC_STOP :
+                                               UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static std::vector<std::string> m_tx_cqe_log;
+
     struct op_completion {
         uct_completion_t uct;
         unsigned         done;
@@ -1857,6 +1908,8 @@ private:
                                     &comp->uct);
     }
 };
+
+std::vector<std::string> test_uct_peer_failure_sgl_zcopy::m_tx_cqe_log;
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_first,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
