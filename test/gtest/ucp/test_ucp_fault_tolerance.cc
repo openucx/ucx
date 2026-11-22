@@ -127,14 +127,15 @@ protected:
     void cleanup() override {
         /* A probe still held fails before the endpoints are destroyed */
         if (m_held_probe_comp != NULL) {
-            UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(sender().worker());
+            UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(m_probe_worker);
             mock_invoke_completion(UCS_ERR_CANCELED);
-            UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(sender().worker());
+            UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(m_probe_worker);
         }
 
         test_ucp_memheap::cleanup();
 
         m_probe_mock      = NULL;
+        m_probe_worker    = NULL;
         m_probe_count     = 0;
         m_held_probe_comp = NULL;
     }
@@ -871,7 +872,8 @@ protected:
         ucp_context_h context = worker->context;
         ucp_rsc_index_t rsc_index;
 
-        m_probe_mock = &mock;
+        m_probe_mock   = &mock;
+        m_probe_worker = worker;
 
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
             if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
@@ -935,6 +937,7 @@ protected:
 
     static uct_completion_t *m_held_probe_comp;
     static ucs::mock        *m_probe_mock;
+    static ucp_worker_h      m_probe_worker;
     static unsigned          m_probe_count;
 
     void run_initiator_failure();
@@ -970,6 +973,7 @@ private:
 
 uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
+ucp_worker_h test_ucp_fault_tolerance::m_probe_worker         = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
 /* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token, but
@@ -1357,12 +1361,15 @@ void test_ucp_fault_tolerance::run_probe_in_flight_in_idle_round(
         return ucp_ep_is_lane_p2p(ep, l) && (l != key->am_lane) &&
                (l != key->wireup_msg_lane) && (l != key->keepalive_lane);
     };
-    auto keepalive_rounds = [this]() {
-        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(1.0);
+    /* Every keepalive round of the holder runs its recovery round */
+    auto keepalive_rounds = [this, &holder]() {
+        size_t round_count = holder.worker()->keepalive.round_count + 3;
 
-        while (ucs_get_time() < deadline) {
-            short_progress_loop();
-        }
+        wait_for_cond([&]() {
+            return holder.worker()->keepalive.round_count >= round_count;
+        }, [this]() { short_progress_loop(); });
+        EXPECT_GE(holder.worker()->keepalive.round_count, round_count)
+                << "the holder ran no keepalive rounds";
     };
     auto recovery_state_is = [](ucp_ep_h ep, int state) {
         ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
