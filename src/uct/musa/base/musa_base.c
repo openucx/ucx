@@ -114,6 +114,7 @@ uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
     ucs_sys_bus_id_t bus_id;
     ucs_sys_device_t sys_dev;
     char pci_bus_id[UCT_MUSA_PCI_BUS_ID_LEN];
+    char device_name[10];
     ucs_status_t status;
     musaError_t err;
 
@@ -137,6 +138,14 @@ uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
     }
 
     status = ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Priority 10 matches cuda_util.c and rocm_base.c, so a GPU name replaces
+     * the bus-id label in ucx_info and the transport tables. */
+    ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%u", device);
+    status = ucs_topo_sys_device_set_name(sys_dev, device_name, 10);
     if (status != UCS_OK) {
         return status;
     }
