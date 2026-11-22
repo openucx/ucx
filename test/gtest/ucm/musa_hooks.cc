@@ -73,6 +73,8 @@ protected:
     }
 };
 
+/* Existing-alloc discovery comes from the mappings UCM scans in
+ * /proc/self/maps, which depends on the driver's VA layout. */
 UCS_TEST_F(musa_hooks, test_existing_musaMalloc_is_reported)
 {
     EXPECT_TRUE(musa_existing_seen);

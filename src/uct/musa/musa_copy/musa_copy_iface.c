@@ -13,6 +13,7 @@
 
 #include <uct/musa/base/musa_base.h>
 
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 
@@ -61,9 +62,10 @@ uct_musa_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_musa_copy_device_rsc_t *device_rsc =
             ucs_container_of(mp, uct_musa_copy_device_rsc_t, event_mp);
     uct_musa_copy_event_desc_t *event_desc = obj;
-    int current_device                    = -1;
+    char op[64];
+    int current_device = -1;
     int have_current_device;
-    int switched_device;
+    int restore_device;
 
     if (event_desc->event == NULL) {
         return;
@@ -71,24 +73,26 @@ uct_musa_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    switched_device = uct_musa_base_need_device_switch(have_current_device,
-                                                       current_device,
-                                                       device_rsc->device);
-    if (switched_device &&
-        (uct_musa_base_status(musaSetDevice(device_rsc->device),
-                              UCS_LOG_LEVEL_WARN,
-                              "musaSetDevice") != UCS_OK)) {
-        return;
+    restore_device = uct_musa_base_need_device_switch(have_current_device,
+                                                      current_device,
+                                                      device_rsc->device);
+    if (restore_device) {
+        ucs_snprintf_safe(op, sizeof(op), "musaSetDevice(device=%d)",
+                          device_rsc->device);
+        if (uct_musa_base_status(musaSetDevice(device_rsc->device),
+                                 UCS_LOG_LEVEL_WARN, op) != UCS_OK) {
+            /* Event destruction does not depend on the current device, so
+             * keep going and release the event instead of leaking it. */
+            restore_device = 0;
+        }
     }
 
-    if (uct_musa_base_status(musaEventDestroy(event_desc->event),
-                             UCS_LOG_LEVEL_WARN, "musaEventDestroy") !=
-        UCS_OK) {
-        ucs_warn("failed to destroy MUSA event on device %d",
-                 device_rsc->device);
-    }
+    ucs_snprintf_safe(op, sizeof(op), "musaEventDestroy(device=%d)",
+                      device_rsc->device);
+    uct_musa_base_status(musaEventDestroy(event_desc->event),
+                         UCS_LOG_LEVEL_WARN, op);
 
-    if (switched_device) {
+    if (restore_device) {
         uct_musa_base_restore_device(current_device, have_current_device);
     }
 }
@@ -689,6 +693,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
     uct_musa_copy_device_rsc_t *device_rsc;
     uct_musa_copy_queue_desc_t *queue_desc;
     uct_musa_copy_event_desc_t *event_desc;
+    char op[64];
     unsigned i;
     unsigned j;
     unsigned k;
@@ -703,26 +708,24 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
 
         have_current_device =
                 (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+        ucs_snprintf_safe(op, sizeof(op), "musaSetDevice(device=%d)",
+                          device_rsc->device);
         if (uct_musa_base_status(musaSetDevice(device_rsc->device),
-                                 UCS_LOG_LEVEL_WARN,
-                                 "musaSetDevice") != UCS_OK) {
+                                 UCS_LOG_LEVEL_WARN, op) != UCS_OK) {
             if (!ucs_queue_is_empty(&device_rsc->active_queue)) {
                 ucs_fatal("cannot drain outstanding MUSA copies on device %d",
                           device_rsc->device);
             }
 
-            ucs_warn("failed to select MUSA device %d during idle cleanup",
-                     device_rsc->device);
             ucs_mpool_cleanup(&device_rsc->event_mp, 1);
             continue;
         }
 
-        if ((device_rsc->short_stream != NULL) &&
-            (uct_musa_base_status(musaStreamDestroy(device_rsc->short_stream),
-                                  UCS_LOG_LEVEL_WARN,
-                                  "musaStreamDestroy") != UCS_OK)) {
-            ucs_warn("failed to destroy MUSA short stream on device %d",
-                     device_rsc->device);
+        if (device_rsc->short_stream != NULL) {
+            ucs_snprintf_safe(op, sizeof(op), "musaStreamDestroy(device=%d)",
+                              device_rsc->device);
+            uct_musa_base_status(musaStreamDestroy(device_rsc->short_stream),
+                                 UCS_LOG_LEVEL_WARN, op);
         }
 
         for (j = 0; j < UCT_MUSA_COPY_QUEUE_LAST; ++j) {
@@ -753,13 +756,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
                     ucs_mpool_put(event_desc);
                 }
 
-                if (uct_musa_base_status(
-                            musaStreamDestroy(queue_desc->stream),
-                            UCS_LOG_LEVEL_WARN,
-                            "musaStreamDestroy") != UCS_OK) {
-                    ucs_warn("failed to destroy MUSA stream on device %d",
-                             device_rsc->device);
-                }
+                ucs_snprintf_safe(op, sizeof(op),
+                                  "musaStreamDestroy(device=%d)",
+                                  device_rsc->device);
+                uct_musa_base_status(musaStreamDestroy(queue_desc->stream),
+                                     UCS_LOG_LEVEL_WARN, op);
             }
         }
 

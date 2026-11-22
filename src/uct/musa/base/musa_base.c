@@ -122,7 +122,7 @@ uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
     err = musaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), (int)device);
     if (err != musaSuccess) {
         ucs_debug("musaDeviceGetPCIBusId(device=%u) failed: %s", device,
-                  musaGetErrorString(err));
+                  uct_musa_error_string(err));
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -249,6 +249,8 @@ uct_musa_base_get_current_device(int *device_p)
 
 ucs_status_t uct_musa_base_set_device(int device)
 {
+    /* The data path copies on runtime-created streams, so the device must be
+     * selected with the runtime API as well. */
     return uct_musa_base_status(musaSetDevice(device), UCS_LOG_LEVEL_ERROR,
                                 "musaSetDevice");
 }

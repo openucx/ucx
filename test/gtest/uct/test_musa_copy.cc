@@ -116,6 +116,34 @@ UCS_TEST_SKIP_COND_P(test_musa_copy, put_zcopy_is_async,
     recvbuf.pattern_check(SEED1);
 }
 
+UCS_TEST_SKIP_COND_P(test_musa_copy, data_path_preserves_runtime_error,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    mapped_buffer sendbuf(4096, SEED1, sender(), 0, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer recvbuf(4096, SEED2, receiver(), 0, UCS_MEMORY_TYPE_MUSA);
+    uct_iov_t iov = {sendbuf.ptr(), sendbuf.length(), sendbuf.memh(), 0, 1};
+    flush_completion completion;
+    musaError_t error;
+
+    /* Poison the runner-visible runtime last-error, then verify that a
+     * successful data path does not consume or overwrite it. */
+    EXPECT_NE(musaSuccess, musaSetDevice(-1));
+    error = musaPeekAtLastError();
+    UCS_TEST_SCOPE_EXIT() {
+        (void)musaGetLastError();
+    } UCS_TEST_SCOPE_EXIT_END
+
+    ASSERT_NE(musaSuccess, error);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(sender_ep(), &iov, 1, recvbuf.addr(),
+                               recvbuf.rkey(), &completion.uct));
+    flush();
+
+    EXPECT_EQ(1u, completion.calls);
+    EXPECT_EQ(error, musaPeekAtLastError());
+    recvbuf.pattern_check(SEED1);
+}
+
 UCS_TEST_SKIP_COND_P(test_musa_copy, flush_completion_multiple_streams,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
