@@ -66,6 +66,7 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
  * caller, or is NULL when they are unknown, in which case they are resolved on
  * the first memory domain which actually requires them. Returns UCP_NULL_LANE
  * if no lane is compatible.
+ * @a skip_md_index is the MD to exclude, or UCP_NULL_RESOURCE for none.
  */
 static ucp_lane_index_t
 ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
@@ -116,6 +117,7 @@ ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
  * Select the mem type endpoint lane which can register the buffer, and register
  * it. @a mem_info holds the memory flags resolved by the caller, or is NULL
  * when they are unknown.
+ * @a skip_md_index is the MD to exclude, or UCP_NULL_RESOURCE for none.
  */
 static ucs_status_t
 ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
@@ -161,12 +163,11 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
     unsigned additional_selection_flags;
     ucs_status_t status;
 
-    *detected = (ucp_memory_info_t){
-        .type = mem_type,
-        .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .flags = UCS_MEM_FLAG_CUDA_ASYNC
-    };
     if (mem_info == NULL) {
+        detected->type    = mem_type;
+        detected->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        detected->flags   = UCS_MEM_FLAG_CUDA_ASYNC;
+
         ep = ucp_worker_cuda_async_ep_for_short(worker, detected, operation,
                                                 &lane);
         if (ep == NULL) {
@@ -181,7 +182,7 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
         *mem_info_p    = mem_info;
     }
 
-    if ((mem_info == NULL) || !(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC)) {
+    if (!(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

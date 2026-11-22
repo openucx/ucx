@@ -373,12 +373,8 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     switch (memtype_op) {
     case UCT_EP_OP_PUT_SHORT:
     case UCT_EP_OP_GET_SHORT:
-        async_ep = (copy_mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ?
-                           ucp_worker_cuda_async_ep_for_short(worker,
-                                                              copy_mem_info,
-                                                              memtype_op,
-                                                              &lane) :
-                           NULL;
+        async_ep = ucp_worker_cuda_async_ep_for_short(worker, copy_mem_info,
+                                                      memtype_op, &lane);
         if (async_ep != NULL) {
             ep_config = ucp_ep_config(async_ep);
         } else {
