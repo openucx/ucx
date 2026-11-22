@@ -75,7 +75,9 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "                     still use the real host, so an emulated remote\n"
      "                     host on the same machine stays local for the\n"
      "                     data path. Intended for testing the fallback to\n"
-     "                     other transports.",
+     "                     other transports.\n"
+     "                     Ignored if ENABLE_MNNVL=n, which disables\n"
+     "                     multi-node NVLINK altogether.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
      UCS_CONFIG_TYPE_STRING},
 
