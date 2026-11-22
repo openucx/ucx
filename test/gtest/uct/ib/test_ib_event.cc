@@ -25,6 +25,27 @@ class uct_test_event_base : public uct_p2p_test {
 public:
     uct_test_event_base(): uct_p2p_test(0), m_event() {}
 
+    /* LAST_WQE_REACHED is generated only for QPs attached to an SRQ. */
+    bool iface_has_srq(entity &e) {
+        if (GetParam()->tl_name != "rc_verbs") {
+            return true;
+        }
+
+        return ucs_derived_of(e.iface(), uct_rc_verbs_iface_t)->srq != NULL;
+    }
+
+    /* Before init(), no entity exists and the test cannot determine whether
+     * its QPs use an SRQ, so do not skip yet. */
+    bool has_srq() {
+        FOR_EACH_ENTITY(iter) {
+            if (!iface_has_srq(**iter)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     class qp {
     public:
         qp(entity &e) : m_e(e) {}
@@ -217,7 +238,7 @@ public:
     }
 };
 
-UCS_TEST_P(uct_p2p_test_event_log, last_wqe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event_log, last_wqe, !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -255,7 +276,8 @@ public:
 
 };
 
-UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_after_subscribe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event, last_wqe_cb_after_subscribe,
+                     !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -266,7 +288,8 @@ UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_after_subscribe)
     }
 }
 
-UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_before_subscribe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event, last_wqe_cb_before_subscribe,
+                     !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -304,6 +327,60 @@ public:
     virtual void init() {
         uct_test::init();
         m_e.reset(create_entity(0));
+        check_skip_test();
+    }
+
+    /* m_e is not stored in m_entities, so check its interface directly. */
+    bool has_srq() {
+        return (m_e == NULL) || iface_has_srq(*m_e);
+    }
+
+    ucs_status_t register_software_event() {
+        m_event.got       = false;
+        m_event.super.cb  = last_wqe_check_cb;
+        m_event.super.cbq = &m_e->worker()->progress_q;
+        m_event.dev       = dev(*m_e);
+        /* Use a separate event key to avoid notifying a real QP. */
+        m_event.qp_num    = UINT32_MAX;
+
+        return uct_ib_device_async_event_register(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num);
+    }
+
+    static void unregister_software_event(event_ctx *event) {
+        uct_ib_device_async_event_unregister(event->dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, event->qp_num);
+    }
+
+    void fire_software_event() {
+        uct_rc_iface_qp_cleanup_ready(
+                ucs_derived_of(m_e->iface(), uct_rc_iface_t), m_event.qp_num);
+    }
+
+    void test_software_last_wqe(bool before) {
+        ASSERT_UCS_OK(register_software_event());
+        ucs::handle<event_ctx*> event(&m_event, unregister_software_event);
+
+        if (before) {
+            fire_software_event();
+        }
+
+        ASSERT_UCS_OK(uct_ib_device_async_event_wait(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num, &m_event.super));
+        if (!before) {
+            /* Firing the event twice must invoke the callback only once. */
+            fire_software_event();
+            fire_software_event();
+        }
+
+        EXPECT_FALSE(m_event.got);
+
+        ucs_time_t deadline = ucs::get_deadline(5.0);
+        while (!m_event.got && (ucs_get_time() < deadline)) {
+            m_e->progress();
+        }
+
+        EXPECT_TRUE(m_event.got);
     }
 
     bool wait_for_last_wqe_event(bool before) {
@@ -387,7 +464,7 @@ private:
             ucs_status_t status;
 
             status = uct_rc_iface_qp_create(&m_iface->super, &m_ibqp, &attr,
-                                            m_iface->super.config.tx_qp_len,
+                                            m_iface->super.config.tx_qp_len, 0,
                                             m_iface->srq);
             ASSERT_UCS_OK(status);
 
@@ -418,14 +495,42 @@ private:
     };
 };
 
-UCS_TEST_P(uct_qp_test_event, last_wqe_cb_after_subscribe)
+UCS_TEST_SKIP_COND_P(uct_qp_test_event, last_wqe_cb_after_subscribe,
+                     !has_srq())
 {
     ASSERT_TRUE(wait_for_last_wqe_event(false));
 }
 
-UCS_TEST_P(uct_qp_test_event, last_wqe_cb_before_subscribe)
+UCS_TEST_SKIP_COND_P(uct_qp_test_event, last_wqe_cb_before_subscribe,
+                     !has_srq())
 {
     ASSERT_TRUE(wait_for_last_wqe_event(true));
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_before_subscribe)
+{
+    test_software_last_wqe(true);
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_after_subscribe)
+{
+    test_software_last_wqe(false);
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_unregister_pending)
+{
+    {
+        ASSERT_UCS_OK(register_software_event());
+        ucs::handle<event_ctx*> event(&m_event, unregister_software_event);
+
+        ASSERT_UCS_OK(uct_ib_device_async_event_wait(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num, &m_event.super));
+        fire_software_event();
+        EXPECT_FALSE(m_event.got);
+    }
+
+    m_e->progress();
+    EXPECT_FALSE(m_event.got);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(uct_qp_test_event);

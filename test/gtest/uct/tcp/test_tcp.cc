@@ -6,9 +6,13 @@
 #include <common/test.h>
 #include <uct/uct_test.h>
 
+#include <set>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/tcp/tcp.h>
+#include <ucs/sys/netlink.h>
+#include <ucs/sys/sys.h>
 }
 
 class test_uct_tcp : public uct_test {
@@ -189,6 +193,10 @@ private:
         uct_iface_addr_t *iface_addr;
         ucs_status_t status;
 
+        if (to.tcp_vrf_drops_loopback()) {
+            UCS_TEST_SKIP_R("same-host traffic in VRF is dropped");
+        }
+
         dev_addr   = (uct_device_addr_t*)malloc(to.iface_attr().device_addr_len);
         iface_addr = (uct_iface_addr_t*)malloc(to.iface_attr().iface_addr_len);
 
@@ -207,6 +215,14 @@ private:
                     (dest_addr.ss_family == AF_INET6));
         status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, 0, &fd);
         ASSERT_UCS_OK(status);
+
+        // Addresses in a VRF are reachable only from sockets bound to the VRF
+        const char *vrf_name = uct_tcp_iface_vrf_name(
+                (uct_tcp_iface_t*)to.iface());
+        if (vrf_name != NULL) {
+            status = ucs_socket_bind_to_device(fd, vrf_name);
+            ASSERT_UCS_OK(status);
+        }
 
         status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);
         ASSERT_UCS_OK(status);
@@ -250,6 +266,53 @@ private:
     }
 
 protected:
+    ucs_status_t open_md(const char *vrf_enable, uct_md_h *md_p)
+    {
+        uct_md_config_t *md_config;
+        ucs_status_t status;
+
+        status = uct_md_config_read(GetParam()->component, NULL, NULL,
+                                    &md_config);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_config_modify(md_config, "TCP_VRF_ENABLE", vrf_enable);
+        if (status == UCS_OK) {
+            status = uct_md_open(GetParam()->component,
+                                 GetParam()->md_name.c_str(), md_config, md_p);
+        }
+
+        uct_config_release(md_config);
+        return status;
+    }
+
+    void query_devices(const char *vrf_enable, std::set<std::string> &devices)
+    {
+        uct_tl_resource_desc_t *resources;
+        unsigned num_resources;
+        uct_md_h md;
+
+        ASSERT_UCS_OK(open_md(vrf_enable, &md));
+
+        ucs_status_t status = uct_md_query_tl_resources(md, &resources,
+                                                        &num_resources);
+        if (status == UCS_OK) {
+            for (unsigned i = 0; i < num_resources; ++i) {
+                devices.insert(resources[i].dev_name);
+            }
+            uct_release_tl_resource_list(resources);
+        }
+        uct_md_close(md);
+        ASSERT_UCS_OK(status);
+    }
+
+    static int vrf_master_index(const std::string &dev_name)
+    {
+        return ucs_netlink_get_vrf_master_index(
+                if_nametoindex(dev_name.c_str()));
+    }
+
     uct_tcp_iface *m_tcp_iface;
     entity        *m_ent;
 };
@@ -329,6 +392,155 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
     EXPECT_EQ(sizeof(uct_tcp_ep_addr_t), iface_attr.ep_addr_len);
 }
 
+UCS_TEST_P(test_uct_tcp, vrf_enable)
+{
+    const int process_vrf_index = uct_tcp_netif_process_vrf_index();
+    std::set<std::string> devices, vrf_devices, yes_devices;
+    int vrf_index;
+
+    query_devices("n", devices);
+    query_devices("try", vrf_devices);
+
+    // With "y", a device whose sockets cannot be bound to its VRF fails the
+    // tcp device query instead of being skipped. uct_md_query_tl_resources()
+    // skips a transport whose query fails, so it returns UCS_OK and no devices.
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        query_devices("y", yes_devices);
+    }
+    if (m_errors.empty()) {
+        EXPECT_EQ(vrf_devices, yes_devices);
+    } else {
+        EXPECT_TRUE(yes_devices.empty());
+    }
+
+    // Devices in a VRF other than the VRF of the process are not reported
+    // when VRF_ENABLE is "n"
+    for (const auto &dev_name : devices) {
+        vrf_index = vrf_master_index(dev_name);
+        EXPECT_TRUE((vrf_index == -1) || (vrf_index == process_vrf_index))
+                << dev_name;
+        EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;
+    }
+
+    for (const auto &dev_name : vrf_devices) {
+        if (devices.count(dev_name) == 0) {
+            vrf_index = vrf_master_index(dev_name);
+            EXPECT_NE(-1, vrf_index) << dev_name;
+            EXPECT_NE(process_vrf_index, vrf_index) << dev_name;
+            UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
+        }
+    }
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_disabled_iface_open)
+{
+    uct_iface_params_t params = {};
+    ucs_status_t status;
+    uct_iface_h iface;
+    uct_md_h md;
+
+    if (uct_tcp_iface_vrf_name(m_tcp_iface) == NULL) {
+        UCS_TEST_SKIP_R("the device is not in a VRF");
+    }
+
+    if (vrf_master_index(GetParam()->dev_name) ==
+        uct_tcp_netif_process_vrf_index()) {
+        UCS_TEST_SKIP_R("the process runs in the VRF of the device");
+    }
+
+    ASSERT_UCS_OK(open_md("n", &md));
+
+    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                                  UCT_IFACE_PARAM_FIELD_DEVICE;
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.tl_name  = GetParam()->tl_name.c_str();
+    params.mode.device.dev_name = GetParam()->dev_name.c_str();
+
+    // A device in a VRF cannot be opened when VRF_ENABLE is "n"
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        status = uct_iface_open(md, m_ent->worker(), &params, m_iface_config,
+                                &iface);
+    }
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+
+    if (status == UCS_OK) {
+        uct_iface_close(iface);
+    }
+    uct_md_close(md);
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)
+{
+    const char *iface_vrf_name   = uct_tcp_iface_vrf_name(m_tcp_iface);
+    int vrf_index                = vrf_master_index(m_tcp_iface->if_name);
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    char vrf_name[IFNAMSIZ]      = {};
+
+    if (vrf_index != -1) {
+        ASSERT_NE(nullptr, if_indextoname(vrf_index, vrf_name));
+    }
+    EXPECT_STREQ(vrf_name, (iface_vrf_name != NULL) ? iface_vrf_name : "");
+
+    // The listener must be bound to the VRF device, if any
+    ASSERT_EQ(0, getsockopt(m_tcp_iface->listen_fd, SOL_SOCKET,
+                            SO_BINDTODEVICE, bound_if_name, &len));
+    EXPECT_STREQ(vrf_name, bound_if_name);
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_ipv6_local_reachable)
+{
+    const char *vrf_name = uct_tcp_iface_vrf_name(m_tcp_iface);
+    std::vector<char> dev_addr(m_ent->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(m_ent->iface_attr().iface_addr_len);
+    uct_iface_is_reachable_params_t params;
+    long vrf_ipv6_disabled = 0;
+    bool local_reachable;
+    char info_str[256];
+
+    // Same-host traffic in a VRF is looped back through the VRF device, which
+    // drops IPv6 packets if IPv6 is disabled on it. The sysctl file is missing
+    // if IPv6 is disabled in the kernel.
+    if (vrf_name != NULL) {
+        (void)ucs_read_file_number(&vrf_ipv6_disabled, 1,
+                                   "/proc/sys/net/ipv6/conf/%s/disable_ipv6",
+                                   vrf_name);
+    }
+    EXPECT_EQ(!vrf_ipv6_disabled,
+              !!m_tcp_iface->config.vrf_ipv6_local_reachable);
+
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_ent->iface(), (uct_device_addr_t*)&dev_addr[0]));
+    ASSERT_UCS_OK(uct_iface_get_address(m_ent->iface(),
+                                        (uct_iface_addr_t*)&iface_addr[0]));
+
+    params.field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH |
+                                UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
+    params.device_addr        = (uct_device_addr_t*)&dev_addr[0];
+    params.device_addr_length = dev_addr.size();
+    params.iface_addr         = (uct_iface_addr_t*)&iface_addr[0];
+    params.iface_addr_length  = iface_addr.size();
+    params.info_string        = info_str;
+    params.info_string_length = sizeof(info_str);
+
+    // The own IPv6 address is unreachable if same-host IPv6 traffic in the VRF
+    // is dropped
+    local_reachable = !m_ent->tcp_vrf_drops_loopback();
+    EXPECT_EQ(local_reachable,
+              !!uct_iface_is_reachable_v2(m_ent->iface(), &params));
+    if (!local_reachable) {
+        EXPECT_NE(std::string::npos,
+                  std::string(info_str).find("is a local address of VRF"))
+                << info_str;
+    }
+}
+
 UCS_TEST_P(test_uct_tcp, prefer_default)
 {
     /* UCP prefers the higher priority when transport scores are equal */
@@ -367,6 +579,49 @@ UCS_TEST_P(test_uct_tcp, maxseg_auto)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+class test_uct_tcp_conn_nb : public test_uct_tcp {
+public:
+    void init() {
+        // Do not wait for a connection, which can be dropped in a VRF
+        modify_config("TCP_CONN_NB", "y");
+        test_uct_tcp::init();
+    }
+};
+
+UCS_TEST_P(test_uct_tcp_conn_nb, vrf_ep_bind_to_device)
+{
+    const char *vrf_name         = uct_tcp_iface_vrf_name(m_tcp_iface);
+    std::vector<char> dev_addr(m_ent->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(m_ent->iface_attr().iface_addr_len);
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    uct_ep_params_t ep_params;
+    uct_ep_h ep;
+
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_ent->iface(), (uct_device_addr_t*)&dev_addr[0]));
+    ASSERT_UCS_OK(uct_iface_get_address(m_ent->iface(),
+                                        (uct_iface_addr_t*)&iface_addr[0]));
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_DEV_ADDR |
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+    ep_params.iface      = m_ent->iface();
+    ep_params.dev_addr   = (uct_device_addr_t*)&dev_addr[0];
+    ep_params.iface_addr = (uct_iface_addr_t*)&iface_addr[0];
+    ASSERT_UCS_OK(uct_ep_create(&ep_params, &ep));
+
+    // The connecting socket must be bound to the VRF device, if any
+    EXPECT_EQ(0, getsockopt(ucs_derived_of(ep, uct_tcp_ep_t)->fd, SOL_SOCKET,
+                            SO_BINDTODEVICE, bound_if_name, &len));
+    EXPECT_STREQ((vrf_name != NULL) ? vrf_name : "", bound_if_name);
+
+    uct_ep_destroy(ep);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_conn_nb, tcp)
 
 
 class test_uct_tcp_maxseg : public test_uct_tcp {

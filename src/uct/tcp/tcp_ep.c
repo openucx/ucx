@@ -677,11 +677,19 @@ static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     struct sockaddr *saddr = (struct sockaddr*)ep->peer_addr;
+    const char *vrf_name   = uct_tcp_iface_vrf_name(iface);
     ucs_status_t status;
 
     status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, 0, &ep->fd);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    if (vrf_name != NULL) {
+        status = ucs_socket_bind_to_device(ep->fd, vrf_name);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     status = uct_tcp_ep_bind_src_iface(ep);

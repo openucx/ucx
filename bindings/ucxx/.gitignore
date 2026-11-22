@@ -1,0 +1,31 @@
+# Common
+*.*~
+*.so
+.cache
+.conda-bld
+.pytest_cache
+.vscode
+_build
+__pytestcache__
+__pycache__
+build
+compile_commands.json
+
+# Python build directories and artifcats
+dask-worker-space
+dist/
+python/record.txt
+python/ucxx/ucxx/_lib/*.a
+python/ucxx/ucxx/_lib/*.o
+python/ucxx/ucxx/_lib/*.c
+python/ucxx/ucxx/_lib/*.cpp
+python/ucxx/ucxx/_lib/*.h
+wheels/
+*.egg-info/
+_skbuild/
+*.tar.gz
+*.whl
+
+## Doxygen
+cpp/doxygen/html
+cpp/doxygen/xml

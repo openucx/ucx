@@ -543,8 +543,9 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if ((op->handler != (uct_rc_send_handler_t)ucs_mpool_put) &&
             (op->handler != uct_rc_ep_short_dm_desc_handler)) {
-            /* Allow from destroy flow: clean flush cancel and ep_check ops. */
+            /* Allow internal, flush cancel and ep_check ops in destroy flow. */
             if (warn &&
+                !(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_CANCEL_ON_PURGE) &&
                 (op->handler != uct_rc_ep_flush_op_completion_handler) &&
                 (op->handler != uct_rc_ep_check_completion_handler)) {
                 ucs_warn("destroying txqp %p with uncompleted operation %p"

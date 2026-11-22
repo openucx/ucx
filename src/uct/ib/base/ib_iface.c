@@ -74,6 +74,7 @@ const char *uct_ib_reachability_modes[] = {
     [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
     [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
     [UCT_IB_REACHABILITY_MODE_ALL]          = "all",
+    [UCT_IB_REACHABILITY_MODE_KERNEL]       = "kernel",
     [UCT_IB_REACHABILITY_MODE_LAST]         = NULL
 };
 
@@ -221,7 +222,9 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "The mode used for performing the reachability check\n"
    " - route        - all routable addresses are assumed as reachable\n"
    " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
-   " - all          - all addresses are assumed as reachable, without any check",
+   " - all          - all addresses are assumed as reachable, without any check\n"
+   " - kernel       - like route, but the kernel selects the route, applying policy routing\n"
+   "                  rules. Falls back to route if the kernel does not support it.",
    ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
@@ -239,6 +242,18 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
+
+  {"FABRIC_ID", "0",
+   "Administrative identifier of the fabric, as a decimal number. The same\n"
+   "value applies to every device used by the process. An interface only\n"
+   "considers peers whose device reports the same identifier, so it must be\n"
+   "configured consistently on every process in the job. Value 0 selects the\n"
+   "default fabric, which is enforced as well: an interface on the default\n"
+   "fabric and one on any other fabric cannot reach each other. Values above\n"
+   "65535 are rejected. Requires peers running a UCX version which supports\n"
+   "this option, older peers report the default fabric and may still\n"
+   "consider us reachable.",
+   ucs_offsetof(uct_ib_iface_config_t, fabric_id), UCS_CONFIG_TYPE_UINT},
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
@@ -356,8 +371,12 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
 static inline uct_ib_roce_version_t
 uct_ib_address_flags_get_roce_version(uint8_t flags)
 {
+    UCS_STATIC_ASSERT(UCT_IB_DEVICE_ROCE_ANY <
+                      UCS_BIT(UCT_IB_ADDRESS_ROCE_VERSION_BITS));
     ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
-    return (uct_ib_roce_version_t)(flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+    return (uct_ib_roce_version_t)
+           ((flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST)) &
+            UCS_MASK(UCT_IB_ADDRESS_ROCE_VERSION_BITS));
 }
 
 static inline sa_family_t
@@ -409,6 +428,10 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
     }
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) {
+        size += sizeof(uint16_t);
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID) {
         size += sizeof(uint16_t);
     }
 
@@ -490,6 +513,12 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PKEY;
         *ucs_serialize_next(&ptr, uint16_t) = params->pkey;
     }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID) {
+        ucs_assert(params->fabric_id != 0);
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_FABRIC_ID;
+        *ucs_serialize_next(&ptr, uint16_t) = params->fabric_id;
+    }
 }
 
 unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
@@ -510,6 +539,10 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
     } else {
         /* pack only subnet prefix for reachability test */
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+    }
+
+    if (iface->config.fabric_id != 0) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID;
     }
 
     if (iface->config.path_mtu != IBV_MTU_4096) {
@@ -541,11 +574,14 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     /* to suppress gcc 4.3.4 warning */
     params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
     params.pkey      = iface->pkey;
+    params.fabric_id = iface->config.fabric_id;
     uct_ib_address_pack(&params, ib_addr);
 }
 
-ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                                   uct_ib_address_pack_params_t *params_p)
+static ucs_status_t
+uct_ib_address_unpack_size(const uct_ib_address_t *ib_addr,
+                           uct_ib_address_pack_params_t *params_p,
+                           size_t *size_p)
 {
     const void *ptr                     = ib_addr + 1;
     /* silence cppcheck warning */
@@ -614,8 +650,32 @@ ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     /* PKEY is always in params */
     params.flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
 
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_FABRIC_ID) {
+        params.fabric_id = *ucs_serialize_next(&ptr, const uint16_t);
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID;
+    }
+
     *params_p = params;
+    *size_p   = UCS_PTR_BYTE_DIFF(ib_addr, ptr);
     return UCS_OK;
+}
+
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p)
+{
+    size_t size;
+
+    return uct_ib_address_unpack_size(ib_addr, params_p, &size);
+}
+
+size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr)
+{
+    uct_ib_address_pack_params_t params;
+    ucs_status_t status;
+    size_t size;
+
+    status = uct_ib_address_unpack_size(ib_addr, &params, &size);
+    return (status == UCS_OK) ? size : 0;
 }
 
 const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
@@ -662,6 +722,11 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
     ucs_assert((params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) &&
                (params.flags != UCT_IB_ADDRESS_INVALID_PKEY));
     snprintf(p, endp - p, "pkey 0x%x", params.pkey);
+    p += strlen(p);
+
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID) {
+        snprintf(p, endp - p, " fabric id %u", params.fabric_id);
+    }
 
     return buf;
 }
@@ -697,24 +762,38 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
+static ucs_status_t
+uct_ib_iface_roce_ndev_index(uct_ib_iface_t *iface, uint8_t gid_index,
+                             const uct_iface_is_reachable_params_t *params,
+                             unsigned *ndev_index_p)
+{
+    ucs_status_t status;
+
+    status = uct_ib_device_get_roce_ndev_index(uct_ib_iface_device(iface),
+                                               iface->config.port_num,
+                                               gid_index, ndev_index_p);
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(params,
+                                    "no ndev for " UCT_IB_IFACE_FMT " gid[%u]",
+                                    UCT_IB_IFACE_ARG(iface), gid_index);
+    }
+
+    return status;
+}
+
 static int
 uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
                               const uct_iface_is_reachable_params_t *params)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uint8_t port_num     = iface->config.port_num;
     unsigned lo_ndev_index = 0;
     char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ], local_ifname[IFNAMSIZ];
     char remote_str[128];
     int local_ndev_index;
     unsigned ndev_index;
 
-    if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
-                                          &ndev_index) != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "no ndev for " UCT_IB_IFACE_FMT " gid[%u]",
-                                    UCT_IB_IFACE_ARG(iface), gid_index);
+    if (uct_ib_iface_roce_ndev_index(iface, gid_index, params, &ndev_index) !=
+        UCS_OK) {
         return 0;
     }
 
@@ -758,6 +837,51 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
             ucs_ndev_index_to_ifname(lo_ndev_index, lo_ifname,
                                      sizeof(lo_ifname)),
             lo_ndev_index);
+    return 0;
+}
+
+static int uct_ib_iface_roce_is_kernel_routable(
+        uct_ib_iface_t *iface, uint8_t gid_index,
+        const struct sockaddr *sa_local, struct sockaddr *sa_remote,
+        const uct_iface_is_reachable_params_t *params)
+{
+    char ndev_ifname[IFNAMSIZ], remote_str[UCS_SOCKADDR_STRING_LEN];
+    uint8_t best_prefix_len;
+    unsigned ndev_index;
+    ucs_status_t status;
+
+    if (uct_ib_iface_roce_ndev_index(iface, gid_index, params, &ndev_index) !=
+        UCS_OK) {
+        return 0;
+    }
+
+    /* A same-host address can be in another VRF than the RoCE netdev */
+    if (ucs_netlink_is_host_addr(sa_remote)) {
+        return 1;
+    }
+
+    /* The kernel resolves the remote address with the same parameters */
+    status = ucs_netlink_kernel_route_matches(ndev_index, sa_remote, sa_local,
+                                              &best_prefix_len);
+    if (status == UCS_OK) {
+        return 1;
+    } else if (status == UCS_ERR_UNSUPPORTED) {
+        return uct_ib_iface_roce_is_routable(iface, gid_index, sa_remote,
+                                             params);
+    }
+
+    ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str));
+    ucs_ndev_index_to_ifname(ndev_index, ndev_ifname, sizeof(ndev_ifname));
+    if (best_prefix_len > 0) {
+        uct_iface_fill_info_str_buf(
+                params, "default route to %s via %s, while a /%u route exists",
+                remote_str, ndev_ifname, best_prefix_len);
+    } else {
+        uct_iface_fill_info_str_buf(params, "kernel route to %s via %s: %s",
+                                    remote_str, ndev_ifname,
+                                    ucs_status_string(status));
+    }
+
     return 0;
 }
 
@@ -867,6 +991,13 @@ uct_ib_iface_roce_is_reachable(uct_ib_iface_t *iface,
                                              params);
     }
 
+    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_KERNEL) {
+        return uct_ib_iface_roce_is_kernel_routable(
+                iface, local_gid_info.gid_index,
+                (const struct sockaddr*)&sa_local, (struct sockaddr*)&sa_remote,
+                params);
+    }
+
     ucs_assert(iface->config.reachability_mode ==
                UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET);
     return uct_ib_iface_roce_is_local_subnet(iface->addr_prefix_bits,
@@ -943,6 +1074,16 @@ static int uct_ib_iface_dev_addr_is_reachable(
     if (!((params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
         uct_iface_fill_info_str_buf(is_reachable_params,
                                     "partial member pkey 0x%x", params.pkey);
+        return 0;
+    }
+
+    /* Fabric ids have to be equal. An interface without a configured id
+     * belongs to the default fabric, whose id is 0, and is unreachable from
+     * any interface which does report one */
+    if (params.fabric_id != iface->config.fabric_id) {
+        uct_iface_fill_info_str_buf(is_reachable_params,
+                                    "fabric id local %u remote %u",
+                                    iface->config.fabric_id, params.fabric_id);
         return 0;
     }
 
@@ -1818,6 +1959,15 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
+
+    if (config->fabric_id > UINT16_MAX) {
+        ucs_error("fabric id %u is out of range, must be at most %u",
+                  config->fabric_id, UINT16_MAX);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    self->config.fabric_id          = config->fabric_id;
     uct_ib_iface_set_path_mtu(self, config);
 
     self->config.send_overhead = config->send_overhead;
@@ -1914,9 +2064,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
-#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     uct_iface_set_async_event_params(params, &self->async_ctx.cb,
                                      &self->async_ctx.arg);
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;

@@ -9,6 +9,7 @@
 #endif
 
 #include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
 
@@ -361,6 +362,40 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     return 0;
 }
 
+static void ucp_ep_flush_assert_started_p2p(ucp_ep_h ep, ucp_request_t *req)
+{
+#if UCS_ENABLE_ASSERT
+    ucp_lane_map_t started_p2p;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        /* A p2p lane still on its wireup proxy cannot have been flushed.
+         * Recovery switches lanes one at a time, so another lane may already
+         * be on the transport with a flush in progress. */
+        started_p2p = req->send.flush.started_lanes &
+                      ucp_ep_config(ep)->p2p_lanes;
+        ucs_for_each_bit(lane, started_p2p) {
+            uct_ep = ucp_ep_get_lane(ep, lane);
+            ucs_assertv((uct_ep == NULL) || !ucp_wireup_ep_test(uct_ep),
+                        "req=%p flush started on wireup lane %d"
+                        " started_lanes=0x%" PRIx64,
+                        req, lane, req->send.flush.started_lanes);
+        }
+    } else {
+        /* Only lanes connected to iface can be started/flushed before
+         * wireup is done because connect2iface does not create wireup_ep
+         * without cm mode */
+        ucs_assertv(!(req->send.flush.started_lanes &
+                      ucp_ep_config(ep)->p2p_lanes),
+                    "req=%p flush started_lanes=0x%" PRIx64
+                    " p2p_lanes=0x%" PRIx64,
+                    req, req->send.flush.started_lanes,
+                    ucp_ep_config(ep)->p2p_lanes);
+    }
+#endif
+}
+
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 {
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
@@ -376,16 +411,7 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
                           req->send.flush.started_lanes),
                         "req=%p lane=%d started_lanes=0x%" PRIx64, req,
                         req->send.lane, req->send.flush.started_lanes);
-
-            /* Only lanes connected to iface can be started/flushed before
-             * wireup is done because connect2iface does not create wireup_ep
-             * without cm mode */
-            ucs_assertv(!(req->send.flush.started_lanes &
-                          ucp_ep_config(ep)->p2p_lanes),
-                        "req=%p flush started_lanes=0x%" PRIx64
-                        " p2p_lanes=0x%" PRIx64,
-                        req, req->send.flush.started_lanes,
-                        ucp_ep_config(ep)->p2p_lanes);
+            ucp_ep_flush_assert_started_p2p(ep, req);
         }
 
         ucs_assertv(req->send.flush.sw_state ==
