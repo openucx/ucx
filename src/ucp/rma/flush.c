@@ -657,12 +657,13 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
     ucp_request_set_send_callback_param(param, req, send);
 
     if (ucs_unlikely(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH)) {
-        /* The send callback of a request which the wireup replays issued the
-         * flush. The requests which the replay did not send yet were issued
-         * before the flush, so start it after the replay. */
+        /* A request which the replay completed inline issued this flush from
+         * its send callback. The requests which the replay did not send yet
+         * were issued before the flush, so start it after the replay. */
         ucp_trace_req(req, "flush ep %p starts after the replay", ep);
         ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, req,
                                   ucp_ep_flush_resume_slow_path_callback, req);
+        ucp_worker_signal_internal(ep->worker);
         goto out;
     }
 

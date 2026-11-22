@@ -461,8 +461,8 @@ protected:
         void         *flush_req;
     };
 
-    static void flush_send_cb(void *request, ucs_status_t status,
-                              void *user_data)
+    static void
+    flush_send_cb(void *request, ucs_status_t status, void *user_data)
     {
         flush_send_arg *arg       = static_cast<flush_send_arg*>(user_data);
         ucp_request_param_t param = {};
@@ -811,8 +811,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
  * completes when it is posted calls its callback from the replay, so a flush
  * issued there must start after the replay, and complete. */
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, flush_from_replayed_send_cb,
-                     !(get_variant_value() & TEST_TAG))
-{
+                     !(get_variant_value() & TEST_TAG)) {
     flush_send_arg arg = {NULL, UCS_INPROGRESS, NULL};
     ucp_request_param_t param;
     void *req;
@@ -827,8 +826,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, flush_from_replayed_send_cb,
     param.cb.send      = flush_send_cb;
     param.user_data    = &arg;
     param.datatype     = DT_U64;
-    req                = ucp_tag_send_nbx(arg.ep, m_send_data.data(), 1, TAG,
-                                          &param);
+    req = ucp_tag_send_nbx(arg.ep, m_send_data.data(), 1, TAG, &param);
     ASSERT_UCS_PTR_OK(req);
 
     /* Before a skip as well: a message left unmatched makes the cleanup warn */
