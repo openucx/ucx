@@ -397,6 +397,9 @@ protected:
         mapped_buffer rbuf(size, receiver());
         ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
 
+        /* The AM sends the beginning of the PUT buffer */
+        lbuf.pattern_fill(m_seed, am_msg_size());
+
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t lane_idx = 0; lane_idx < lanes.size() - 1; ++lane_idx) {
             std::vector<ucs_status_ptr_t> status_ptrs;
@@ -414,6 +417,7 @@ protected:
                              << " operation after failure injection on lane "
                              << size_t(lane) << '/' << lanes.size() << "...";
 
+            m_am_received = false;
             status_ptrs.push_back(
                     ucp_put_nbx(sender().ep(0, INJECTED_EP_INDEX), lbuf.ptr(), size,
                     uintptr_t(rbuf.ptr()), rkey, &m_req_empty_param));
@@ -426,6 +430,7 @@ protected:
             status = requests_wait(status_ptrs);
             EXPECT_EQ(UCS_OK, status) << "PUT, AM and FLUSH operations completed with status: "
                                       << ucs_status_string(status);
+            EXPECT_UCS_OK(wait_for_am(am_msg_size()));
 
             // Check that no other lanes have been affected
             for (ucp_lane_index_t valid_lane = lane_idx + 1; valid_lane < lanes.size();
@@ -505,7 +510,8 @@ protected:
             } else if (status == UCS_OK) {
                 /* Some lanes recovered; EP still operable, no error callback required. */
             } else {
-                /* Operation failed => EP must fail with exactly one initiator err CB. */
+                /* Operation failed or the AM was lost => EP must fail with
+                 * exactly one initiator err CB. */
                 ucs_time_t deadline = ucs::get_deadline();
                 while ((m_initiator_err_count == 0) &&
                        (ucs_get_time() < deadline)) {
@@ -830,8 +836,20 @@ protected:
             return status;
         }
 
+        return wait_for_am(size);
+    }
+
+    /* Wait for the AM that was sent after m_am_received was cleared */
+    ucs_status_t wait_for_am(size_t size)
+    {
         wait_for_value(&m_am_received, true);
-        mem_buffer::pattern_check(m_am_rbuf.data(), size, m_seed);
+        if (!m_am_received) {
+            UCS_TEST_MESSAGE << "the AM was not received";
+            return UCS_ERR_TIMED_OUT;
+        }
+
+        EXPECT_EQ(size, m_am_rbuf.size()) << "wrong length of the received AM";
+        mem_buffer::pattern_check(m_am_rbuf.data(), m_am_rbuf.size(), m_seed);
         return UCS_OK;
     }
 
