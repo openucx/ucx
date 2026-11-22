@@ -64,6 +64,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                 # Mandatory symbols: referenced directly by the MUSA
                 # components and their tests, so the build must fail early
                 # when one of them is missing.
+                AC_MSG_CHECKING([whether MUSA mandatory symbols can be linked])
                 AC_LINK_IFELSE(
                     [AC_LANG_PROGRAM(
                         [[#include <stddef.h>
@@ -135,8 +136,9 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                           musaStreamSynchronize(runtime_stream);
                           musaStreamDestroy(runtime_stream);
                           return count < 0;]])],
-                    [],
-                    [musa_happy=no])
+                    [AC_MSG_RESULT([yes])],
+                    [AC_MSG_RESULT([no])
+                     musa_happy=no])
             ])
             AS_IF([test "x$musa_happy" = "xyes"], [
                 # Optional non-async allocation family (driver _v2 alloc/free,

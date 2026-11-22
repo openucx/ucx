@@ -1546,8 +1546,14 @@ run_configure_tests() {
 # Build for devel tests and gtest, or for ASAN
 #
 build_for_tests() {
+	local musa_config_args=()
+	if [ -f /usr/local/musa/include/musa_runtime_api.h ]; then
+		musa_config_args+=(--with-musa)
+	fi
+
 	if [[ "$ASAN_CHECK" == "yes" ]]; then
-		build devel --enable-gtest --enable-asan --without-valgrind
+		build devel --enable-gtest --enable-asan --without-valgrind \
+			"${musa_config_args[@]}"
 		return
 	fi
 
@@ -1556,7 +1562,7 @@ build_for_tests() {
 	# configuration related tests
 	run_configure_tests
 
-	build devel --enable-gtest --without-valgrind
+	build devel --enable-gtest --without-valgrind "${musa_config_args[@]}"
 }
 
 #
