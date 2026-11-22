@@ -54,7 +54,6 @@ public:
                                    rma_op | TEST_OP_FLUSH,
                                    op_name(rma_op | TEST_OP_FLUSH));
         }
-
         for (unsigned am_op : am_ops) {
             for (unsigned msg_size_variant : am_msg_size_variants) {
                 add_variant_with_value(variants, UCP_FEATURE_AM,
@@ -66,6 +65,10 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
                                TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
+
+        add_variant_with_value(variants, UCP_FEATURE_AM,
+                               TEST_OP_WIREUP | TEST_OP_AM,
+                               op_name(TEST_OP_WIREUP | TEST_OP_AM));
     }
 
     test_ucp_fault_tolerance() {
@@ -96,6 +99,7 @@ protected:
         TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
         TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
         TEST_MSG_SIZE_LARGE      = UCS_BIT(7),
+        TEST_OP_WIREUP           = UCS_BIT(8),
         TEST_MSG_SIZE_MASK       = TEST_MSG_SIZE_SMALL | TEST_MSG_SIZE_MEDIUM |
                                    TEST_MSG_SIZE_LARGE
     };
@@ -646,8 +650,67 @@ protected:
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
+    /* Destroy the peer before any wait, so the handshake cannot finish. */
+    void test_target_wireup() {
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        mem_buffer sbuf(am_msg_size(), UCS_MEMORY_TYPE_HOST);
+        ucs_status_t status;
+        ucs_time_t deadline;
+        uct_ep_h am_ep;
+
+        sender().set_ib_ud_peer_timeout(3.);
+        sender().progress();
+
+        am_ep = ucp_ep_get_lane(ep, ucp_ep_config(ep)->key.am_lane);
+        ASSERT_NE((uct_ep_h)NULL, am_ep);
+        ASSERT_TRUE(ucp_wireup_ep_test(am_ep));
+        ASSERT_FALSE(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+
+        {
+            scoped_log_handler slh(hide_errors_logger);
+
+            receiver().destroy_worker();
+            status = request_wait(ucp_am_send_nbx(ep, AM_ID, NULL, 0,
+                                                  sbuf.ptr(), am_msg_size(),
+                                                  &m_req_empty_param));
+            EXPECT_NE(UCS_INPROGRESS, status) <<
+                    "operation timed out during wireup";
+
+            /* Both sender endpoints see the dead worker. Count only the
+             * injected one. */
+            deadline = ucs::get_deadline();
+            while ((m_initiator_err_count == 0) &&
+                   (ucs_get_time() < deadline)) {
+                short_progress_loop();
+            }
+
+            ASSERT_EQ(1, m_initiator_err_count)
+                    << "Error callback invoked " << m_initiator_err_count
+                    << " times";
+        }
+
+        /* Peer is gone, so cleanup must force-close instead of flushing. */
+        sender().add_err(UCS_ERR_ENDPOINT_TIMEOUT);
+    }
+
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
+
+        if (is_target_wireup(op_mask, failure_side)) {
+            if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5",
+                                    "rc_verbs"})) {
+                UCS_TEST_SKIP_R("initial wireup failure is RC-only for now");
+            }
+
+            test_target_wireup();
+            return;
+        }
+
+        if (op_mask & TEST_OP_WIREUP) {
+            /* The flush before injection completes the handshake. */
+            UCS_TEST_SKIP_R("initial wireup failure is covered by "
+                            "target_failure");
+        }
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
             test_put_am_flush_with_injected_failure(failure_side, op_mask);
@@ -690,9 +753,19 @@ protected:
         return msg_size_by_variant(UCS_KBYTE);
     }
 
+    static bool is_target_wireup(unsigned op_mask, failure_side_t failure_side)
+    {
+        return (op_mask & TEST_OP_WIREUP) &&
+               (failure_side == FAILURE_SIDE_TARGET);
+    }
+
     static std::string op_name(unsigned op_mask)
     {
         std::string name;
+
+        if (op_mask & TEST_OP_WIREUP) {
+            name += "WIREUP|";
+        }
 
         if (op_mask & TEST_OP_PUT) {
             name += "PUT|";
