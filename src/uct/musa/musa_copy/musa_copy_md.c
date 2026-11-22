@@ -95,8 +95,12 @@ uct_musa_md_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
         device = current_device;
     }
 
-    error = musaMalloc(address_p, *length_p);
-    status = uct_musa_base_status(error, UCS_LOG_LEVEL_ERROR, "musaMalloc");
+    error  = musaMalloc(address_p, *length_p);
+    status = uct_musa_base_status(error,
+                                  (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                                          UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_ERROR,
+                                  "musaMalloc");
     if (switched_device) {
         uct_musa_base_restore_device(current_device, have_current_device);
     }
