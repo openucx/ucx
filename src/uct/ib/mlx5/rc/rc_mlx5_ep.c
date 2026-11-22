@@ -292,6 +292,15 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     return status;
 }
 
+static void uct_rc_mlx5_ep_sgl_zcopy_reserve(uct_ep_h tl_ep, size_t count)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    uct_rc_ep_reserve_cqe(iface, ep, count - 1);
+    uct_rc_ep_reserve_txqp(ep, count - 1);
+}
+
 ucs_status_t
 uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   const size_t *lengths, uct_mem_h const *memhs,
@@ -319,6 +328,9 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                                  UCT_IB_MAX_MESSAGE_SIZE,
                                                  "put_sgl_zcopy");
     if (status != UCS_OK) {
+        if (status == UCS_ERR_NO_RESOURCE) {
+            uct_rc_mlx5_ep_sgl_zcopy_reserve(tl_ep, count);
+        }
         return status;
     }
 
@@ -419,6 +431,9 @@ uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
             iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
             iface->super.config.max_get_zcopy, "get_sgl_zcopy");
     if (status != UCS_OK) {
+        if (status == UCS_ERR_NO_RESOURCE) {
+            uct_rc_mlx5_ep_sgl_zcopy_reserve(tl_ep, count);
+        }
         return status;
     }
 
