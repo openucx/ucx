@@ -1782,6 +1782,47 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
     EXPECT_NE(UCP_NULL_LANE, ep_config->key.keepalive_lane);
 }
 
+/* The lanes of a configuration stay unset after a failed wireup, until the
+ * scheduled endpoint failure runs */
+UCS_TEST_P(test_ucp_wireup_keepalive, lane_without_uct_ep,
+           "KEEPALIVE_INTERVAL=0.1s")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep         = sender().ep();
+    ucp_lane_index_t lane;
+    size_t round_count;
+    uct_ep_h uct_ep;
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+
+    lane = ucp_ep_config(ep)->key.keepalive_lane;
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no keepalive lane");
+    }
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ucp_ep_set_lane(ep, lane, NULL);
+    }
+
+    /* The round in progress may have already passed the endpoint */
+    round_count = worker->keepalive.round_count + 2;
+    wait_for_cond(
+            [&]() { return worker->keepalive.round_count >= round_count; },
+            [&]() { progress(); });
+    EXPECT_GE(worker->keepalive.round_count, round_count);
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_ep_set_lane(ep, lane, uct_ep);
+    }
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)
 
 class test_ucp_address_v2 : public test_ucp_wireup {
