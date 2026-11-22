@@ -2587,9 +2587,9 @@ static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
 }
 
 ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
-                                        ucp_worker_cfg_index_t rkey_cfg_index,
-                                        ucp_worker_cfg_index_t ep_cfg_index,
-                                        ucp_worker_cfg_index_t *new_cfg_index)
+                                         ucp_worker_cfg_index_t rkey_cfg_index,
+                                         ucp_worker_cfg_index_t ep_cfg_index,
+                                         ucp_worker_cfg_index_t *new_cfg_index)
 {
     const ucp_rkey_config_t *old_config =
             ucp_worker_rkey_config(worker, rkey_cfg_index);
@@ -2623,7 +2623,6 @@ ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
     key.ep_cfg_index = ep_cfg_index;
     return ucp_worker_rkey_config_get(worker, &key, distances, new_cfg_index);
 }
-
 
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,

@@ -71,10 +71,10 @@ ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
 #if ENABLE_PARAMS_CHECK
             /* Reconfiguration updates each rkey's cached EP independently. */
             if ((rkey->cfg_index <
-                 ucs_array_length(&ref_rkey->ep->worker->rkey_config)) &&
+                 ucs_array_length(&rkey->ep->worker->rkey_config)) &&
                 (ref_rkey->cfg_index <
                  ucs_array_length(&ref_rkey->ep->worker->rkey_config))) {
-                key     = ucp_rkey_config(ref_rkey->ep->worker, rkey)->key;
+                key     = ucp_rkey_config(rkey->ep->worker, rkey)->key;
                 ref_key = ucp_rkey_config(ref_rkey->ep->worker, ref_rkey)->key;
                 key.ep_cfg_index = ref_key.ep_cfg_index;
                 if (ucp_rkey_config_is_equal(key, ref_key)) {

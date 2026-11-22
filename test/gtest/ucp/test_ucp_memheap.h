@@ -51,7 +51,71 @@ protected:
     };
 
     void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
-                       ucs_memory_type_t src_type, ucs_memory_type_t dst_type);
+                       ucs_memory_type_t src_type, ucs_memory_type_t dst_type,
+                       int ep_index = 0);
+
+    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+                       const std::vector<ucs_memory_type_t> &src_types,
+                       const std::vector<ucs_memory_type_t> &dst_types,
+                       int ep_index = 0);
+
+    static constexpr uint64_t LOCAL_MASK_DEFAULT =
+            UCP_DT_LOCAL_SGL_FIELD_BUFFERS | UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+
+    static constexpr uint64_t REMOTE_MASK_DEFAULT =
+            UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+            UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+            UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+
+    template<typename T>
+    static const T *sgl_array(const std::vector<T> &array, uint64_t null_arrays,
+                              uint64_t field) {
+        return (null_arrays & field) ? nullptr : array.data();
+    }
+
+    static ucp_dt_local_sgl_t
+    make_local_sgl(sgl_ctx &ctx, uint64_t field_mask) {
+        ucp_dt_local_sgl_t sgl = {};
+        sgl.field_mask         = field_mask;
+        sgl.buffers            = sgl_array(ctx.buffers, ctx.null_local_arrays,
+                                           UCP_DT_LOCAL_SGL_FIELD_BUFFERS);
+        sgl.lengths            = sgl_array(ctx.lengths, ctx.null_local_arrays,
+                                           UCP_DT_LOCAL_SGL_FIELD_LENGTHS);
+        sgl.memhs              = sgl_array(ctx.memhs, ctx.null_local_arrays,
+                                            UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        return sgl;
+    }
+
+    static ucp_dt_remote_sgl_t
+    make_remote_sgl(sgl_ctx &ctx, uint64_t field_mask) {
+        ucp_dt_remote_sgl_t sgl = {};
+        sgl.field_mask          = field_mask;
+        sgl.remote_addrs        = sgl_array(
+                ctx.remote_addrs, ctx.null_remote_arrays,
+                UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS);
+        sgl.lengths             = sgl_array(ctx.remote_lengths,
+                                            ctx.null_remote_arrays,
+                                            UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
+        sgl.rkeys               = sgl_array(ctx.rkeys, ctx.null_remote_arrays,
+                                            UCP_DT_REMOTE_SGL_FIELD_RKEYS);
+        return sgl;
+    }
+
+    ucp_request_param_t
+    make_sgl_param(ucp_dt_remote_sgl_t *remote, size_t remote_count,
+                   uint32_t extra_mask = 0) {
+        ucp_request_param_t param = {};
+        param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE |
+                                UCP_OP_ATTR_FIELD_REMOTE_COUNT |
+                                extra_mask;
+        param.datatype        = ucp_dt_make_sgl();
+        param.remote_datatype = ucp_dt_make_sgl();
+        param.remote          = remote;
+        param.remote_count    = remote_count;
+        return param;
+    }
 
     virtual void init();
 

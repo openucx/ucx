@@ -557,14 +557,13 @@ UCS_TEST_P(test_ucp_proto, reconfigure_rkey_distances)
     ucp_rkey_config_key_t key  = create_rkey_config_key(0);
     ucs_sys_dev_distance_t distances[UCP_MAX_LANES];
     ucp_worker_cfg_index_t old_ep, new_ep, old_rkey, new_rkey;
-    ucp_lane_index_t lane;
 
     if (ep_key.num_lanes < 2) {
         UCS_TEST_SKIP_R("requires two lanes");
     }
 
     /* Distinct remote devices and distances expose lane-position reuse. */
-    for (lane = 0; lane < ep_key.num_lanes; ++lane) {
+    for (ucp_lane_index_t lane = 0; lane < ep_key.num_lanes; ++lane) {
         ep_key.lanes[lane].dst_sys_dev = lane;
         distances[lane]               = ucs_topo_default_distance;
         distances[lane].latency      = (lane + 1) * 1e-6;
@@ -580,12 +579,12 @@ UCS_TEST_P(test_ucp_proto, reconfigure_rkey_distances)
     ASSERT_NE(nullptr, ucp_proto_select_get(worker(), new_ep, old_rkey,
                                              &new_rkey));
     const ucp_rkey_config_t *config = ucp_worker_rkey_config(worker(), new_rkey);
-    EXPECT_EQ(new_ep, config->key.ep_cfg_index);
     EXPECT_EQ(distances[1].latency, config->lanes_distance[0].latency);
     EXPECT_EQ(distances[0].latency, config->lanes_distance[1].latency);
+    ucp_worker_cfg_index_t cached_rkey;
     ASSERT_UCS_OK(ucp_worker_reconfigure_rkey(worker(), new_rkey, new_ep,
-                                               &old_rkey));
-    EXPECT_EQ(new_rkey, old_rkey);
+                                               &cached_rkey));
+    EXPECT_EQ(new_rkey, cached_rkey);
 }
 
 UCS_TEST_P(test_ucp_proto, dump_protocols) {

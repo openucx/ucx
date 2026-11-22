@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
@@ -1484,90 +1485,14 @@ protected:
     }
 
     void init_sgl_ctx_mixed_mem_types(sgl_ctx &ctx) {
-        static constexpr size_t buf_size = 64;
-        static constexpr size_t num      = 2;
-        const ucs_memory_type_t types[]  = {UCS_MEMORY_TYPE_HOST,
-                                            UCS_MEMORY_TYPE_CUDA};
-
-        ctx.rkey_handles.resize(num);
-        ctx.buffers.resize(num);
-        ctx.remote_addrs.resize(num);
-        ctx.lengths.resize(num);
-        ctx.memhs.resize(num);
-        ctx.rkeys.resize(num);
-        ctx.src.reserve(num);
-        ctx.dst.reserve(num);
-
-        for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(buf_size, sender(), 0, types[i]);
-            ctx.dst.emplace_back(buf_size, receiver(), 0, types[i]);
-        }
-
-        for (size_t i = 0; i < num; i++) {
-            ctx.src[i].memset(static_cast<uint8_t>(i + 1));
+        const std::vector<ucs_memory_type_t> types = {UCS_MEMORY_TYPE_HOST,
+                                                       UCS_MEMORY_TYPE_CUDA};
+        test_ucp_memheap::init_sgl_ctx(
+                ctx, std::vector<size_t>(types.size(), 64), types, types);
+        for (size_t i = 0; i < types.size(); ++i) {
+            ctx.src[i].memset(i + 1);
             ctx.dst[i].memset(0);
-            ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
-
-            ctx.buffers[i]      = ctx.src[i].ptr();
-            ctx.memhs[i]        = ctx.src[i].memh();
-            ctx.remote_addrs[i] = reinterpret_cast<uint64_t>(ctx.dst[i].ptr());
-            ctx.lengths[i]      = buf_size;
-            ctx.rkeys[i]        = ctx.rkey_handles[i];
         }
-
-        ctx.remote_lengths = ctx.lengths;
-    }
-
-    template<typename T>
-    static const T *sgl_array(const std::vector<T> &array, uint64_t null_arrays,
-                              uint64_t field) {
-        return (null_arrays & field) ? nullptr : array.data();
-    }
-
-    static ucp_dt_local_sgl_t
-    make_local_sgl(sgl_ctx &ctx, uint64_t field_mask) {
-        ucp_dt_local_sgl_t sgl = {};
-        sgl.field_mask         = field_mask;
-        sgl.buffers            = sgl_array(ctx.buffers, ctx.null_local_arrays,
-                                           UCP_DT_LOCAL_SGL_FIELD_BUFFERS);
-        sgl.lengths            = sgl_array(ctx.lengths, ctx.null_local_arrays,
-                                           UCP_DT_LOCAL_SGL_FIELD_LENGTHS);
-        if (field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
-            sgl.memhs = sgl_array(ctx.memhs, ctx.null_local_arrays,
-                                  UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-        }
-        return sgl;
-    }
-
-    static ucp_dt_remote_sgl_t
-    make_remote_sgl(sgl_ctx &ctx, uint64_t field_mask) {
-        ucp_dt_remote_sgl_t sgl = {};
-        sgl.field_mask          = field_mask;
-        sgl.remote_addrs        = sgl_array(
-                ctx.remote_addrs, ctx.null_remote_arrays,
-                UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS);
-        sgl.lengths             = sgl_array(ctx.remote_lengths,
-                                            ctx.null_remote_arrays,
-                                            UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
-        sgl.rkeys               = sgl_array(ctx.rkeys, ctx.null_remote_arrays,
-                                            UCP_DT_REMOTE_SGL_FIELD_RKEYS);
-        return sgl;
-    }
-
-    ucp_request_param_t
-    make_sgl_param(ucp_dt_remote_sgl_t *remote, size_t remote_count,
-                   uint32_t extra_mask = 0) {
-        ucp_request_param_t param = {};
-        param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE |
-                                UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
-                                UCP_OP_ATTR_FIELD_REMOTE |
-                                UCP_OP_ATTR_FIELD_REMOTE_COUNT |
-                                extra_mask;
-        param.datatype        = ucp_dt_make_sgl();
-        param.remote_datatype = ucp_dt_make_sgl();
-        param.remote          = remote;
-        param.remote_count    = remote_count;
-        return param;
     }
 
     ucs_status_ptr_t sgl_op_nbx(void *local_sgl, size_t count,
@@ -1749,14 +1674,6 @@ protected:
         }
     }
 
-    static constexpr uint64_t LOCAL_MASK_DEFAULT =
-            UCP_DT_LOCAL_SGL_FIELD_BUFFERS | UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
-
-    static constexpr uint64_t REMOTE_MASK_DEFAULT =
-            UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-            UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
-            UCP_DT_REMOTE_SGL_FIELD_RKEYS;
-
     void expect_sgl_status_ctx(
             sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
             size_t count, ucs_status_t expected_status,
@@ -1815,18 +1732,84 @@ protected:
 
 };
 
+/* Ordinary wireup restart must also retain posted SGL registrations. */
+class test_ucp_sgl_reset : public test_ucp_rma_sgl {
+public:
+    void init() override {
+        modify_config("RC_MLX5_TX_MAX_BB", "64", SETENV_IF_NOT_EXIST);
+        test_ucp_rma_sgl::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_sgl_reset, pending,
+           "PROTOS=put/sgl/offload,reconfig")
+{
+    if (!sender().has_lane_with_caps(0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        !check_reg_mem_types(sender(), src_mem_type())) {
+        UCS_TEST_SKIP_R("requires native SGL registration");
+    }
+
+    flush_workers();
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 256, 4096);
+    for (size_t i = 0; i < ctx.src.size(); ++i) {
+        ctx.src[i].pattern_fill(i + 1);
+    }
+    auto local = make_local_sgl(ctx, LOCAL_MASK_DEFAULT |
+                                    UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    auto remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    auto param = make_sgl_param(&remote, ctx.lengths.size(),
+                                UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+    auto request = sgl_op_nbx(&local, ctx.lengths.size(),
+                              UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                              &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+    auto *req = static_cast<ucp_request_t*>(request) - 1;
+    EXPECT_EQ(src_mem_type(), req->send.state.dt_iter.mem_info.type);
+    ASSERT_NE(UCP_NULL_LANE, req->send.lane);
+    ASSERT_GT(req->send.state.uct_comp.count, 1);
+    ++req->send.state.uct_comp.count;
+    uct_ep_pending_purge(ucp_ep_get_lane(sender().ep(), req->send.lane),
+            [](uct_pending_req_t *pending, void *arg) {
+                EXPECT_EQ(arg, pending);
+            }, &req->send.uct);
+    auto *memhs = req->send.state.dt_iter.type.sgl.memhs;
+    auto status = req->send.proto_config->proto->reset(req);
+    EXPECT_EQ(UCS_ERR_CANCELED, status);
+    EXPECT_EQ(memhs, req->send.state.dt_iter.type.sgl.memhs);
+    if (status != UCS_ERR_CANCELED) {
+        ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_ERR_CANCELED);
+    }
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
+    auto result = request_wait(request);
+    if (status == UCS_ERR_CANCELED) {
+        EXPECT_UCS_OK(result);
+        flush_ep(sender());
+        for (size_t i = 0; i < ctx.lengths.size(); ++i) {
+            ctx.dst[i].pattern_check(i + 1);
+        }
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sgl_reset, rcx, "rc_x")
+
 /* SGL must remain usable when the endpoint requests rail failover. */
 class test_ucp_rma_sgl_failover : public test_ucp_rma_sgl {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        static const char *modes[] = {"peer", "sw", "token"};
+        static const char *modes[] = {"peer", "sw", "token",
+                                      "sw_peer", "sw_sw", "sw_token"};
         add_variant_values(variants, test_ucp_rma_sgl::get_test_variants,
-                           UCS_MASK(3), modes);
+                           UCS_MASK(6), modes);
     }
 
     void init() override {
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
+        modify_config("MULTI_LANE_MAX_RATIO", "1000");
         configure_peer_failure_settings();
-        modify_config("PROTOS", "put/sgl/offload,repost,reconfig");
+        modify_config("PROTOS", get_variant_value(3) < MODE_COUNT ?
+                      "put/sgl/offload,repost,reconfig" :
+                      "put/sgl/offload_sw,repost,reconfig");
         modify_config("FAILOVER_MODE", (mode() == MODE_SW) ? "sw" : "token");
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
         modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
@@ -1841,11 +1824,12 @@ protected:
     enum {
         MODE_PEER,
         MODE_SW,
-        MODE_TOKEN
+        MODE_TOKEN,
+        MODE_COUNT
     };
 
     unsigned mode() const {
-        return get_variant_value(3);
+        return get_variant_value(3) % MODE_COUNT;
     }
 
     ucp_ep_params_t get_ep_params() override {
@@ -1929,6 +1913,11 @@ protected:
             ASSERT_FALSE(UCS_PTR_IS_ERR(sptr))
                     << ucs_status_string(UCS_PTR_STATUS(sptr));
             ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+            auto *req = static_cast<ucp_request_t*>(sptr) - 1;
+            EXPECT_EQ(src_mem_type(), req->send.state.dt_iter.mem_info.type);
+            EXPECT_STREQ(get_variant_value(3) < MODE_COUNT ?
+                         "put/sgl/offload" : "put/sgl/offload_sw",
+                         req->send.proto_config->proto->name);
             auto status = request_progress(sptr, entities());
             if (status == UCS_INPROGRESS) {
                 /* Drain callbacks before the descriptors and cb leave scope. */
@@ -1979,7 +1968,7 @@ UCS_TEST_P(test_ucp_rma_sgl_failover, put_lane_failure) {
     test_put(true);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_failover, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_failover, rcx, "rc_x")
 
 /* Tests which verify the transferred data run for every combination of source
  * and destination memory types */

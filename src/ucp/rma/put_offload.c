@@ -449,11 +449,12 @@ ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 static ucs_status_t ucp_proto_put_sgl_offload_reset(ucp_request_t *req)
 {
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
-        (req->send.state.uct_comp.count != 0) &&
-        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        (req->send.state.uct_comp.count != 0)) {
         /* A pending request still owns its posting reference. Drop it and
          * defer reset until every outstanding batch has completed. */
-        ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_ERR_CANCELED);
+        req->send.state.uct_comp.func =
+                ucp_proto_request_zcopy_restart_completion;
+        ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
         return UCS_ERR_CANCELED;
     }
 

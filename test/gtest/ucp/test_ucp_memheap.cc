@@ -128,7 +128,18 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
 
 void test_ucp_memheap::init_sgl_ctx(
         sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
-        ucs_memory_type_t src_type, ucs_memory_type_t dst_type)
+        ucs_memory_type_t src_type, ucs_memory_type_t dst_type, int ep_index)
+{
+    init_sgl_ctx(ctx, elem_sizes,
+                 std::vector<ucs_memory_type_t>(elem_sizes.size(), src_type),
+                 std::vector<ucs_memory_type_t>(elem_sizes.size(), dst_type),
+                 ep_index);
+}
+
+void test_ucp_memheap::init_sgl_ctx(
+        sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+        const std::vector<ucs_memory_type_t> &src_types,
+        const std::vector<ucs_memory_type_t> &dst_types, int ep_index)
 {
     size_t num = elem_sizes.size();
 
@@ -142,12 +153,12 @@ void test_ucp_memheap::init_sgl_ctx(
     ctx.dst.reserve(num);
 
     for (size_t i = 0; i < num; i++) {
-        ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_type);
-        ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_type);
+        ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_types[i]);
+        ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_types[i]);
     }
 
     for (size_t i = 0; i < num; i++) {
-        ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
+        ctx.dst[i].rkey(sender(), ctx.rkey_handles[i], ep_index);
 
         ctx.buffers[i]      = ctx.src[i].ptr();
         ctx.memhs[i]        = ctx.src[i].memh();

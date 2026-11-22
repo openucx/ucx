@@ -330,10 +330,14 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
 static void ucp_ep_flush_schedule_restart(ucp_request_t *req)
 {
+    int signal = req->send.flush.sw_state != UCP_FLUSH_SW_STATE_RESTART_PENDING;
+
     req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
     ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q, req,
                               ucp_ep_flush_failover_oneshot_cb, req);
-    ucp_worker_signal_internal(req->send.ep->worker);
+    if (signal) {
+        ucp_worker_signal_internal(req->send.ep->worker);
+    }
 }
 
 static int ucp_ep_flush_defer_recovery(ucp_request_t *req)

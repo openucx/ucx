@@ -319,6 +319,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 
+void ucp_proto_request_zcopy_restart_completion(uct_completion_t *self);
+
+
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param);
 
 

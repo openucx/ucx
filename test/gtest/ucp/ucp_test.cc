@@ -1352,11 +1352,14 @@ ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) cons
     return ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy);
 }
 
-void ucp_test::mapped_buffer::rkey(const entity& entity, ucs::handle<ucp_rkey_h> &rkey) const
+void ucp_test::mapped_buffer::rkey(const entity& entity,
+                                   ucs::handle<ucp_rkey_h> &rkey,
+                                   int ep_index) const
 {
     ucp_rkey_h ucp_rkey;
 
-    ASSERT_UCS_OK(ucp_ep_rkey_unpack(entity.ep(), m_rkey_buffer, &ucp_rkey));
+    ASSERT_UCS_OK(ucp_ep_rkey_unpack(entity.ep(0, ep_index), m_rkey_buffer,
+                                      &ucp_rkey));
     rkey.reset(ucp_rkey, ucp_rkey_destroy);
 }
 

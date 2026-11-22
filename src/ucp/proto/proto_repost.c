@@ -597,7 +597,8 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
      * posted batches have drained. No fragment descriptors need to be saved. */
     if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
         (op_info->comp != NULL) &&
-        (op_info->comp->func == ucp_proto_request_zcopy_completion)) {
+        ((op_info->comp->func == ucp_proto_request_zcopy_completion) ||
+         (op_info->comp->func == ucp_proto_request_zcopy_restart_completion))) {
         req = ucs_container_of(op_info->comp, ucp_request_t,
                                send.state.uct_comp);
         if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
