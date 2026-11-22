@@ -851,7 +851,10 @@ ucp_ep_h ucp_worker_cuda_async_ep_for_short(ucp_worker_h worker,
             continue;
         }
 
-        /* DMA-BUF CPU mapping waives only legacy peer-pinning eligibility. */
+        /*
+         * required_mem_flags also applies to ordinary buffers. Waive legacy
+         * peer-pinning only on this qualified async short-copy route.
+         */
         if (ucs_test_all_flags(mem_info->flags,
                                md_attr->required_mem_flags &
                                        ~UCS_MEM_FLAG_GDR_CAPABLE)) {

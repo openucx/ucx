@@ -902,19 +902,27 @@ protected:
                      ucs_derived_of(managed_iface, uct_base_iface_t)},
             m_counts{0, 0}
         {
-            ucs_assert(m_active == nullptr);
-            ucs_assert(m_ifaces[0]->internal_ops != m_ifaces[1]->internal_ops);
+            if ((m_active != nullptr) || (m_ifaces[0] == m_ifaces[1])) {
+                UCS_TEST_ABORT("Copy performance counter requires distinct "
+                               "interfaces and no active counter");
+            }
+
+            for (unsigned i = 0; i < 2; ++i) {
+                m_orig_ops[i] = m_ifaces[i]->internal_ops;
+                m_ops[i]      = *m_orig_ops[i];
+                m_mock.setup(&m_ops[i].iface_estimate_perf, estimate_perf);
+            }
+
             m_active = this;
             for (unsigned i = 0; i < 2; ++i) {
-                m_orig[i] = m_ifaces[i]->internal_ops->iface_estimate_perf;
-                m_ifaces[i]->internal_ops->iface_estimate_perf = estimate_perf;
+                m_ifaces[i]->internal_ops = &m_ops[i];
             }
         }
 
         ~scoped_copy_perf_counter()
         {
             for (unsigned i = 0; i < 2; ++i) {
-                m_ifaces[i]->internal_ops->iface_estimate_perf = m_orig[i];
+                m_ifaces[i]->internal_ops = m_orig_ops[i];
             }
             m_active = nullptr;
         }
@@ -936,12 +944,15 @@ protected:
 
             ucs_assert(iface == &m_active->m_ifaces[i]->super);
             ++m_active->m_counts[i];
-            return m_active->m_orig[i](iface, perf_attr);
+            return m_active->m_mock.orig_func(
+                    &m_active->m_ops[i].iface_estimate_perf, iface, perf_attr);
         }
 
         uct_base_iface_t *m_ifaces[2];
-        uct_iface_estimate_perf_func_t m_orig[2];
+        uct_iface_internal_ops_t *m_orig_ops[2];
+        uct_iface_internal_ops_t m_ops[2];
         unsigned m_counts[2];
+        ucs::mock m_mock;
         static scoped_copy_perf_counter *m_active;
     };
 

@@ -155,18 +155,24 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
     const ucp_memory_info_t *mem_info = *mem_info_p;
     void *reg_address                 = address;
     size_t reg_length                 = length;
-    ucp_ep_h ep;
+    ucp_ep_h ep                       = NULL;
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
+    unsigned additional_selection_flags;
     ucs_status_t status;
 
     *detected = (ucp_memory_info_t){
         .type = mem_type,
+        .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
         .flags = UCS_MEM_FLAG_CUDA_ASYNC
     };
-    if ((mem_info == NULL) &&
-        (ucp_worker_cuda_async_ep_for_short(worker, detected, operation,
-                                            &lane) != NULL)) {
+    if (mem_info == NULL) {
+        ep = ucp_worker_cuda_async_ep_for_short(worker, detected, operation,
+                                                &lane);
+        if (ep == NULL) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         /* Discover origin only when a qualified async route is available. */
         /* coverity[pass_freed_arg] */
         ucp_memory_detect(worker->context, address, length, detected);
@@ -179,9 +185,18 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ep = ucp_worker_cuda_async_ep_for_short(worker, mem_info, operation, &lane);
-    if (ep == NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    /*
+     * The probe assumes ASYNC and the selector ignores GDR_CAPABLE.
+     * Other flags can make an earlier lane eligible.
+     */
+    additional_selection_flags = mem_info->flags & ~(UCS_MEM_FLAG_CUDA_ASYNC |
+                                                     UCS_MEM_FLAG_GDR_CAPABLE);
+    if ((ep == NULL) || (additional_selection_flags != 0)) {
+        ep = ucp_worker_cuda_async_ep_for_short(worker, mem_info, operation,
+                                                &lane);
+        if (ep == NULL) {
+            return UCS_ERR_UNSUPPORTED;
+        }
     }
 
     md_index = ucp_ep_md_index(ep, lane);
@@ -192,6 +207,9 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
      * CUDA_MANAGED. Its cache_mem_types == 0 keeps this local type override out
      * of UCP's shared registration cache, avoiding conflicting cached types.
      */
+    ucs_assertv(!(worker->context->cache_md_map[UCS_MEMORY_TYPE_CUDA] &
+                  UCS_BIT(md_index)),
+                "async MD %d uses shared registration cache", md_index);
     status = ucp_mem_type_reg_buffers(worker, reg_address, reg_length,
                                       UCS_MEMORY_TYPE_CUDA, md_index,
                                       UCT_MD_MEM_FLAG_HIDE_ERRORS,

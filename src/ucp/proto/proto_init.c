@@ -353,10 +353,10 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     }
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
-        ep_config = ucp_ep_config(worker->mem_type_ep[local_mem_type]);
+        ep_config     = ucp_ep_config(worker->mem_type_ep[local_mem_type]);
         copy_mem_info = local_mem_info;
     } else if (worker->mem_type_ep[remote_mem_type] != NULL) {
-        ep_config = ucp_ep_config(worker->mem_type_ep[remote_mem_type]);
+        ep_config     = ucp_ep_config(worker->mem_type_ep[remote_mem_type]);
         copy_mem_info = remote_mem_info;
     } else {
         ucs_debug("cannot copy memory between %s and %s",
