@@ -23,6 +23,8 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/api/device/uct_device_types.h>
 
+#include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <string.h>
 #include <sys/types.h>
@@ -796,6 +798,22 @@ out:
     }
 }
 
+/* Parse an unsigned number (decimal, 0x hex or 0 octal), rejecting a sign,
+ * whitespace and overflow, which strtoul() would accept. *end_p is set after
+ * the number. */
+static ucs_status_t
+uct_cuda_ipc_md_parse_ulong(const char *str, unsigned long *value_p,
+                            char **end_p)
+{
+    if (!isdigit((unsigned char)*str)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    errno    = 0;
+    *value_p = strtoul(str, end_p, 0);
+    return (errno == 0) ? UCS_OK : UCS_ERR_INVALID_PARAM;
+}
+
 /* Parse "<domain>[:<host>]", <host> defaults to <domain> */
 static ucs_status_t
 uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
@@ -803,7 +821,7 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
 {
     char *end;
 
-    if (ucs_str_to_ulong(str, 0, domain_p, &end) != UCS_OK) {
+    if (uct_cuda_ipc_md_parse_ulong(str, domain_p, &end) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -812,11 +830,12 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
         return UCS_OK;
     }
 
-    if (*end != ':') {
+    if ((*end != ':') ||
+        (uct_cuda_ipc_md_parse_ulong(end + 1, host_p, &end) != UCS_OK)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    return ucs_str_to_ulong(end + 1, 0, host_p, NULL);
+    return (*end == '\0') ? UCS_OK : UCS_ERR_INVALID_PARAM;
 }
 
 /* Enable MNNVL and set the NVLink domain and host of the MD from the

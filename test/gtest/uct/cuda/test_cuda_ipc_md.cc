@@ -433,7 +433,7 @@ UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_mnnvl_disabled)
 UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_invalid)
 {
     static const char *values[] = {"", "abc", "5:", "5:x", "5;7", "5:7:9",
-                                   ":7", "-1", "5:-1", "+5", " 5", "5: 7",
+                                   ":7", "-1", "5:-1", "+5", "0x", "5:0x", " 5", "5: 7",
                                    "99999999999999999999",
                                    "18446744073709551615",
                                    "5:18446744073709551615"};
