@@ -46,6 +46,7 @@ static MUresult ucm_muMemAllocPitch(MUdeviceptr *address, size_t *pitch,
                                     size_t width, size_t height,
                                     unsigned element_size);
 static MUresult ucm_muMemFree(MUdeviceptr address);
+static MUresult ucm_muMemFreeHost(void *address);
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
 static MUresult ucm_muMemAlloc_v2(MUdeviceptr *address, size_t size);
 static MUresult ucm_muMemAllocManaged(MUdeviceptr *address, size_t size,
@@ -110,6 +111,7 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFreeAsync, MUresult, -1, MUdeviceptr,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocPitch, MUresult, -1, MUdeviceptr *,
                                   size_t *, size_t, size_t, unsigned)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFree, MUresult, -1, MUdeviceptr)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFreeHost, MUresult, -1, void *)
 
 static size_t ucm_musa_mem_size(void *address)
 {
@@ -190,6 +192,8 @@ UCM_MUSA_ALLOC_FUNC(muMemAllocPitch, MUresult, MUSA_SUCCESS, (*arg0) * arg2,
                     MUdeviceptr, *, size_t*, size_t, size_t, unsigned)
 UCM_MUSA_FREE_FUNC(muMemFree, MUresult, MUdeviceptr, UCS_MEMORY_TYPE_MUSA,
                    ucm_musa_mem_size((void *)(uintptr_t)arg0), MUdeviceptr)
+UCM_MUSA_FREE_FUNC(muMemFreeHost, MUresult, void*, UCS_MEMORY_TYPE_HOST, 1,
+                   void*)
 
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
 UCM_MUSA_ALLOC_FUNC(muMemAlloc_v2, MUresult, MUSA_SUCCESS, arg0, MUdeviceptr,
@@ -217,6 +221,7 @@ static ucm_hook_func_t ucm_musa_driver_funcs[] = {
     UCM_HOOK_FUNC_ENTRY(muMemAlloc),
     UCM_HOOK_FUNC_ENTRY(muMemAllocPitch),
     UCM_HOOK_FUNC_ENTRY(muMemFree),
+    UCM_HOOK_FUNC_ENTRY(muMemFreeHost),
 #ifdef HAVE_MUSA_MEM_ALLOC_V2
     UCM_HOOK_FUNC_ENTRY(muMemAlloc_v2),
     UCM_HOOK_FUNC_ENTRY(muMemAllocManaged),

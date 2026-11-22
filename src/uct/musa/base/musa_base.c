@@ -152,23 +152,24 @@ uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
 
 static void uct_musa_base_init_sys_devs(void)
 {
+    unsigned num_devices;
     unsigned i;
 
     uct_musa_base_sys_dev_status =
-            uct_musa_base_get_device_count(&uct_musa_base_num_devices);
+            uct_musa_base_get_device_count(&num_devices);
     if (uct_musa_base_sys_dev_status != UCS_OK) {
         return;
     }
 
     uct_musa_base_sys_devices =
-            ucs_calloc(uct_musa_base_num_devices,
-                       sizeof(*uct_musa_base_sys_devices), "musa sys devices");
+            ucs_calloc(num_devices, sizeof(*uct_musa_base_sys_devices),
+                       "musa sys devices");
     if (uct_musa_base_sys_devices == NULL) {
         uct_musa_base_sys_dev_status = UCS_ERR_NO_MEMORY;
         return;
     }
 
-    for (i = 0; i < uct_musa_base_num_devices; ++i) {
+    for (i = 0; i < num_devices; ++i) {
         uct_musa_base_sys_devices[i] = UCS_SYS_DEVICE_ID_UNKNOWN;
         uct_musa_base_query_sys_dev(i, &uct_musa_base_sys_devices[i]);
     }

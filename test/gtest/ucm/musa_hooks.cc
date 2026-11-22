@@ -12,6 +12,8 @@
 
 static ucm_event_t musa_alloc_event;
 static ucm_event_t musa_free_event;
+static unsigned musa_alloc_count;
+static unsigned musa_free_count;
 static void *musa_existing_ptr;
 static bool musa_existing_seen;
 static ucm_event_t musa_existing_event;
@@ -19,6 +21,7 @@ static ucm_event_t musa_existing_event;
 static void musa_mem_alloc_callback(ucm_event_type_t event_type,
                                     ucm_event_t *event, void *arg)
 {
+    ++musa_alloc_count;
     musa_alloc_event.mem_type = event->mem_type;
     if ((musa_existing_ptr != NULL) &&
         ((uintptr_t)event->mem_type.address <= (uintptr_t)musa_existing_ptr) &&
@@ -32,6 +35,7 @@ static void musa_mem_alloc_callback(ucm_event_type_t event_type,
 static void musa_mem_free_callback(ucm_event_type_t event_type,
                                    ucm_event_t *event, void *arg)
 {
+    ++musa_free_count;
     musa_free_event.mem_type = event->mem_type;
 }
 
@@ -60,6 +64,8 @@ protected:
                 musa_mem_alloc_callback, this));
         ASSERT_UCS_OK(ucm_set_event_handler(UCM_EVENT_MEM_TYPE_FREE, 0,
                                             musa_mem_free_callback, this));
+        musa_alloc_count = 0;
+        musa_free_count  = 0;
     }
 
     void cleanup() override
@@ -93,12 +99,14 @@ UCS_TEST_F(musa_hooks, test_musaMalloc_musaFree)
     void *ptr;
 
     ASSERT_EQ(musaSuccess, musaMalloc(&ptr, 64));
+    EXPECT_EQ(1u, musa_alloc_count);
     EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
     EXPECT_EQ(64ul, musa_alloc_event.mem_type.size);
     EXPECT_EQ(UCS_MEMORY_TYPE_LAST, musa_alloc_event.mem_type.mem_type);
     EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, musa_alloc_event.mem_type.mem_flags);
 
     ASSERT_EQ(musaSuccess, musaFree(ptr));
+    EXPECT_EQ(1u, musa_free_count);
     EXPECT_EQ(ptr, musa_free_event.mem_type.address);
     EXPECT_EQ(UCS_MEMORY_TYPE_MUSA, musa_free_event.mem_type.mem_type);
 }
@@ -109,9 +117,11 @@ UCS_TEST_F(musa_hooks, test_musaMallocHost_musaFreeHost)
 
     musa_alloc_event.mem_type.address = NULL;
     ASSERT_EQ(musaSuccess, musaMallocHost(&ptr, 64));
+    EXPECT_EQ(0u, musa_alloc_count);
     EXPECT_EQ(nullptr, musa_alloc_event.mem_type.address);
 
     ASSERT_EQ(musaSuccess, musaFreeHost(ptr));
+    EXPECT_EQ(1u, musa_free_count);
     EXPECT_EQ(ptr, musa_free_event.mem_type.address);
     EXPECT_EQ(UCS_MEMORY_TYPE_HOST, musa_free_event.mem_type.mem_type);
 }
@@ -122,8 +132,10 @@ UCS_TEST_F(musa_hooks, test_musaMallocManaged_is_reported)
 
     ASSERT_EQ(musaSuccess,
               musaMallocManaged(&ptr, 64, musaMemAttachGlobal));
+    EXPECT_EQ(1u, musa_alloc_count);
     EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
     EXPECT_EQ(UCS_MEMORY_TYPE_LAST, musa_alloc_event.mem_type.mem_type);
 
     ASSERT_EQ(musaSuccess, musaFree(ptr));
+    EXPECT_EQ(1u, musa_free_count);
 }
