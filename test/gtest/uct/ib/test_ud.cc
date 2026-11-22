@@ -1102,6 +1102,8 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_destroy,
     iface(m_e2)->rx.hook = drop_all;
     m_e1->connect_to_iface(0, *m_e2);
     ASSERT_EQ(UCS_INPROGRESS, uct_ep_check(m_e1->ep(0), 0, &ep_check_comp));
+    /* Reclaim the local CREQ send credit before hiding the TX resources. */
+    short_progress_loop();
 
     /* No TX resources on m_e1: its CREP stays scheduled */
     tx_available              = iface(m_e1)->tx.available;
@@ -1136,7 +1138,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_cancel,
     ep_check_comp.status = UCS_OK;
     ep_check_count       = 0;
     ep_check_status      = UCS_OK;
-    flush_comp.func      = [](uct_completion_t*) {};
+    flush_comp.func      = [](uct_completion_t *) {};
     flush_comp.count     = 1;
     flush_comp.status    = UCS_OK;
 
