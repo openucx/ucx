@@ -143,6 +143,9 @@
  * Fixed empty Git branch and revision fields in build metadata
  * Fixed compilation when configured without GDA
  * Fixed UCS time-header compilation by including the UCS_INFINITY declaration
+### Known issues:
+ * JUCX package for this release was renamed to
+   `1.23.0-1`, please avoid using `1.23.0`.
 
 ## 1.22.0 (August 2, 2026)
 ### Features:
