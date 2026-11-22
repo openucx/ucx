@@ -700,14 +700,40 @@ uct_musa_base_copy_kind(const uct_musa_pointer_info_t *src_info,
 }
 
 static ucs_status_t
+uct_musa_base_memcpy(void *dst, const void *src, size_t length,
+                     enum musaMemcpyKind kind, musaStream_t stream)
+{
+    ucs_status_t status;
+
+    status = uct_musa_base_status(musaMemcpyAsync(dst, src, length, kind,
+                                                  stream),
+                                  UCS_LOG_LEVEL_ERROR, "musaMemcpyAsync");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_musa_base_status(musaStreamSynchronize(stream),
+                                UCS_LOG_LEVEL_ERROR, "musaStreamSynchronize");
+}
+
+static ucs_status_t
+uct_musa_base_memcpy_async(void *dst, const void *src, size_t length,
+                           enum musaMemcpyKind kind, musaStream_t stream)
+{
+    return uct_musa_base_status(musaMemcpyAsync(dst, src, length, kind,
+                                                stream),
+                                UCS_LOG_LEVEL_ERROR, "musaMemcpyAsync");
+}
+
+static ucs_status_t
 uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
                              const uct_musa_pointer_info_t *src_info,
                              const uct_musa_pointer_info_t *dst_info,
-                             musaError_t (*copy_func)(void *, const void *,
-                                                      size_t,
-                                                      enum musaMemcpyKind,
-                                                      musaStream_t),
-                             musaStream_t stream, const char *copy_name)
+                             ucs_status_t (*copy_func)(void *, const void *,
+                                                       size_t,
+                                                       enum musaMemcpyKind,
+                                                       musaStream_t),
+                             musaStream_t stream)
 {
     enum musaMemcpyKind kind;
 
@@ -719,29 +745,7 @@ uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
 
     /* The caller has made the stream's device current. */
     uct_musa_base_copy_kind(src_info, dst_info, &kind);
-    return uct_musa_base_status(copy_func(dst, src, length, kind, stream),
-                                UCS_LOG_LEVEL_ERROR, copy_name);
-}
-
-static musaError_t
-uct_musa_base_memcpy(void *dst, const void *src, size_t length,
-                     enum musaMemcpyKind kind, musaStream_t stream)
-{
-    musaError_t error;
-
-    error = musaMemcpyAsync(dst, src, length, kind, stream);
-    if (error != musaSuccess) {
-        return error;
-    }
-
-    return musaStreamSynchronize(stream);
-}
-
-static musaError_t
-uct_musa_base_memcpy_async(void *dst, const void *src, size_t length,
-                           enum musaMemcpyKind kind, musaStream_t stream)
-{
-    return musaMemcpyAsync(dst, src, length, kind, stream);
+    return copy_func((void*)dst, src, length, kind, stream);
 }
 
 ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
@@ -755,7 +759,7 @@ ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
 
     return uct_musa_base_copy_with_info(src, dst, length, src_info,
                                         dst_info, uct_musa_base_memcpy,
-                                        stream, "MUSA short copy");
+                                        stream);
 }
 
 ucs_status_t
@@ -770,7 +774,7 @@ uct_musa_base_copy_async(const void *src, void *dst, size_t length,
 
     return uct_musa_base_copy_with_info(src, dst, length, src_info,
                                         dst_info, uct_musa_base_memcpy_async,
-                                        stream, "musaMemcpyAsync");
+                                        stream);
 }
 
 UCS_MODULE_INIT()

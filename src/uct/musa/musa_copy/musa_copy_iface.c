@@ -262,9 +262,8 @@ uct_musa_copy_complete_event(uct_musa_copy_event_desc_t *event_desc,
  * have been traversed, so completion callbacks cannot invalidate the active
  * queue iterators through recursive progress. */
 static unsigned
-uct_musa_copy_poll_device(uct_musa_copy_iface_t *iface,
-                          uct_musa_copy_device_rsc_t *device_rsc,
-                          ucs_queue_head_t *completed)
+uct_musa_copy_poll_device(uct_musa_copy_device_rsc_t *device_rsc,
+                          unsigned max_events, ucs_queue_head_t *completed)
 {
     uct_musa_copy_event_desc_t *event_desc;
     uct_musa_copy_queue_desc_t *queue_desc;
@@ -277,7 +276,7 @@ uct_musa_copy_poll_device(uct_musa_copy_iface_t *iface,
                             &device_rsc->active_queue, queue) {
         ucs_queue_for_each_safe(event_desc, event_iter,
                                 &queue_desc->event_queue, queue) {
-            if (count >= iface->config.max_poll) {
+            if (count >= max_events) {
                 return count;
             }
 
@@ -338,7 +337,9 @@ unsigned uct_musa_copy_iface_progress(uct_iface_h tl_iface)
             continue;
         }
 
-        count += uct_musa_copy_poll_device(iface, device_rsc, &completed);
+        count += uct_musa_copy_poll_device(device_rsc,
+                                           iface->config.max_poll - count,
+                                           &completed);
         if (count >= iface->config.max_poll) {
             break;
         }

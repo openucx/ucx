@@ -555,11 +555,10 @@ static ucs_status_t ucm_musamem_install(int events)
         if ((bistro_status != UCS_OK) ||
             (driver_reloc_status != UCS_OK) ||
             (runtime_reloc_status != UCS_OK)) {
-            ucm_warn("MUSA hooks installed partially "
-                     "(bistro: %s, driver reloc: %s, runtime reloc: %s)",
-                     ucs_status_string(bistro_status),
-                     ucs_status_string(driver_reloc_status),
-                     ucs_status_string(runtime_reloc_status));
+            ucm_warn("MUSA hooks installed partially (bistro: %d, "
+                     "driver reloc: %d, runtime reloc: %d)",
+                     bistro_status, driver_reloc_status,
+                     runtime_reloc_status);
         } else {
             ucm_info("MUSA hooks are ready");
         }
@@ -567,7 +566,7 @@ static ucs_status_t ucm_musamem_install(int events)
         status = (bistro_status != UCS_OK) ? bistro_status :
                  (driver_reloc_status != UCS_OK) ? driver_reloc_status :
                                                    runtime_reloc_status;
-        ucm_diag("failed to install MUSA hooks: %s", ucs_status_string(status));
+        ucm_diag("failed to install MUSA hooks: status %d", status);
     }
 
     pthread_mutex_unlock(&install_mutex);
