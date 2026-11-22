@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 extern "C" {
+#include <musa.h>
 #include <musa_runtime_api.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
@@ -203,6 +204,24 @@ UCS_TEST_F(test_musa_copy_md, host_registration_on_fresh_thread)
     if (error) {
         std::rethrow_exception(error);
     }
+}
+
+UCS_TEST_F(test_musa_copy_md, driver_address_range_matches_allocation)
+{
+    const size_t alloc_size = 1024;
+    MUdeviceptr base        = 0;
+    size_t size             = 0;
+    void *address           = NULL;
+
+    ASSERT_EQ(musaSuccess, musaMalloc(&address, alloc_size));
+    ucs::handle<void*> allocation(address, [](void *address) {
+        EXPECT_EQ(musaSuccess, musaFree(address));
+    });
+
+    ASSERT_EQ(MUSA_SUCCESS,
+              muMemGetAddressRange(&base, &size, (MUdeviceptr)address));
+    EXPECT_EQ((MUdeviceptr)address, base);
+    EXPECT_EQ(alloc_size, size);
 }
 
 UCS_TEST_F(test_musa_copy_md, mem_query_preserves_allocation_for_overrun)

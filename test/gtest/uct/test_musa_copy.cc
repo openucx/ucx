@@ -220,19 +220,27 @@ UCS_TEST_SKIP_COND_P(test_musa_copy, completions_run_on_application_device,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
     int num_devices = 0;
+    int application_device;
 
     ASSERT_EQ(musaSuccess, musaGetDeviceCount(&num_devices));
     if (num_devices < 2) {
         UCS_TEST_SKIP_R("requires at least 2 MUSA devices");
     }
 
+    ASSERT_EQ(musaSuccess, musaGetDevice(&application_device));
+    ucs::handle<int*> device_guard(&application_device, [](int *device) {
+        musaError_t error = musaSetDevice(*device);
+        EXPECT_EQ(musaSuccess, error) << musaGetErrorString(error);
+    });
+
     /* Allocate the device buffer while device B is current, so that the copy
      * is executed on device B ... */
-    ASSERT_EQ(musaSuccess, musaSetDevice(1));
+    const int copy_device = (application_device + 1) % num_devices;
+    ASSERT_EQ(musaSuccess, musaSetDevice(copy_device));
     mapped_buffer sendbuf(4096, SEED1, sender(), 0, UCS_MEMORY_TYPE_HOST);
     mapped_buffer recvbuf(4096, SEED2, receiver(), 0, UCS_MEMORY_TYPE_MUSA);
     /* ... and restore the application device A. */
-    ASSERT_EQ(musaSuccess, musaSetDevice(0));
+    ASSERT_EQ(musaSuccess, musaSetDevice(application_device));
 
     device_completion zcopy_completion;
     device_completion flush_completion;
@@ -249,8 +257,8 @@ UCS_TEST_SKIP_COND_P(test_musa_copy, completions_run_on_application_device,
 
     EXPECT_EQ(1u, zcopy_completion.calls);
     EXPECT_EQ(1u, flush_completion.calls);
-    EXPECT_EQ(0, zcopy_completion.device_seen);
-    EXPECT_EQ(0, flush_completion.device_seen);
+    EXPECT_EQ(application_device, zcopy_completion.device_seen);
+    EXPECT_EQ(application_device, flush_completion.device_seen);
     recvbuf.pattern_check(SEED1);
 }
 
