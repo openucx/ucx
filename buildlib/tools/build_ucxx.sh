@@ -4,9 +4,11 @@
 #
 # See file LICENSE for terms.
 #
-# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs|devcontainer>
-# Env: UCXX_DIR (all phases except ucx_pr). Build phases also need
-#   RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
+# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|
+#                       docs|checks>
+# Env: ucx_pr needs RAPIDS_CUDA_VERSION and UCX_PR_TARBALL; checks needs
+#   UCXX_DIR, RAPIDS_CUDA_VERSION and RAPIDS_PY_VERSION; every other phase
+#   needs UCXX_DIR, RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
 # Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
 #
@@ -39,34 +41,39 @@ fi
 
 : "${UCXX_DIR:?UCXX_DIR required}"
 
-case "$phase" in
-  devcontainer)
-    # Parse each .devcontainer config; verify its Dockerfile + BASE exist
-    # (no registry pull - the devcontainer CLI catches missing images at use).
-    UCXX_DIR="$UCXX_DIR" python3 - <<'PY'
-import glob, json, os, sys
-root = os.environ["UCXX_DIR"]
-cfgs = glob.glob(os.path.join(root, ".devcontainer", "*", "devcontainer.json"))
-if not cfgs:
-    sys.exit("ERROR: no devcontainer.json under .devcontainer/")
-for cfg in cfgs:
-    b = json.load(open(cfg))["build"]
-    df = b["dockerfile"].replace("${localWorkspaceFolder}", root)
-    assert os.path.isfile(df), f"{cfg}: missing Dockerfile {df}"
-    assert b["args"]["BASE"], f"{cfg}: empty BASE"
-    print(f"OK {cfg}")
-PY
-    exit 0 ;;
-esac
-
 : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
+
+if [ "$phase" = "checks" ]; then
+  export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
+  # The ucxx pre-commit checks, including the ones that keep the files
+  # generated from dependencies.yaml in sync. pre-commit works from the root
+  # of a git repository, and the ucxx hooks address their files from the ucxx
+  # root (dependencies.yaml, RAPIDS_VERSION, ^conda/environments/). So the
+  # hooks run in a throwaway repository made of the tracked UCXX files: there
+  # the UCXX tree is the root, and --all-files covers UCXX only. That
+  # repository has one commit, so verify-copyright, which looks at the files
+  # changed against the target branch, finds nothing to check.
+  checks_dir=$(mktemp -d)
+  (cd "$UCXX_DIR" && git ls-files -z | tar --null -T - -cf -) \
+    | tar -xf - -C "$checks_dir"
+  cd "$checks_dir"
+  git init -q
+  git add -A
+  git -c user.name=ucxx-checks -c user.email=ucxx-checks@localhost \
+    -c commit.gpgsign=false commit -q -m "UCXX tree"
+  # CI=true keeps rapids-github-fetch from prompting for an interactive
+  # GitHub login; it downloads anonymously.
+  CI=true bash ci/check_style.sh
+  exit 0
+fi
+
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
 UCX_PR_PREFIX=/tmp/ucx-pr
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
-# upstream test-env matrices select the dependency set via this key
+# the ucxx test-env matrices select the dependency set via this key
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
 # persistent pip cache (host volume); pip disables caching itself if unwritable
 [ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
@@ -110,6 +117,14 @@ if [ -n "${WHEEL_INPUT_DIR:-}" ]; then
   chmod +x "$HOME/.local/bin/rapids-download-from-github"
 fi
 
+# The UCX repository has no ucxx tags for rapids-generate-version to derive
+# the package version from; take it from the ucxx VERSION file instead.
+cat > "$HOME/.local/bin/rapids-generate-version" <<EOF
+#!/bin/bash
+echo -n "$(head -n 1 "$UCXX_DIR/VERSION")\${RAPIDS_VERSION_SUFFIX:-}"
+EOF
+chmod +x "$HOME/.local/bin/rapids-generate-version"
+
 export PATH="$HOME/.local/bin:$PATH"
 
 cd "$UCXX_DIR"
@@ -145,16 +160,6 @@ case "$phase" in
     : "${WHEEL_INPUT_DIR:?WHEEL_INPUT_DIR required for wheel_ucxx (libucxx wheel dir)}"
     bash ci/build_wheel_ucxx.sh ;;
   docs)
-    # Upstream forces RAPIDS_DOCS_DIR=$(mktemp -d); make it default-if-unset
-    # so our staged output dir survives. Guard catches upstream rewording.
-    sed -i 's|RAPIDS_DOCS_DIR="$(mktemp -d)"|: "${RAPIDS_DOCS_DIR:=$(mktemp -d)}"|' ci/build_docs.sh
-    grep -q 'RAPIDS_DOCS_DIR:=' ci/build_docs.sh \
-      || { echo "ERROR: docs patch did not apply to ci/build_docs.sh" >&2; exit 1; }
-    # The docs env carries no ucx package; provide the PR's UCX libraries.
-    grep -q "ucx-pr" ci/build_docs.sh \
-      || sed -i 's#^conda activate docs$#conda activate docs\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\necho "UCX-PR overlaid into docs env"#' ci/build_docs.sh
-    grep -q "ucx-pr" ci/build_docs.sh \
-      || { echo "ERROR: UCX-PR overlay patch did not apply to ci/build_docs.sh" >&2; exit 1; }
     bash ci/build_docs.sh ;;
   *) echo "Unknown phase: $phase" >&2; exit 1 ;;
 esac

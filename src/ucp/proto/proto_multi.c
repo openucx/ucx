@@ -131,7 +131,7 @@ ucp_proto_rma_split_lane(const ucp_proto_multi_priv_t *mpriv,
 
 const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
         ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
-        const ucp_proto_multi_lane_priv_t *lpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv, ucp_ep_path_bw_op_t op,
         ucp_proto_multi_lane_priv_t *adjusted)
 {
     ucp_ep_h ep                          = req->send.ep;
@@ -164,8 +164,8 @@ const ucp_proto_multi_lane_priv_t *ucp_proto_rma_adjust_lane(
         return lpriv;
     }
 
-    return ucp_proto_rma_split_lane(mpriv, state, UCP_EP_PATH_BW_OP_PUT,
-                                    length, lpriv, adjusted);
+    return ucp_proto_rma_split_lane(mpriv, state, op, length, lpriv,
+                                    adjusted);
 }
 
 

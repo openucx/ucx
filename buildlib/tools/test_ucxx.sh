@@ -37,7 +37,7 @@ UCX_PR_PREFIX=/tmp/ucx-pr
   || { echo "ERROR: UCX (PR) not staged at $UCX_PR_PREFIX - UCXX_ucx artifact missing?" >&2; exit 1; }
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
-# upstream test-env matrices select the dependency set via this key
+# the ucxx test-env matrices select the dependency set via this key
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
 # persistent pip cache (host volume); pip disables caching itself if unwritable
 [ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
@@ -53,25 +53,10 @@ shim_download_helper() {
 
 cd "$UCXX_DIR"
 
-# ucxx asks for its UCXX_NO_LIBUCX switch in every job (ci/README.md). The
-# tests load the PR's UCX through the overlay and LD_LIBRARY_PATH below.
-export UCXX_NO_LIBUCX=true
-
-# Tolerate missing nvidia-smi on CPU containers. Guard catches upstream rewording.
-sed -i 's#^  nvidia-smi$#  command -v nvidia-smi >/dev/null \&\& nvidia-smi || echo "(no GPU)"#' ci/test_common.sh
-grep -q 'command -v nvidia-smi' ci/test_common.sh \
-  || { echo "ERROR: nvidia-smi patch did not apply to ci/test_common.sh" >&2; exit 1; }
-
-# Conda tests load the PR-built UCX: right after env activation, copy its
-# libraries and tools into the env. The PR build is the only provider of UCX
-# there, so assert no released ucx package slipped back into the env - that is
-# the one way another libucs could shadow the overlay.
-for f in ci/test_cpp.sh ci/test_python.sh; do
-  grep -q "ucx-pr" "$f" \
-    || sed -i 's#^conda activate test$#conda activate test\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\nif conda list | grep -qE "^ucx +[0-9]"; then echo "ERROR: released ucx package present in test env - it would shadow the PR UCX" >\&2; exit 1; fi\necho "UCX-PR overlaid into test env"#' "$f"
-  grep -q "ucx-pr" "$f" \
-    || { echo "ERROR: UCX-PR overlay patch did not apply to $f" >&2; exit 1; }
-done
+# Point every ucxx test at the PR's UCX instead of released ucx: with the
+# ucxx UCXX_NO_LIBUCX switch the test scripts take UCX from ucx_ROOT, and the
+# wheel test checks that the UCX it loaded is that one.
+export UCXX_NO_LIBUCX=true ucx_ROOT="$UCX_PR_PREFIX"
 
 # Forces the host driver ahead of the image's newer compat driver (MPS rejects
 # a client newer than the daemon -> cuInit hangs). ubuntu: /usr/lib/<arch>-linux-gnu;
@@ -112,13 +97,7 @@ case "$phase" in
     : "${LIBUCXX_WHL_DIR:?LIBUCXX_WHL_DIR required}"
     : "${UCXX_WHL_DIR:?UCXX_WHL_DIR required}"
     # The ucxx wheel carries no libucx dependency - the loader resolves the
-    # UCX libraries from UCX_PR_PREFIX via LD_LIBRARY_PATH, and the injected
-    # check asserts the runtime UCX version is the PR's. ucxx reports only
-    # MAJOR.MINOR.PATCH, so the check drops any extra version suffix.
-    grep -q "ucx-pr" ci/test_wheel_ucxx.sh \
-      || sed -i '/^print_system_stats$/i want=$(/tmp/ucx-pr/bin/ucx_info -v | sed -n "s/^# Library version: //p" | grep -oE "^[0-9]+[.][0-9]+[.][0-9]+")\ngot=$(python -c "import ucxx; print(*ucxx.get_ucx_version(), sep=chr(46))")\n[ "$got" = "$want" ] || { echo "ERROR: UCX version mismatch: $got != $want" >\&2; exit 1; }\necho "UCXX runs UCX-PR $got"' ci/test_wheel_ucxx.sh
-    grep -q "ucx-pr" ci/test_wheel_ucxx.sh \
-      || { echo "ERROR: UCX-PR version check did not apply to ci/test_wheel_ucxx.sh" >&2; exit 1; }
+    # UCX libraries from UCX_PR_PREFIX via LD_LIBRARY_PATH.
     # The wheel test installs from both the libucxx and ucxx wheelhouses via
     # the download helpers; stage both wheels in one dir and point the helpers
     # there so the libucxx_*.whl / ucxx_*.whl globs resolve.

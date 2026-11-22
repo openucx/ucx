@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -104,73 +104,11 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     return status;
 }
 
-typedef struct {
-    ucm_reloc_patch_t patch;
-    void              **orig_func_ptr;
-} ucm_rocm_func_t;
-
-static ucm_rocm_func_t ucm_rocm_funcs[] =
-        {{{"hsa_amd_memory_pool_allocate",
-           ucm_override_hsa_amd_memory_pool_allocate},
-          (void**)&ucm_orig_hsa_amd_memory_pool_allocate},
-         {{"hsa_amd_memory_pool_free", ucm_override_hsa_amd_memory_pool_free},
-          (void**)&ucm_orig_hsa_amd_memory_pool_free},
-         {{NULL, NULL}, NULL}};
-
-
-static ucs_status_t
-ucm_rocm_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_hooks_p)
-{
-    ucm_rocm_func_t *func;
-    ucs_status_t status;
-    void *func_ptr;
-    int count;
-
-    if (*installed_hooks_p & UCS_BIT(mode)) {
-        return UCS_OK;
-    }
-
-    if (!(ucm_global_opts.rocm_hook_modes & UCS_BIT(mode))) {
-        /* Disabled by configuration */
-        ucm_debug("rocm memory hooks mode %s is disabled",
-                  ucm_mmap_hook_modes[mode]);
-        return UCS_OK;
-    }
-
-    count = 0;
-    for (func = ucm_rocm_funcs; func->patch.symbol != NULL; ++func) {
-        func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
-        if (func_ptr == NULL) {
-            /* Symbol not (yet) loaded - e.g. libhsa-runtime64 not mapped */
-            continue;
-        }
-
-        if (mode == UCM_MMAP_HOOK_BISTRO) {
-            status = ucm_bistro_patch(func_ptr, func->patch.value,
-                                      func->patch.symbol, func->orig_func_ptr,
-                                      NULL);
-        } else if (mode == UCM_MMAP_HOOK_RELOC) {
-            status = ucm_reloc_modify(&func->patch);
-        } else {
-            break;
-        }
-
-        if (status != UCS_OK) {
-            ucm_diag("failed to install %s hook for '%s'",
-                     ucm_mmap_hook_modes[mode], func->patch.symbol);
-            return status;
-        }
-
-        ucm_debug("installed %s hook for '%s'", ucm_mmap_hook_modes[mode],
-                  func->patch.symbol);
-        ++count;
-    }
-
-    *installed_hooks_p |= UCS_BIT(mode);
-    ucm_info("rocm memory hooks mode %s: installed %d hooks",
-             ucm_mmap_hook_modes[mode], count);
-    return UCS_OK;
-}
+static ucm_hook_func_t ucm_rocm_funcs[] = {
+    UCM_HOOK_FUNC_ENTRY(hsa_amd_memory_pool_allocate),
+    UCM_HOOK_FUNC_ENTRY(hsa_amd_memory_pool_free),
+    {{NULL, NULL}, NULL}
+};
 
 static ucs_status_t ucm_rocmmem_install(int events)
 {
@@ -194,8 +132,10 @@ static ucs_status_t ucm_rocmmem_install(int events)
     /* Install bistro first: it patches the HSA function body, so it catches
      * callers regardless of how they resolved the symbol (GOT or dlsym). If
      * bistro cannot patch (e.g. an unrelocatable prologue or W^X) */
-    bistro_status = ucm_rocm_install_hooks(UCM_MMAP_HOOK_BISTRO,
-                                              &installed_hooks);
+    bistro_status = ucm_install_hooks(ucm_rocm_funcs, "rocm",
+                                      UCM_MMAP_HOOK_BISTRO,
+                                      ucm_global_opts.rocm_hook_modes,
+                                      &installed_hooks);
     if (bistro_status != UCS_OK) {
         ucm_debug("failed to install rocm bistro hooks");
     }
@@ -203,8 +143,10 @@ static ucs_status_t ucm_rocmmem_install(int events)
     /* Install reloc as well: it is harmless (the wrapper calls the bistro
      * trampoline via ucm_orig_*, which bypasses the patch, so no double
      * dispatch) and provides coverage where bistro is not installed. */
-    reloc_status = ucm_rocm_install_hooks(UCM_MMAP_HOOK_RELOC,
-                                             &installed_hooks);
+    reloc_status = ucm_install_hooks(ucm_rocm_funcs, "rocm",
+                                     UCM_MMAP_HOOK_RELOC,
+                                     ucm_global_opts.rocm_hook_modes,
+                                     &installed_hooks);
     if (reloc_status != UCS_OK) {
         ucm_debug("failed to install rocm reloc hooks");
     }
