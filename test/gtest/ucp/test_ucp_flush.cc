@@ -583,6 +583,37 @@ UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
     }
 }
 
+/* The wireup replays pending requests with flushes blocked, and the send
+ * callback of a replayed request can issue a flush. That flush must start only
+ * after the replay, and then complete. */
+UCS_TEST_P(test_ucp_flush, blocked_flush_starts_after_replay)
+{
+    ucp_request_param_t param = {};
+    ucp_ep_h ep               = sender().ep();
+    ucs_status_ptr_t request;
+
+    flush_ep(sender());
+    {
+        test_flush_worker_cs_guard cs_guard(ep->worker);
+
+        ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
+
+        request = ucp_ep_flush_internal(ep, 0, &param, NULL,
+                                        test_flush_completion,
+                                        "blocked_flush_starts_after_replay",
+                                        UCT_FLUSH_FLAG_LOCAL);
+
+        ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
+    }
+
+    ASSERT_TRUE(UCS_PTR_IS_PTR(request))
+            << "flush completed while flushes were blocked";
+    EXPECT_EQ(0, (static_cast<ucp_request_t*>(request) - 1)
+                         ->send.flush.started_lanes)
+            << "flush started while flushes were blocked";
+    EXPECT_UCS_OK(request_wait(request));
+}
+
 UCS_TEST_P(test_ucp_flush,
            force_completion_removes_remote_completion_request)
 {
