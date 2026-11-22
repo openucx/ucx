@@ -1120,6 +1120,52 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_destroy,
     EXPECT_EQ(1u, ep_check_count) << "ep check lost on endpoint destroy";
     EXPECT_EQ(UCS_ERR_CANCELED, ep_check_status);
 }
+
+/* Cancel a check waiting for an unsent CREP, without a peer ACK. Restoring TX
+ * credits without progress keeps the CREP pending when flush(CANCEL) runs. */
+UCS_TEST_SKIP_COND_P(test_ud, ep_check_simultaneous_creq_cancel,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK)) {
+    /* May remain queued until endpoint teardown if an assertion fails. */
+    static uct_completion_t flush_comp;
+    int16_t tx_available;
+
+    disable_async(m_e1);
+    disable_async(m_e2);
+    ep_check_comp.func   = ep_check_done;
+    ep_check_comp.count  = 1;
+    ep_check_comp.status = UCS_OK;
+    ep_check_count       = 0;
+    ep_check_status      = UCS_OK;
+    flush_comp.func     = [](uct_completion_t*) {};
+    flush_comp.count    = 1;
+    flush_comp.status   = UCS_OK;
+
+    iface(m_e2)->rx.hook = drop_all;
+    m_e1->connect_to_iface(0, *m_e2);
+    ASSERT_EQ(UCS_INPROGRESS, uct_ep_check(m_e1->ep(0), 0, &ep_check_comp));
+    /* Reclaim the local CREQ send credit before hiding the TX resources. */
+    short_progress_loop();
+    tx_available              = iface(m_e1)->tx.available;
+    iface(m_e1)->tx.available = 0;
+    m_e2->connect_to_iface(0, *m_e1);
+    validate_connect(ep(m_e1), 0U);
+    iface(m_e1)->tx.available = tx_available;
+
+    ASSERT_TRUE(uct_ud_ep_ctl_op_check(ep(m_e1), UCT_UD_EP_OP_CREP));
+    ASSERT_EQ(0u, ep_check_count);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, &flush_comp));
+    wait_for_cond([&]() {
+        return (ep_check_count != 0) && (flush_comp.count == 0);
+    }, [this]() { progress(); }, TEST_UD_LINGER_TIMEOUT_IN_SEC);
+
+    EXPECT_EQ(1u, ep_check_count);
+    EXPECT_UCS_OK(ep_check_status);
+    EXPECT_EQ(0, flush_comp.count);
+    EXPECT_UCS_OK(flush_comp.status);
+    EXPECT_EQ(UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
+    iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
+}
 #endif
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
