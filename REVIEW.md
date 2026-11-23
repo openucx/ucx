@@ -57,6 +57,8 @@ branch, such as `v1.23.x`. Review it against the original PR:
   description should explain it
 - **One PR at a time** — a backport should apply exactly one original PR;
   ask the author to split a backport that combines several PRs
+- **Size** — the 500-added-line limit does not apply, because a backport
+  keeps the size of the original PR
 - **Tests** — tests that the original PR added or changed should come with
   the backport, adapted if needed
 
