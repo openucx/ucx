@@ -50,7 +50,7 @@ typedef struct uct_rc_gdaki_iface {
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
     ucs_range_spec_t           qpn_range;
-    uint32_t                   next_qpn;
+    uint32_t                   *next_qpns;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
     uct_rc_gdaki_devx_uar_t    *uar_wrap;
