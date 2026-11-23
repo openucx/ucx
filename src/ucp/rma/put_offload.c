@@ -591,6 +591,7 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
     const void *buffer;
     ucp_datatype_t datatype;
     size_t contig_length;
+    size_t send_count;
 
     elem_req = ucp_request_get(ep->worker);
     if (ucs_unlikely(elem_req == NULL)) {
@@ -605,6 +606,7 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
                                             elem_offset);
         datatype      = ucp_dt_make_contig(1);
         contig_length = length;
+        send_count    = length;
         elem_req->send.rma.remote_addr =
                 req->send.rma.sgl.remote_addrs[index] + elem_offset;
 
@@ -641,6 +643,7 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
         buffer        = &local;
         datatype      = ucp_dt_make_sgl();
         contig_length = 0;
+        send_count    = count;
         elem_req->send.rma.remote_addr         = UCP_REMOTE_ADDR_INVALID;
         elem_req->send.rma.sgl.remote_addrs    = remote.remote_addrs;
         elem_req->send.rma.sgl.rkeys           = remote.rkeys;
@@ -651,8 +654,7 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
     sptr = ucp_proto_request_send_op_rma(
             ep, rkey, elem_req, fence_flag,
             ucp_proto_select_op_id(&req->send.proto_config->select_param),
-            buffer, (count == 1) ? contig_length : count, datatype,
-            contig_length, &param, 0, 0);
+            buffer, send_count, datatype, contig_length, &param, 0, 0);
     if (UCS_PTR_IS_PTR(sptr)) {
         ++req->send.state.uct_comp.count;
         return UCS_OK;
