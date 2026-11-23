@@ -16,7 +16,7 @@ kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
   limits: "{memory: 2Gi, cpu: 1000m}"
-  requests: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 512Mi, cpu: 100m}"
 
 credentials:
   - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
