@@ -634,6 +634,10 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
              * handle (e.g. a memory pool without an exportable handle type),
              * so other buffers of the peer may still be accessible */
             *accessible = UCT_CUDA_IPC_ACCESS_NO_HANDLE;
+            ucs_debug("device %d has p2p access, but remote memory addr %p "
+                      "len %zu has no ipc handle",
+                      cu_dev, (void*)rkey->super.super.d_bptr,
+                      rkey->super.super.b_len);
         } else {
             /* The failure may be caused by missing P2P access */
             *accessible = UCT_CUDA_IPC_ACCESS_UNREACHABLE;

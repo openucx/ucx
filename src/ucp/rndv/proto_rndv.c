@@ -364,8 +364,9 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
      * buffer). If we failed to unpack MDs from the peer's remote key because
      * the peer device is not reachable, the peer is expected to fail unpacking
      * them from our remote key as well, so mark them as unreachable. If only
-     * the peer's buffer was not accessible (e.g. it has no IPC handle), the
-     * local buffer (e.g. a rndv fragment) may still be accessible by the peer.
+     * the peer's buffer was not accessible (e.g. it has no IPC handle), local
+     * buffers which keep their full MD map (UCP_PROTO_COMMON_KEEP_MD_MAP, e.g.
+     * the rndv fragments) may still be accessible by the peer.
      */
     remote_md_map = ucp_proto_rndv_md_map_to_remote(params, md_map);
     peer_key      = params->super.super.rkey_config_key;
