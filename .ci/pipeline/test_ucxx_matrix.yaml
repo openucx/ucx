@@ -1,0 +1,97 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# UCXX rows that need no GPU, against this UCX in Kubernetes pods, mirroring
+# the Azure UCXX stages (buildlib/pr/ucxx_*.yml).
+---
+job: ucx-test-ucxx
+
+failFast: false
+# Covers the step timeouts of the longest row.
+timeout_minutes: 360
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  # The CPU request is below the limit so that two PR runs fit the namespace quota
+  requests: "{memory: 16Gi, cpu: 2000m}"
+
+env:
+  UCXX_PY_VERSION: "3.12"
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Same image as the Azure ucxx_rapidsai_ci_conda container.
+runs_on_dockers:
+  - { name: "rapidsai-ci-conda", url: "harbor.mellanox.com/ucx/rapidsai-ci-conda:26.12-azp-2", arch: x86_64 }
+  - { name: "rapidsai-ci-conda", url: "harbor.mellanox.com/ucx/rapidsai-ci-conda:26.12-azp-2", arch: aarch64 }
+
+# Same CUDA versions as the Azure UCXX slices.
+matrix:
+  axes:
+    arch: [x86_64, aarch64]
+    cuda: ['12.9.2', '13.4.3']
+
+taskName: '${arch}/${name}/cuda${cuda}'
+
+# Steps share the pod, so the UCX build and the conda channel stay in /tmp.
+# The RAPIDS tools take a set CI variable for their own runners, so it is unset.
+steps:
+  - name: Pre-commit checks
+    containerSelector: "{name: 'rapidsai-ci-conda', arch: 'x86_64', cuda: '13.*'}"
+    parallel: false
+    timeout: 30
+    run: |
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      ./buildlib/tools/build_ucxx.sh checks
+
+  - name: Build UCX
+    parallel: false
+    timeout: 40
+    run: |
+      unset CI
+      export RAPIDS_CUDA_VERSION=${cuda} UCX_PR_TARBALL=/tmp/ucx-pr.tar.gz
+      ./buildlib/tools/build_ucxx.sh ucx_pr
+
+  - name: Conda C++ build
+    parallel: false
+    timeout: 60
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export RAPIDS_BLD_OUTPUT_DIR=/tmp/ucxx-conda-bld
+      ./buildlib/tools/build_ucxx.sh conda_cpp
+
+  # Adds the Python packages to the C++ channel, like the Azure artifact.
+  - name: Conda Python build
+    parallel: false
+    timeout: 60
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export RAPIDS_BLD_OUTPUT_DIR=/tmp/ucxx-conda-bld
+      ./buildlib/tools/build_ucxx.sh conda_python
+
+  - name: Docs build
+    containerSelector: "{name: 'rapidsai-ci-conda', arch: 'x86_64', cuda: '13.*'}"
+    parallel: false
+    timeout: 60
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export RAPIDS_BLD_OUTPUT_DIR=/tmp/ucxx-docs-bld RAPIDS_DOCS_DIR=/tmp/ucxx-docs
+      export CPP_CHANNEL_DIR=/tmp/ucxx-conda-bld PYTHON_CHANNEL_DIR=/tmp/ucxx-conda-bld
+      ./buildlib/tools/build_ucxx.sh docs
+
+  # CPU slices, as on Azure: the C++ tests skip the CUDA gtests.
+  - name: C++ tests
+    parallel: false
+    timeout: 90
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export IS_GPU=false CONDA_CHANNEL_DIR=/tmp/ucxx-conda-bld
+      bash .ci/scripts/cap_output.sh ./buildlib/tools/test_ucxx.sh test_cpp
