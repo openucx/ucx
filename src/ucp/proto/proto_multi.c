@@ -1019,7 +1019,8 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
 
-        if (params->super.send_op == UCT_EP_OP_GET_ZCOPY) {
+        if ((params->super.send_op == UCT_EP_OP_GET_ZCOPY) &&
+            (params->super.super.select_param->dt_class == UCP_DATATYPE_SGL)) {
             mpriv->sgl_min_frag = ucs_max(
                     mpriv->sgl_min_frag,
                     ucp_proto_common_get_iface_attr(&params->super.super,
