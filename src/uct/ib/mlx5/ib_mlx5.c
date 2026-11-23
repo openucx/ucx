@@ -587,7 +587,8 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, uint32_t flags,
+ucs_status_t uct_ib_mlx5_devx_alloc_uar(const uct_ib_mlx5_md_t *md,
+                                        uint32_t flags,
                                         struct mlx5dv_devx_uar **uar_p)
 {
     const char *uar_type_str      = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ?
@@ -678,16 +679,9 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 {
 #if HAVE_DEVX
     ucs_status_t status;
-    uint32_t flags;
 
-    /* Use UCT_IB_MLX5_MD_FLAG_UAR_USE_WC to determine the supported UAR allocation type */
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
-        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_WC;
-    } else {
-        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_NC;
-    }
-
-    status = uct_ib_mlx5_devx_alloc_uar(md, flags, &uar->uar);
+    status = uct_ib_mlx5_devx_alloc_uar(md, uct_ib_mlx5_md_uar_alloc_type(md),
+                                        &uar->uar);
     if (status != UCS_OK) {
         return status;
     }

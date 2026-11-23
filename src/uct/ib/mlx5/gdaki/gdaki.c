@@ -243,12 +243,14 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 
 static int uct_gdaki_md_check_uar(const uct_ib_md_t *md)
 {
-    int ret = 0;
+    const uct_ib_mlx5_md_t *ib_mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
+    int ret                            = 0;
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
 
-    uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context, 0);
-    if (uar == NULL) {
+    status = uct_ib_mlx5_devx_alloc_uar(
+            ib_mlx5_md, uct_ib_mlx5_md_uar_alloc_type(ib_mlx5_md), &uar);
+    if (status != UCS_OK) {
         return 0;
     }
 

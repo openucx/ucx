@@ -1004,10 +1004,18 @@ void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs
 int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar, uct_ib_mlx5_md_t *md,
                              uct_ib_mlx5_mmio_mode_t mmio_mode);
 
-ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, uint32_t flags,
+ucs_status_t uct_ib_mlx5_devx_alloc_uar(const uct_ib_mlx5_md_t *md,
+                                        uint32_t flags,
                                         struct mlx5dv_devx_uar **uar_p);
 
 ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md);
+
+static inline uint32_t uct_ib_mlx5_md_uar_alloc_type(const uct_ib_mlx5_md_t *md)
+{
+    return (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) ?
+                   UCT_IB_MLX5_UAR_ALLOC_TYPE_WC :
+                   UCT_IB_MLX5_UAR_ALLOC_TYPE_NC;
+}
 
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
