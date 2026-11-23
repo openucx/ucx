@@ -5355,27 +5355,35 @@ protected:
         check_lanes_distance(rkey_cfg_index);
     }
 
+    /* Find an RMA lane other than the AM lane, and its transport endpoint */
+    void find_rma_lane(ucp_lane_index_t *lane_p, uct_ep_h *uct_ep_p)
+    {
+        ucp_ep_h ep                    = sender().ep();
+        const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+        const ucp_lane_index_t *rma_lane;
+
+        *lane_p = UCP_NULL_LANE;
+        ucs_carray_for_each(rma_lane, key->rma_bw_lanes, UCP_MAX_LANES) {
+            if ((*rma_lane != UCP_NULL_LANE) && (*rma_lane != key->am_lane)) {
+                *lane_p = *rma_lane;
+                break;
+            }
+        }
+
+        ASSERT_NE(UCP_NULL_LANE, *lane_p);
+        *uct_ep_p = ucp_ep_get_lane(ep, *lane_p);
+        ASSERT_FALSE(ucp_wireup_ep_test(*uct_ep_p));
+    }
+
     /* Move an RMA lane other than the AM lane to the error state, and wait
      * until the endpoint fails it over if @a wait */
     void fail_rma_lane(bool wait)
     {
         const uct_ep_invalidate_params_t params = {};
-        ucp_ep_h ep                             = sender().ep();
-        const ucp_ep_config_key_t *key          = &ucp_ep_config(ep)->key;
-        ucp_lane_index_t lane                   = UCP_NULL_LANE;
-        const ucp_lane_index_t *rma_lane;
+        ucp_lane_index_t lane;
         uct_ep_h uct_ep;
 
-        ucs_carray_for_each(rma_lane, key->rma_bw_lanes, UCP_MAX_LANES) {
-            if ((*rma_lane != UCP_NULL_LANE) && (*rma_lane != key->am_lane)) {
-                lane = *rma_lane;
-                break;
-            }
-        }
-
-        ASSERT_NE(UCP_NULL_LANE, lane);
-        uct_ep = ucp_ep_get_lane(ep, lane);
-        ASSERT_FALSE(ucp_wireup_ep_test(uct_ep));
+        ASSERT_NO_FATAL_FAILURE(find_rma_lane(&lane, &uct_ep));
         ASSERT_UCS_OK(uct_ep_invalidate(uct_ep, &params));
         if (wait) {
             wait_for_cond([&]() { return is_lane_failed(lane); },
@@ -5564,4 +5572,174 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig, get_restart,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_rkey_reconfig, rcx,
+                              "rc_x")
+/*
+ * Token failover takes a failed lane off the endpoint at once, and holds the
+ * requests pending on that lane until the recovery is over. If the recovery
+ * gives up on the lane, they restart on the endpoint configuration without
+ * it, with the remote key configuration of the previous one.
+ */
+class test_ucp_proto_mock_rcx_rkey_reconfig_tf :
+    public test_ucp_proto_mock_rcx_rkey_reconfig {
+public:
+    test_ucp_proto_mock_rcx_rkey_reconfig_tf()
+    {
+        modify_config("FAILOVER_MODE", "token");
+        /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected */
+        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
+    }
+
+protected:
+    void test_pending_restart(ucp_operation_id_t op_id)
+    {
+        /* The mocked devices have no auxiliary transport to rebuild the
+         * failed lane, so the recovery gives up on it */
+        scoped_log_handler slh(hide_no_aux_logger);
+        ucs::mock mock;
+
+        test_reconfig(
+                op_id, [this, &mock]() { hold_rma_lane(mock); }, true);
+        EXPECT_NE(nullptr, s_lane.req)
+                << "the operation was not pending on the failed lane";
+        EXPECT_UCS_OK(s_lane.invalidate_status);
+        EXPECT_TRUE(s_lane.held_by_tf)
+                << "token failover did not hold the operation";
+        s_lane = {};
+    }
+
+private:
+    /* An RMA lane which keeps an operation pending, for the mock functions */
+    struct held_lane {
+        ucs::mock                   *mock;
+        ucp_ep_h                    ucp_ep;
+        uct_ep_h                    uct_ep;
+        uct_ep_pending_purge_func_t pending_purge;
+        bool                        no_resource;
+        uct_pending_req_t           *req;
+        ucs_status_t                invalidate_status;
+        bool                        held_by_tf;
+    };
+
+    /* The next operation gets no resources on an RMA lane, and the lane fails
+     * while the operation waits in its pending queue */
+    void hold_rma_lane(ucs::mock &mock)
+    {
+        ucp_lane_index_t lane;
+        uct_iface_ops_t *ops;
+        uct_ep_h uct_ep;
+
+        ASSERT_NO_FATAL_FAILURE(find_rma_lane(&lane, &uct_ep));
+
+        ops                  = &uct_ep->iface->ops;
+        s_lane               = {};
+        s_lane.mock          = &mock;
+        s_lane.ucp_ep        = sender().ep();
+        s_lane.uct_ep        = uct_ep;
+        s_lane.pending_purge = ops->ep_pending_purge;
+        mock.setup(&ops->ep_put_zcopy, put_zcopy_no_resource);
+        mock.setup(&ops->ep_get_zcopy, get_zcopy_no_resource);
+        mock.setup(&ops->ep_pending_add, pending_add_fail_lane);
+        mock.setup(&ops->ep_pending_purge, pending_purge_held);
+    }
+
+    static ucs_status_t
+    put_zcopy_no_resource(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
+                          uint64_t remote_addr, uct_rkey_t rkey,
+                          uct_completion_t *comp)
+    {
+        if (ep == s_lane.uct_ep) {
+            s_lane.no_resource = true;
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        return s_lane.mock->orig_func(&ep->iface->ops.ep_put_zcopy, ep, iov,
+                                      iovcnt, remote_addr, rkey, comp);
+    }
+
+    static ucs_status_t
+    get_zcopy_no_resource(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
+                          uint64_t remote_addr, uct_rkey_t rkey,
+                          uct_completion_t *comp)
+    {
+        if (ep == s_lane.uct_ep) {
+            s_lane.no_resource = true;
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        return s_lane.mock->orig_func(&ep->iface->ops.ep_get_zcopy, ep, iov,
+                                      iovcnt, remote_addr, rkey, comp);
+    }
+
+    /* Keep the operation which got no resources, and fail the lane */
+    static ucs_status_t
+    pending_add_fail_lane(uct_ep_h ep, uct_pending_req_t *req, unsigned flags)
+    {
+        const uct_ep_invalidate_params_t params = {};
+
+        if ((ep != s_lane.uct_ep) || !s_lane.no_resource ||
+            (s_lane.req != nullptr)) {
+            return s_lane.mock->orig_func(&ep->iface->ops.ep_pending_add, ep,
+                                          req, flags);
+        }
+
+        s_lane.req               = req;
+        s_lane.invalidate_status = uct_ep_invalidate(ep, &params);
+        return UCS_OK;
+    }
+
+    static void
+    pending_purge_held(uct_ep_h ep, uct_pending_purge_callback_t cb, void *arg)
+    {
+        ucp_ep_recovery_arg_t *recovery_arg;
+
+        if ((ep == s_lane.uct_ep) && (s_lane.req != nullptr)) {
+            recovery_arg      = ucp_ep_recovery_arg(s_lane.ucp_ep);
+            s_lane.held_by_tf = (recovery_arg != nullptr) &&
+                                (arg == &recovery_arg->tf_pending_q);
+            cb(s_lane.req, arg);
+            /* The lane does not use this transport endpoint anymore, and its
+             * address can be reused after it is destroyed */
+            s_lane.uct_ep = nullptr;
+        }
+
+        s_lane.pending_purge(ep, cb, arg);
+    }
+
+    static ucs_log_func_rc_t
+    hide_no_aux_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap)
+    {
+        if ((level == UCS_LOG_LEVEL_ERROR) &&
+            (format_message(message, ap).find("no auxiliary transport") !=
+             std::string::npos)) {
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static held_lane s_lane;
+};
+
+test_ucp_proto_mock_rcx_rkey_reconfig_tf::held_lane
+        test_ucp_proto_mock_rcx_rkey_reconfig_tf::s_lane;
+
+/* The recovery gives up on the failed lane after one keepalive round */
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig_tf, put_pending_restart,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0",
+           "RECOVERY_RETRIES=1", "KEEPALIVE_INTERVAL=0.1s")
+{
+    test_pending_restart(UCP_OP_ID_PUT);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_rkey_reconfig_tf, get_pending_restart,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0",
+           "RECOVERY_RETRIES=1", "KEEPALIVE_INTERVAL=0.1s")
+{
+    test_pending_restart(UCP_OP_ID_GET);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_rkey_reconfig_tf, rcx,
                               "rc_x")
