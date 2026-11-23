@@ -72,7 +72,8 @@
           properties-content: |
             jjb_proj={jjb_proj}
     description: "{jjb_description}"
-    concurrent: true
+    jjb_concurrent: true
+    concurrent: "{obj:jjb_concurrent}"
     sandbox: false
     parameters:
       - string:
@@ -174,5 +175,15 @@
     jjb_proj: "ucx-test-dl-gpu-oss"
     jjb_conf_file: ".ci/pipeline/test_dl_matrix.yaml"
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bf
+    jjb_proj: "ucx-test-bf-oss"
+    jjb_conf_file: ".ci/pipeline/test_bf_matrix.yaml"
+    jjb_description: "UCX GTest on BlueField (GitHub Blossom). Do NOT edit via Web GUI!"
+    # The pods share the host network and CPUs of the BF3 nodes.
+    jjb_concurrent: false
     jobs:
       - "{jjb_proj}"
