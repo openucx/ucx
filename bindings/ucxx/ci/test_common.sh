@@ -94,10 +94,10 @@ configure_crash_backtraces() {
   # - Otherwise use `UCX_HANDLE_ERRORS=bt`: UCX prints the stack of the crashing
   #   thread itself.
   #
-  # In CI the former applies: GDB ships with `rapidsai/citestwheel` images and is
-  # installed in conda test environments (`dependencies.yaml`), and test jobs run as
-  # root with `--cap-add CAP_SYS_PTRACE`. The latter covers other environments,
-  # e.g. local runs or devcontainers without GDB or ptrace permissions.
+  # In CI GDB is installed in the images and in the conda test environments
+  # (`dependencies.yaml`), and the containers run with `--cap-add=SYS_PTRACE`; the
+  # check below picks the mode at run time. The latter also covers environments
+  # without GDB or ptrace permissions, e.g. local runs.
   local ci_dir cap_eff ptrace_scope
 
   if [[ -n "${UCX_HANDLE_ERRORS:-}" ]]; then

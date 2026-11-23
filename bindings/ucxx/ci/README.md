@@ -164,8 +164,9 @@ Test scripts (`run_python.sh`, `run_cpp.sh`) help diagnose crashes and hangs:
   the host and can't be changed from the container.
 - **Stacks on timeout.** `timeout_with_stack.py` prints native and Python stacks of
   every process when a test times out.
-- GDB is available in all test jobs: `rapidsai/citestwheel` images ship it and conda
-  test environments install it (see `dependencies.yaml`). Test jobs run as root with
-  `--cap-add CAP_SYS_PTRACE` (`container-options` in `.github/workflows/`), which allows
-  GDB to attach to other processes of the container regardless of the host's Yama
-  `ptrace_scope` (unless it is `3`).
+- GDB is available in all test jobs: the CI images install it (see
+  `buildlib/dockers/rapidsai-ci-conda.Dockerfile` and
+  `buildlib/dockers/rapidsai-ci-wheel.Dockerfile`) and conda test environments install
+  it (see `dependencies.yaml`). The containers run with `--cap-add=SYS_PTRACE`
+  (`DOCKER_OPT_ARGS` in `buildlib/pr/main.yml`). `configure_crash_backtraces` checks at
+  run time whether GDB may attach, and uses `UCX_HANDLE_ERRORS=bt` when it may not.
