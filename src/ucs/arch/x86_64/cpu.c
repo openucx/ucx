@@ -32,6 +32,13 @@
 #define X86_CPUID_GET_CACHE_INFO  0x00000002u
 #define X86_CPUID_GET_LEAF4_INFO  0x00000004u
 
+/* CPUID leaf 7 sub-leaf 0, EBX */
+#define X86_CPUID_LEAF7_EBX_AVX512F  UCS_BIT(16)
+#define X86_CPUID_LEAF7_EBX_AVX512BW UCS_BIT(30)
+
+/* XCR0: XMM, YMM upper, opmask, ZMM0-15 upper and ZMM16-31 state */
+#define X86_XCR0_AVX512_STATE 0xe6
+
 #define X86_CPU_CACHE_RESERVED    0x80000000
 #define X86_CPU_CACHE_TAG_L1_ONLY 0x40
 #define X86_CPU_CACHE_TAG_LEAF4   0xff
@@ -530,6 +537,7 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 
     if (UCS_CPU_FLAG_UNKNOWN == cpu_flag) {
         uint32_t result = 0;
+        uint32_t xcr0   = 0;
         uint32_t base_value;
         uint32_t _eax, _ebx, _ecx, _edx;
 
@@ -567,7 +575,8 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag()
             }
             if ((_ecx & 0x18000000) == 0x18000000) {
                 ucs_x86_xgetbv(0, _eax, _edx);
-                if ((_eax & 0x6) == 0x6) {
+                xcr0 = _eax;
+                if ((xcr0 & 0x6) == 0x6) {
                     result |= UCS_CPU_FLAG_AVX;
                 }
             }
@@ -577,6 +586,12 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag()
                               &_ecx, &_edx);
             if ((result & UCS_CPU_FLAG_AVX) && (_ebx & (1 << 5))) {
                 result |= UCS_CPU_FLAG_AVX2;
+            }
+            if ((result & UCS_CPU_FLAG_AVX) &&
+                ucs_test_all_flags(_ebx, X86_CPUID_LEAF7_EBX_AVX512F |
+                                         X86_CPUID_LEAF7_EBX_AVX512BW) &&
+                ucs_test_all_flags(xcr0, X86_XCR0_AVX512_STATE)) {
+                result |= UCS_CPU_FLAG_AVX512BW;
             }
         }
         cpu_flag = result;
