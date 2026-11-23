@@ -5,6 +5,10 @@ metadata:
   resources:
     - REVIEW.md
     - AGENTS.md
+    - src/AGENTS.md
+    - test/AGENTS.md
+    - docs/CodeStyle.md
+    - docs/OptimizationStyle.md
 ---
 
 # UCX PR Review
