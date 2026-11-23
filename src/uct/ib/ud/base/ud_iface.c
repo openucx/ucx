@@ -677,8 +677,8 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {"IFACE_OVERHEAD", "0",
-     "Estimated software overhead per operation for the interface and receive\n"
-     "performance estimates.",
+     "Estimated software overhead per operation, reported as the interface\n"
+     "overhead and used for receive overhead estimates.",
      ucs_offsetof(uct_ud_iface_config_t, iface_overhead), UCS_CONFIG_TYPE_TIME},
 
     {"LINGER_TIMEOUT", "5.0m",
