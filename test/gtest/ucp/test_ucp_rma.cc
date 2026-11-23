@@ -2285,9 +2285,57 @@ UCS_TEST_P(test_ucp_rma_sgl_contig, with_callback) {
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
+class test_ucp_rma_sgl_get_sw : public test_ucp_rma_sgl_data {
+public:
+    static void get_get_variants(std::vector<ucp_test_variant>& variants) {
+        static const char *op_names[] = {"put", "get"};
+        add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_GET),
+                           op_names);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_get_variants, SGL_MEM_TYPES_MASK);
+    }
+
+    test_ucp_rma_sgl_get_sw() {
+        modify_config("PROTOS", "get/sgl/offload_sw,get/bcopy,get/zcopy,"
+                                "get/rndv,rndv/*");
+    }
+
+protected:
+    virtual void check_posted_request(ucs_status_ptr_t sptr) override {
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+            return;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        EXPECT_STREQ("get/sgl/offload_sw",
+                     req->send.proto_config->proto->name);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_get_sw, various_lengths) {
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_get_sw, short_elements) {
+    test_sgl({1, 2, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 3, 8 * UCS_KBYTE, 100, 7,
+              4 * UCS_KBYTE, 4 * UCS_KBYTE, 1});
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_get_sw, short_fragments,
+                     RUNNING_ON_VALGRIND) {
+    cleanup();
+    modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
+    test_ucp_rma::init();
+    test_sgl({1, 300, 4096, 64, 700, 2, 257, 66, 513, 4096});
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_contig, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_get_sw, ib, "ib")
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")
