@@ -138,6 +138,39 @@ static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
     return (nlh->nlmsg_type == NLMSG_DONE);
 }
 
+/* Check whether an error message replies to a route lookup, not a dump */
+static int ucs_netlink_is_route_lookup_error(const struct nlmsghdr *nlh)
+{
+    const struct nlmsgerr *nlerr = NLMSG_DATA(nlh);
+
+    return (nlh->nlmsg_type == NLMSG_ERROR) &&
+           (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(*nlerr))) &&
+           (nlerr->msg.nlmsg_type == RTM_GETROUTE) &&
+           !(nlerr->msg.nlmsg_flags & NLM_F_DUMP);
+}
+
+static ucs_status_t
+ucs_netlink_error_status(const struct nlmsghdr *nlh, int err)
+{
+    switch (err) {
+    case -ENETUNREACH:
+    case -EHOSTUNREACH:
+        /* Route lookups fail with these errors when the kernel has no route */
+        return UCS_ERR_UNREACHABLE;
+    case -EACCES:
+    case -EINVAL:
+        /* Route lookups fail with these errors on prohibit and blackhole
+         * routes */
+        return ucs_netlink_is_route_lookup_error(nlh) ? UCS_ERR_UNREACHABLE :
+                                                        UCS_ERR_REJECTED;
+    case -ENOBUFS:
+    case -ENOMEM:
+        return UCS_ERR_NO_MEMORY;
+    default:
+        return UCS_ERR_REJECTED;
+    }
+}
+
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
     struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
@@ -207,10 +240,7 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
 err:
     ucs_log(err_log_level, "received error response from netlink err %d: %s",
             err, strerror(-err));
-    /* Route lookups fail with these errors when the kernel has no route */
-    return ((err == -ENETUNREACH) || (err == -EHOSTUNREACH)) ?
-                   UCS_ERR_UNREACHABLE :
-                   UCS_ERR_IO_ERROR;
+    return ucs_netlink_error_status(nlh, err);
 }
 
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
@@ -729,7 +759,7 @@ static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
 
     if (route.type == RTN_UNSPEC) {
         ucs_debug("netlink reply to a route request has no route");
-        return UCS_ERR_IO_ERROR;
+        return UCS_ERR_REJECTED;
     }
 
     *route_p = route;
@@ -823,17 +853,27 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
         (ucs_time_to_sec(now - result->lookup_time) >=
          ucs_global_opts.netlink_route_cache_ttl)) {
-        result->status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
-                                                  &result->route);
-        result->lookup_time = now;
+        /* The route is written only when it is found */
+        status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
+                                          &result->route);
+        if ((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE)) {
+            result->status      = status;
+            result->lookup_time = now;
+        } else if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
+                   ((status != UCS_ERR_IO_ERROR) &&
+                    (status != UCS_ERR_NO_MEMORY))) {
+            kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
+            goto out_unlock;
+        }
+
+        /* A lookup which failed to get an answer from the kernel, e.g. for lack
+         * of file descriptors or memory, keeps the previous result, and is
+         * done again at the next call */
     }
 
     status = result->status;
     if (status == UCS_OK) {
         *route_p = result->route;
-    } else if (status != UCS_ERR_UNREACHABLE) {
-        /* Other errors can be transient */
-        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
     }
 
 out_unlock:

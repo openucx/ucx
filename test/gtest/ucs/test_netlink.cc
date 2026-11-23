@@ -20,6 +20,7 @@ extern "C" {
 #include <linux/rtnetlink.h>
 #include <sched.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -322,13 +323,55 @@ UCS_TEST_F(test_netlink, kernel_route_matches) {
 class test_netlink_route_cache : private ucs::clear_dontcopy_regions,
                                  public test_netlink {
 protected:
-    /* Exit code of the child process when it cannot change the routes */
+    /* Exit code of the child process when the test cannot run */
     static const int CHILD_SKIP = 77;
 
     static int child_error(const std::string &msg)
     {
         UCS_TEST_MESSAGE << msg;
         return 1;
+    }
+
+    static std::string status_str(ucs_status_t status)
+    {
+        return ucs_status_string(status);
+    }
+
+    void run_in_child(int (*check)(), const std::string &skip_reason)
+    {
+        int status;
+        pid_t pid;
+
+        pid = fork();
+        ASSERT_NE(-1, pid) << strerror(errno);
+        if (pid == 0) {
+            _exit(check());
+        }
+
+        ASSERT_EQ(pid, waitpid(pid, &status, 0));
+        ASSERT_TRUE(WIFEXITED(status)) << ucs::exit_status_info(status);
+        if (WEXITSTATUS(status) == CHILD_SKIP) {
+            UCS_TEST_SKIP_R(skip_reason);
+        }
+
+        EXPECT_EQ(0, WEXITSTATUS(status));
+    }
+
+    static ucs_status_t route_get(const char *ttl, const char *addr,
+                                  unsigned if_index, ucs_netlink_route_t *route)
+    {
+        struct sockaddr_in sin = {};
+        ucs_status_t status;
+
+        status = ucs_global_opts_set_value("NETLINK_ROUTE_CACHE_TTL", ttl);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        sin.sin_family = AF_INET;
+        inet_pton(AF_INET, addr, &sin.sin_addr);
+        return ucs_netlink_route_get((struct sockaddr*)&sin, NULL, if_index,
+                                     route);
     }
 
     static bool set_lo_up(int fd)
@@ -361,36 +404,20 @@ protected:
         return ioctl(fd, request, &rt) == 0;
     }
 
-    static ucs_status_t
-    route_get(const char *ttl, ucs_netlink_route_t *route)
+    static int check_route_change(int fd)
     {
-        struct sockaddr_in sin = {};
-        ucs_status_t status;
-
-        status = ucs_global_opts_set_value("NETLINK_ROUTE_CACHE_TTL", ttl);
-        if (status != UCS_OK) {
-            return status;
-        }
-
         /* Lookups of 198.51.100.1 by other tests can be in the cache copied
          * from the parent process */
-        sin.sin_family = AF_INET;
-        inet_pton(AF_INET, "198.51.100.2", &sin.sin_addr);
-        return ucs_netlink_route_get((struct sockaddr*)&sin, NULL,
-                                     if_nametoindex("lo"), route);
-    }
-
-    static int check_route_cache(int fd)
-    {
+        const char *addr  = "198.51.100.2";
+        unsigned lo_index = if_nametoindex("lo");
         ucs_netlink_route_t route;
         ucs_status_t status;
 
-        status = route_get("inf", &route);
+        status = route_get("inf", addr, lo_index, &route);
         if (status == UCS_ERR_UNSUPPORTED) {
             return CHILD_SKIP;
         } else if (status != UCS_ERR_UNREACHABLE) {
-            return child_error(std::string("lookup without a route: ") +
-                               ucs_status_string(status));
+            return child_error("lookup without a route: " + status_str(status));
         }
 
         if (!change_test_net_2_route(fd, SIOCADDRT)) {
@@ -398,17 +425,16 @@ protected:
                                strerror(errno));
         }
 
-        status = route_get("inf", &route);
+        status = route_get("inf", addr, lo_index, &route);
         if (status != UCS_ERR_UNREACHABLE) {
-            return child_error(std::string("cached lookup: ") +
-                               ucs_status_string(status));
+            return child_error("cached lookup: " + status_str(status));
         }
 
         usleep(20000);
-        status = route_get("10ms", &route);
+        status = route_get("10ms", addr, lo_index, &route);
         if ((status != UCS_OK) || (route.prefix_len != 24)) {
-            return child_error(std::string("lookup after adding a route: ") +
-                               ucs_status_string(status));
+            return child_error("lookup after adding a route: " +
+                               status_str(status));
         }
 
         if (!change_test_net_2_route(fd, SIOCDELRT)) {
@@ -416,29 +442,29 @@ protected:
                                strerror(errno));
         }
 
-        status = route_get("inf", &route);
+        status = route_get("inf", addr, lo_index, &route);
         if (status != UCS_OK) {
-            return child_error(std::string("cached lookup of a route: ") +
-                               ucs_status_string(status));
+            return child_error("cached lookup of a route: " +
+                               status_str(status));
         }
 
-        status = route_get("0", &route);
+        status = route_get("0", addr, lo_index, &route);
         if (status != UCS_ERR_UNREACHABLE) {
-            return child_error(std::string("lookup without the cache: ") +
-                               ucs_status_string(status));
+            return child_error("lookup without the cache: " +
+                               status_str(status));
         }
 
         usleep(20000);
-        status = route_get("10ms", &route);
+        status = route_get("10ms", addr, lo_index, &route);
         if (status != UCS_ERR_UNREACHABLE) {
-            return child_error(std::string("lookup after deleting a route: ") +
-                               ucs_status_string(status));
+            return child_error("lookup after deleting a route: " +
+                               status_str(status));
         }
 
         return 0;
     }
 
-    static int route_cache_child()
+    static int route_change_child()
     {
         int fd, ret;
 
@@ -455,29 +481,92 @@ protected:
         }
 
         /* The loopback device of a new network namespace is down */
-        ret = set_lo_up(fd) ? check_route_cache(fd) : CHILD_SKIP;
+        ret = set_lo_up(fd) ? check_route_change(fd) : CHILD_SKIP;
         close(fd);
         return ret;
     }
+
+    static int failed_lookup_child()
+    {
+        /* Getting the interface index requires a socket */
+        unsigned lo_index = if_nametoindex("lo");
+        scoped_log_handler slh(hide_errors_logger);
+        struct rlimit rlim, no_files;
+        ucs_netlink_route_t route;
+        ucs_status_t status;
+        size_t num_errors;
+
+        status = route_get("inf", "127.0.0.1", lo_index, &route);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            return CHILD_SKIP;
+        } else if (status != UCS_OK) {
+            return child_error("lookup of a local address: " +
+                               status_str(status));
+        }
+
+        if (getrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+            return child_error(std::string("failed to get open files limit: ") +
+                               strerror(errno));
+        }
+
+        /* A lookup which reaches the kernel fails to create a netlink socket,
+         * and logs an error */
+        no_files          = rlim;
+        no_files.rlim_cur = 0;
+        if (setrlimit(RLIMIT_NOFILE, &no_files) != 0) {
+            return child_error(std::string("failed to limit open files: ") +
+                               strerror(errno));
+        }
+
+        num_errors = m_errors.size();
+        status     = route_get("inf", "127.0.0.1", lo_index, &route);
+        if ((status != UCS_OK) || (m_errors.size() != num_errors)) {
+            return child_error("cached lookup: " + status_str(status));
+        }
+
+        status = route_get("0", "127.0.0.1", lo_index, &route);
+        if ((status != UCS_ERR_IO_ERROR) || (m_errors.size() == num_errors)) {
+            return child_error("lookup without the cache: " +
+                               status_str(status));
+        }
+
+        num_errors = m_errors.size();
+        usleep(20000);
+        status = route_get("10ms", "127.0.0.1", lo_index, &route);
+        if ((status != UCS_OK) || (m_errors.size() == num_errors)) {
+            return child_error("failed lookup of an expired route: " +
+                               status_str(status));
+        }
+
+        status = route_get("inf", "127.0.0.2", lo_index, &route);
+        if (status != UCS_ERR_IO_ERROR) {
+            return child_error("failed lookup of a new destination: " +
+                               status_str(status));
+        }
+
+        if (setrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+            return child_error(std::string("failed to restore open files: ") +
+                               strerror(errno));
+        }
+
+        status = route_get("inf", "127.0.0.2", lo_index, &route);
+        if (status != UCS_OK) {
+            return child_error("lookup after a failed lookup: " +
+                               status_str(status));
+        }
+
+        return 0;
+    }
 };
 
-UCS_TEST_F(test_netlink_route_cache, ttl) {
-    int status;
-    pid_t pid;
+UCS_TEST_F(test_netlink_route_cache, route_change) {
+    run_in_child(route_change_child,
+                 "cannot change routes in a new network namespace");
+}
 
-    pid = fork();
-    ASSERT_NE(-1, pid) << strerror(errno);
-    if (pid == 0) {
-        _exit(route_cache_child());
-    }
-
-    ASSERT_EQ(pid, waitpid(pid, &status, 0));
-    ASSERT_TRUE(WIFEXITED(status)) << ucs::exit_status_info(status);
-    if (WEXITSTATUS(status) == CHILD_SKIP) {
-        UCS_TEST_SKIP_R("cannot change routes in a new network namespace");
-    }
-
-    EXPECT_EQ(0, WEXITSTATUS(status));
+UCS_TEST_F(test_netlink_route_cache, failed_lookup) {
+    run_in_child(failed_lookup_child,
+                 "kernel does not support route lookup by fib match");
 }
 
 UCS_TEST_F(test_netlink, is_host_addr) {
@@ -564,26 +653,48 @@ UCS_TEST_F(test_netlink, parse_msg) {
     /* An error reply to a request is logged with the requested log level */
     append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
     count = 0;
-    EXPECT_EQ(UCS_ERR_IO_ERROR,
+    EXPECT_EQ(UCS_ERR_REJECTED,
               ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
                                     &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
     EXPECT_EQ(0, count);
     EXPECT_EQ(0, msg_done);
     EXPECT_TRUE(m_errors.empty());
 
+    auto parse_error = [&](int error, unsigned short type,
+                           unsigned short flags) {
+        nlerr.error           = error;
+        nlerr.msg.nlmsg_type  = type;
+        nlerr.msg.nlmsg_flags = flags;
+        reply.clear();
+        append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
+        return ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
+                                     &count, UCS_LOG_LEVEL_DEBUG, &msg_done);
+    };
+
     /* A route lookup fails when the kernel has no route */
-    reply.clear();
-    nlerr.error = -EHOSTUNREACH;
-    append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
-    EXPECT_EQ(UCS_ERR_UNREACHABLE,
-              ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
-                                    &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(-EHOSTUNREACH, RTM_GETROUTE, 0));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(-ENETUNREACH, RTM_GETROUTE, 0));
+
+    /* A route lookup which selects a prohibit or blackhole route fails with
+     * errors which other requests return for other failures */
+    for (int error : {-EACCES, -EINVAL}) {
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(error, RTM_GETROUTE, 0))
+                << strerror(-error);
+        EXPECT_EQ(UCS_ERR_REJECTED,
+                  parse_error(error, RTM_GETROUTE, NLM_F_DUMP))
+                << strerror(-error);
+        EXPECT_EQ(UCS_ERR_REJECTED, parse_error(error, RTM_GETLINK, 0))
+                << strerror(-error);
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_MEMORY, parse_error(-ENOBUFS, RTM_GETROUTE, 0));
+    EXPECT_TRUE(m_errors.empty());
 
     /* A dump which failed in the kernel ends with an error in NLMSG_DONE */
     dump.resize(done_offset);
     append_nlmsg(dump, NLMSG_DONE, &done_error, sizeof(done_error));
     count = 0;
-    EXPECT_EQ(UCS_ERR_IO_ERROR,
+    EXPECT_EQ(UCS_ERR_REJECTED,
               ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
                                     &count, UCS_LOG_LEVEL_ERROR, &msg_done));
     EXPECT_EQ(2, count);
@@ -605,7 +716,7 @@ UCS_TEST_F(test_netlink, send_request) {
     /* The kernel replies with ENODEV to a query of a missing device */
     ifi.ifi_index = INT_MAX;
     count         = 0;
-    EXPECT_EQ(UCS_ERR_IO_ERROR,
+    EXPECT_EQ(UCS_ERR_REJECTED,
               ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, 0, &ifi,
                                        sizeof(ifi), count_msg_cb, &count,
                                        UCS_LOG_LEVEL_DEBUG));

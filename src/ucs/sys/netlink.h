@@ -61,7 +61,9 @@ typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
  *
  * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
  *         interrupted (NLM_F_DUMP_INTR), UCS_ERR_UNREACHABLE if the kernel
- *         replied that it has no route, or error code otherwise.
+ *         replied that it has no usable route, UCS_ERR_NO_MEMORY if the kernel
+ *         ran out of memory, UCS_ERR_REJECTED if the kernel replied with
+ *         another error, or the error returned by the parse callback.
  */
 ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                                    ucs_netlink_parse_cb_t parse_cb, void *arg,
@@ -82,8 +84,9 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
  *
  * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
  *         interrupted (NLM_F_DUMP_INTR) and should be retried,
- *         UCS_ERR_UNREACHABLE if the kernel replied that it has no route, or
- *         error code otherwise.
+ *         UCS_ERR_UNREACHABLE if the kernel replied that it has no usable
+ *         route, UCS_ERR_REJECTED if the kernel replied with another error, or
+ *         error code otherwise, e.g. if the request could not be sent.
  */
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                                       unsigned short nlmsg_flags,
@@ -177,7 +180,9 @@ void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
  * destination address, as "ip route get fibmatch" does. Unlike the cached
  * routing table, the kernel applies policy routing rules and VRF. The result
  * is cached for UCX_NETLINK_ROUTE_CACHE_TTL, unless it is an error other than
- * UCS_ERR_UNREACHABLE.
+ * UCS_ERR_UNREACHABLE. When looking it up again fails to get an answer from the
+ * kernel, e.g. for lack of file descriptors or memory, the previous result is
+ * returned.
  *
  * @param [in]  sa_remote        Pointer to the destination address.
  * @param [in]  sa_local         Optional pointer to the source address, of the
