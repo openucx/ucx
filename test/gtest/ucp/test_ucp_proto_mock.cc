@@ -5102,9 +5102,22 @@ public:
     {
         add_mock_iface("mock_0:1");
         add_mock_iface("mock_1:1");
+        /* The proto-mock init connects, but this setup must fail to connect. */
         ucp_test::init();
     }
 };
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_create_failure, cleanup_without_config)
+{
+    ucp_ep_h ep;
+    ucs::scoped_async_lock lock(sender().worker()->async);
+
+    ASSERT_UCS_OK(ucp_ep_create_base(sender().worker(), UCP_EP_INIT_FLAG_INTERNAL,
+                                     "cleanup", "unconfigured endpoint", &ep));
+    EXPECT_EQ(UCP_WORKER_CFG_INDEX_NULL, ep->cfg_index);
+    ucp_ep_cleanup_lanes(ep);
+    ucp_ep_delete(ep);
+}
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_create_failure, no_aux_transport)
 {
@@ -5126,7 +5139,13 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_create_failure, no_aux_transport)
     ucp_worker_release_address(receiver().worker(), address);
     ASSERT_EQ(UCS_ERR_UNREACHABLE, status);
 
-    wait_for_value(&worker->flush_ops_count, 0u);
+    /* Auxiliary selection is reached after allocating a wireup endpoint. */
+    ASSERT_FALSE(m_errors.empty());
+    EXPECT_NE(std::string::npos,
+              m_errors.back().find("no auxiliary transport"));
+
+    wait_for_cond([worker]() { return worker->flush_ops_count == 0; },
+                  [this]() { progress(); });
     EXPECT_EQ(0u, worker->flush_ops_count);
     EXPECT_EQ(0u, worker->num_all_eps);
 }

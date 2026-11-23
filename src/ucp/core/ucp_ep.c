@@ -930,9 +930,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     return UCS_OK;
 
 err_delete:
-    if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
-        ucp_ep_cleanup_lanes(ep);
-    }
+    ucp_ep_cleanup_lanes(ep);
     ucp_ep_delete(ep);
 err:
     return status;
@@ -3603,6 +3601,10 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
+    }
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
