@@ -747,8 +747,7 @@ protected:
 
         ASSERT_EQ(EPERM, ret) << strerror(ret);
 
-        entity *e = uct_test::create_entity(0);
-        m_entities.push_back(e);
+        ucs::handle<uct_md_h> md = open_md();
 
         ret = peer_take_fd(fd);
         if (ret == EPERM) {
