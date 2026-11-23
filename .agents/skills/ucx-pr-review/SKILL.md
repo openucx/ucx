@@ -8,6 +8,7 @@ metadata:
     - src/AGENTS.md
     - test/AGENTS.md
     - docs/CodeStyle.md
+    - docs/LoggingStyle.md
     - docs/OptimizationStyle.md
 ---
 
