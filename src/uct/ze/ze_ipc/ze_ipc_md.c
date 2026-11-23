@@ -283,7 +283,7 @@ uct_ze_ipc_md_open(uct_component_h component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_ze_ipc_component;
-#ifdef SYS_pidfd_getfd
+#if defined(SYS_pidfd_open) && defined(SYS_pidfd_getfd)
     /* Peers import the exported dma-buf file descriptors with pidfd_getfd(),
      * which requires them to pass the ptrace access check against this
      * process */
