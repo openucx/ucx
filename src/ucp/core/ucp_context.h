@@ -104,8 +104,7 @@ typedef struct ucp_context_config {
     double                                 multi_lane_max_ratio;
     /* Bandwidth efficiency ratio */
     double                                 multi_path_ratio;
-    /** Whether to also select device lanes from the transports which can
-     *  access both device and host memory */
+    /** Whether to select device lanes which can access host memory */
     int                                    host_mem_device_lanes;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;

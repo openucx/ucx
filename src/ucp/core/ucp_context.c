@@ -239,13 +239,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_POS_DOUBLE},
 
   {"HOST_MEM_DEVICE_LANES", "n",
-   "Also select device API lanes from the transports which can access both\n"
-   "device and host memory (e.g. network transports). Such lanes allow device\n"
-   "API access to remote memory which is not reachable by the lanes selected\n"
-   "for device memory only, such as remote host memory, or device memory which\n"
-   "cannot be accessed through CUDA IPC. When disabled, such lanes may still be\n"
-   "selected, but it is not guaranteed, and fewer resources are allocated\n"
-   "during connection establishment.",
+   "Also create device API lanes over transports that can access host memory\n"
+   "(e.g. network transports). When disabled, lanes are created only for\n"
+   "device memory (CUDA IPC, ROCm), reducing resource consumption.",
    ucs_offsetof(ucp_context_config_t, host_mem_device_lanes),
    UCS_CONFIG_TYPE_BOOL},
 
