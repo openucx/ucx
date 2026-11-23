@@ -10,6 +10,10 @@ failFast: false
 # Covers the step timeouts of the longest row.
 timeout_minutes: 360
 
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
@@ -19,21 +23,47 @@ kubernetes:
 
 env:
   UCXX_PY_VERSION: "3.12"
+  UCXX_IMAGE_TAG: "26.12-1"
 
 # RAM-backed /dev/shm for shm transports; counts toward pod memory.
 empty_volumes:
   - {mountPath: /dev/shm, memory: true}
+  # Podman storage for the wheel image builds.
+  - {mountPath: /var/lib/containers/storage, memory: false}
 
 # Same image as the Azure ucxx_rapidsai_ci_conda container.
 runs_on_dockers:
   - { name: "rapidsai-ci-conda", url: "harbor.mellanox.com/ucx/rapidsai-ci-conda:26.12-azp-2", arch: x86_64 }
   - { name: "rapidsai-ci-conda", url: "harbor.mellanox.com/ucx/rapidsai-ci-conda:26.12-azp-2", arch: aarch64 }
+  # Wheel images are CUDA-pinned and run only the steps that select them.
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ucxx-wheel',
+     name: 'rapidsai-ci-wheel-cuda12',
+     uri: 'aarch64/rapidsai-ci-wheel-conda',
+     tag: "${UCXX_IMAGE_TAG}-cuda12.9.2",
+     arch: aarch64,
+     category: 'tool',
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/rapidsai/ci-wheel:26.12-cuda12.9.2-rockylinux8-py3.12'
+    }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.ucxx-wheel',
+     name: 'rapidsai-ci-wheel-cuda13',
+     uri: 'aarch64/rapidsai-ci-wheel-conda',
+     tag: "${UCXX_IMAGE_TAG}-cuda13.4.3",
+     arch: aarch64,
+     category: 'tool',
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/rapidsai/ci-wheel:26.12-cuda13.4.3-rockylinux8-py3.12'
+    }
 
 # Same CUDA versions as the Azure UCXX slices.
 matrix:
   axes:
     arch: [x86_64, aarch64]
     cuda: ['12.9.2', '13.4.3']
+  # Each wheel image builds its own CUDA version only.
+  exclude:
+    - {name: 'rapidsai-ci-wheel-cuda12', cuda: '13.4.3'}
+    - {name: 'rapidsai-ci-wheel-cuda13', cuda: '12.9.2'}
 
 taskName: '${arch}/${name}/cuda${cuda}'
 
@@ -95,3 +125,35 @@ steps:
       export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
       export IS_GPU=false CONDA_CHANNEL_DIR=/tmp/ucxx-conda-bld
       bash .ci/scripts/cap_output.sh ./buildlib/tools/test_ucxx.sh test_cpp
+
+  # aarch64 wheels, as on Azure. The wheel image keeps conda off PATH.
+  - name: Wheel UCX build
+    containerSelector: "{name: 'rapidsai-ci-wheel-.*'}"
+    parallel: false
+    timeout: 40
+    run: |
+      unset CI
+      export RAPIDS_CUDA_VERSION=${cuda} UCX_PR_TARBALL=/tmp/ucx-pr.tar.gz
+      PATH=$PATH:/opt/conda/bin ./buildlib/tools/build_ucxx.sh ucx_pr
+
+  - name: Wheel libucxx build
+    containerSelector: "{name: 'rapidsai-ci-wheel-.*'}"
+    parallel: false
+    timeout: 60
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export RAPIDS_BLD_OUTPUT_DIR=/tmp/ucxx-wheel-libucxx
+      ./buildlib/tools/build_ucxx.sh wheel_libucxx
+
+  # The libucxx wheel build rewrites VERSION; restore it before the second build.
+  - name: Wheel ucxx build
+    containerSelector: "{name: 'rapidsai-ci-wheel-.*'}"
+    parallel: false
+    timeout: 60
+    run: |
+      unset CI
+      export UCXX_DIR=$(pwd)/bindings/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+      export RAPIDS_BLD_OUTPUT_DIR=/tmp/ucxx-wheel-ucxx WHEEL_INPUT_DIR=/tmp/ucxx-wheel-libucxx
+      git checkout -- bindings/ucxx/VERSION
+      ./buildlib/tools/build_ucxx.sh wheel_ucxx

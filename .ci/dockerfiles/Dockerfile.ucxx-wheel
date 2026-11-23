@@ -1,0 +1,13 @@
+# RAPIDS wheel image plus conda, so one pod builds UCX and the UCXX wheels.
+
+ARG BASE_IMAGE
+ARG CONDA_IMAGE=dockerhub.nvidia.com/rapidsai/ci-conda:26.12-latest
+
+FROM ${CONDA_IMAGE} AS conda
+
+FROM ${BASE_IMAGE}
+
+# Kept off PATH, so the wheel builds use the image's own Python.
+COPY --from=conda /opt/conda /opt/conda
+
+RUN /opt/conda/bin/conda --version && /opt/conda/bin/mamba --version
