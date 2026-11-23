@@ -3,6 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -146,14 +147,18 @@ AC_ARG_ENABLE(optimizations,
 # Check if compiler supports a given CPU optimization flag, and if yes - add it
 # to BASE_CFLAGS substitution, and OPT_CFLAGS C define.
 #
-# Usage: COMPILER_CPU_OPTIMIZATION([name], [doc], [flag], [program])
+# Usage: COMPILER_CPU_OPTIMIZATION([name], [doc], [flag], [program],
+#                                  [default], [action-if-found],
+#                                  [action-if-not-found])
+#
+# The default is $enable_optimizations unless [default] is given.
 #
 AC_DEFUN([COMPILER_CPU_OPTIMIZATION],
 [
     AC_ARG_WITH([$1],
                 [AS_HELP_STRING([--with-$1], [Use $2 compiler option.])],
                 [],
-                [with_$1=$enable_optimizations])
+                [with_$1=m4_default([$5], [$enable_optimizations])])
 
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
@@ -166,8 +171,10 @@ AC_DEFUN([COMPILER_CPU_OPTIMIZATION],
                              # library.
                              BASE_CFLAGS="$BASE_CFLAGS $3"
                              AS_IF([test "x$1" != "xmcpu" -a "x$1" != "xmarch"],
-                                   [OPT_CFLAGS="$OPT_CFLAGS|$1"])],
-                            [AC_MSG_RESULT([no])])
+                                   [OPT_CFLAGS="$OPT_CFLAGS|$1"])
+                             $6],
+                            [AC_MSG_RESULT([no])
+                             $7])
            CFLAGS="$SAVE_CFLAGS"])
 ])
 
@@ -380,6 +387,34 @@ AS_IF([test "x$with_avx" != xyes],
                                   int main(int argc, char** argv) { return _mm_popcnt_u32(0x101) - 2;
                                   }])
       ])
+
+
+#
+# AVX512BW non-temporal buffer-transfer kernels. Opt-in only: -march in CFLAGS
+# alone keeps the AVX2 kernels. The probe runs a masked AVX512BW load and store,
+# so the build machine must support AVX512BW unless cross-compiling.
+#
+AS_CASE(["x$with_avx512bw"],
+        [x|xyes|xno], [],
+        [AC_MSG_ERROR([--with-avx512bw accepts only yes or no, got '$with_avx512bw'])])
+COMPILER_CPU_OPTIMIZATION([avx512bw],
+                          [AVX512BW (selects the AVX-512 NT buffer-transfer kernels; -march alone does not)],
+                          [-mavx512bw],
+                          [#include <immintrin.h>
+                           int main(int argc, char **argv)
+                           {
+                               char out = 0;
+                               __mmask64 mask = (__mmask64)(argc > 0);
+                               __m512i v = _mm512_maskz_loadu_epi8(mask, *argv);
+
+                               _mm512_mask_storeu_epi8(&out, mask, v);
+                               return out != **argv;
+                           }
+                          ],
+                          [no],
+                          [AC_DEFINE([HAVE_NT_AVX512BW], [1],
+                                     [Use the AVX512BW NT buffer-transfer kernels])],
+                          [AC_MSG_ERROR([--with-avx512bw was requested, but the compiler or this build machine does not support -mavx512bw])])
 
 
 DETECT_UARCH()

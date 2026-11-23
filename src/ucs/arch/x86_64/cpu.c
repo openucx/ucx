@@ -798,7 +798,10 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 }
 
 #ifdef __AVX__
-#if defined(__AVX512BW__)
+#if defined(HAVE_NT_AVX512BW)
+#ifndef __AVX512BW__
+#error "HAVE_NT_AVX512BW is set but -mavx512bw is not in effect"
+#endif
 #include "cpu_nt_avx512.inl"
 #else
 #include "cpu_nt_avx2.inl"
