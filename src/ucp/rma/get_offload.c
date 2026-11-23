@@ -327,6 +327,13 @@ ucp_proto_get_sgl_offload_send_func(ucp_request_t *req,
                                     ucp_lane_index_t *lane_shift)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, mpriv, lpriv, UCP_EP_PATH_BW_OP_GET,
+                                    &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     return ucp_proto_rma_sgl_offload_send_func(req, lpriv, mpriv->sgl_min_frag,
                                                next_iter,
@@ -402,6 +409,13 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_lane_index_t *lane_shift)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, mpriv, lpriv, UCP_EP_PATH_BW_OP_GET,
+                                    &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     return ucp_proto_rma_sgl_offload_send_frags(
             req, lpriv, 1, mpriv->sgl_min_frag, next_iter,
