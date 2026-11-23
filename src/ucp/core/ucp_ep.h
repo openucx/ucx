@@ -937,7 +937,12 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker);
 
-/** Select a qualified async short-copy candidate, or NULL if unavailable. */
+/**
+ * Select an async short-copy lane, or return NULL if unavailable. If @a mem_info
+ * is NULL, return the first capability-qualified candidate without checking
+ * allocation type or flags. The caller must establish CUDA/CUDA_MANAGED scope
+ * before using this capability-only probe.
+ */
 ucp_ep_h ucp_worker_cuda_async_ep_for_short(ucp_worker_h worker,
                                             const ucp_memory_info_t *mem_info,
                                             uct_ep_operation_t operation,

@@ -1238,7 +1238,16 @@ typedef enum {
      */
     UCT_MD_FLAG_IPC_MEMTYPE_COPY        = UCS_BIT(13),
 
-    /** MD supports short copies for CUDA stream-ordered allocations. */
+    /**
+     * Memory domain supports registration of CUDA stream-ordered allocations
+     * for memory type short copy operations even if the allocation lacks
+     * UCS_MEM_FLAG_GDR_CAPABLE. For these copies, callers may ignore
+     * UCS_MEM_FLAG_GDR_CAPABLE in @ref uct_md_attr_v2_t::required_mem_flags;
+     * all other required memory flags still apply.
+     *
+     * Supported GET/PUT short operations are advertised by the corresponding
+     * interface capability flags.
+     */
     UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY = UCS_BIT(14)
 } uct_md_flags_v2_t;
 

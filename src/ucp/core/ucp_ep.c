@@ -833,11 +833,15 @@ ucp_ep_h ucp_worker_cuda_async_ep_for_short(ucp_worker_h worker,
     unsigned i;
 
     *lane_p = UCP_NULL_LANE;
-    if ((ep == NULL) || !(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ||
-        ((mem_info->type != UCS_MEMORY_TYPE_CUDA) &&
-         (mem_info->type != UCS_MEMORY_TYPE_CUDA_MANAGED)) ||
-        ((operation != UCT_EP_OP_GET_SHORT) &&
-         (operation != UCT_EP_OP_PUT_SHORT))) {
+    if ((ep == NULL) || ((operation != UCT_EP_OP_GET_SHORT) &&
+                         (operation != UCT_EP_OP_PUT_SHORT))) {
+        return NULL;
+    }
+
+    if ((mem_info != NULL) &&
+        (!(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ||
+         ((mem_info->type != UCS_MEMORY_TYPE_CUDA) &&
+          (mem_info->type != UCS_MEMORY_TYPE_CUDA_MANAGED)))) {
         return NULL;
     }
 
@@ -852,13 +856,8 @@ ucp_ep_h ucp_worker_cuda_async_ep_for_short(ucp_worker_h worker,
             continue;
         }
 
-        /*
-         * required_mem_flags also applies to ordinary buffers. Waive legacy
-         * peer-pinning only on this qualified async short-copy route.
-         */
-        if (ucs_test_all_flags(mem_info->flags,
-                               md_attr->required_mem_flags &
-                                       ~UCS_MEM_FLAG_GDR_CAPABLE)) {
+        if ((mem_info == NULL) ||
+            ucp_cuda_async_mem_flags_match(md_attr, mem_info->flags)) {
             *lane_p = lane;
             return ep;
         }

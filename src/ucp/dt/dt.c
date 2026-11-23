@@ -160,16 +160,15 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
     ucp_ep_h ep                       = NULL;
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
-    unsigned additional_selection_flags;
     ucs_status_t status;
 
     if (mem_info == NULL) {
-        detected->type    = mem_type;
-        detected->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        detected->flags   = UCS_MEM_FLAG_CUDA_ASYNC;
+        if ((mem_type != UCS_MEMORY_TYPE_CUDA) &&
+            (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
 
-        ep = ucp_worker_cuda_async_ep_for_short(worker, detected, operation,
-                                                &lane);
+        ep = ucp_worker_cuda_async_ep_for_short(worker, NULL, operation, &lane);
         if (ep == NULL) {
             return UCS_ERR_UNSUPPORTED;
         }
@@ -186,13 +185,10 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /*
-     * The probe assumes ASYNC and the selector ignores GDR_CAPABLE.
-     * Other flags can make an earlier lane eligible.
-     */
-    additional_selection_flags = mem_info->flags & ~(UCS_MEM_FLAG_CUDA_ASYNC |
-                                                     UCS_MEM_FLAG_GDR_CAPABLE);
-    if ((ep == NULL) || (additional_selection_flags != 0)) {
+    /* Reuse the first capability-qualified lane only if it accepts the buffer. */
+    if ((ep == NULL) ||
+        !ucp_cuda_async_mem_flags_match(ucp_ep_md_attr(ep, lane),
+                                        mem_info->flags)) {
         ep = ucp_worker_cuda_async_ep_for_short(worker, mem_info, operation,
                                                 &lane);
         if (ep == NULL) {

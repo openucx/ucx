@@ -893,6 +893,56 @@ protected:
         uint8_t m_orig_required_flags;
     };
 
+    class scoped_short_copy_counter {
+    public:
+        scoped_short_copy_counter(uct_iface_h iface) :
+            m_iface(iface), m_count(0)
+        {
+            if (m_active != nullptr) {
+                UCS_TEST_ABORT("A short-copy counter is already active");
+            }
+            m_mock.setup(&m_iface->ops.ep_get_short, get_short);
+            m_mock.setup(&m_iface->ops.ep_put_short, put_short);
+            m_active = this;
+        }
+
+        ~scoped_short_copy_counter()
+        {
+            m_active = nullptr;
+        }
+
+        unsigned count() const
+        {
+            return m_count;
+        }
+
+    private:
+        static ucs_status_t get_short(uct_ep_h ep, void *buffer,
+                                      unsigned length, uint64_t remote_addr,
+                                      uct_rkey_t rkey)
+        {
+            ++m_active->m_count;
+            return m_active->m_mock.orig_func(
+                    &m_active->m_iface->ops.ep_get_short, ep, buffer, length,
+                    remote_addr, rkey);
+        }
+
+        static ucs_status_t put_short(uct_ep_h ep, const void *buffer,
+                                      unsigned length, uint64_t remote_addr,
+                                      uct_rkey_t rkey)
+        {
+            ++m_active->m_count;
+            return m_active->m_mock.orig_func(
+                    &m_active->m_iface->ops.ep_put_short, ep, buffer, length,
+                    remote_addr, rkey);
+        }
+
+        uct_iface_h m_iface;
+        unsigned m_count;
+        ucs::mock m_mock;
+        static scoped_short_copy_counter *m_active;
+    };
+
     class scoped_copy_perf_counter {
     public:
         scoped_copy_perf_counter(uct_iface_h cuda_iface,
@@ -981,6 +1031,55 @@ protected:
         }
     }
 
+    void test_unknown_short_copy(ucp_ep_h ep, ucp_lane_index_t gdr_lane,
+                                 uint8_t mem_flags)
+    {
+        if (!mem_buffer::cuda_mem_is_gdr_capable()) {
+            UCS_TEST_SKIP_R("CUDA allocation does not support GDR pinning");
+        }
+
+        ucs_memtype_cache_global_create();
+        if (ucs_memtype_cache_global_instance == nullptr) {
+            UCS_TEST_SKIP_R("Event-driven memory type cache is unavailable");
+        }
+
+        size_t length    = 1024;
+        size_t alignment = ucs_max(length,
+                                   ucp_ep_md_attr(ep, gdr_lane)->reg_alignment);
+        mem_buffer allocation(2 * alignment, UCS_MEMORY_TYPE_CUDA);
+        void *address = ucs_align_up_pow2_ptr(allocation.ptr(), alignment);
+        std::vector<char> source(length), result(length);
+        mem_buffer::pattern_fill(source.data(), length, 0x12345);
+        mem_buffer::copy_to(address, source.data(), length,
+                            UCS_MEMORY_TYPE_CUDA);
+
+        /* Exercise routing with ordinary CUDA memory and injected metadata. */
+        ucs_memtype_cache_update(address, length, UCS_MEMORY_TYPE_CUDA_MANAGED,
+                                 UCS_SYS_DEVICE_ID_UNKNOWN, mem_flags);
+        ucs::handle<void*> remove_cache(
+                address,
+                [](void *p, void *size) {
+                    ucs_memtype_cache_remove(p, *static_cast<size_t*>(size));
+                },
+                &length);
+        ucp_memory_info_t detected;
+        ucp_memory_detect(context(), address, length, &detected);
+        ASSERT_EQ(mem_flags, detected.flags);
+
+        scoped_short_copy_counter counter(ucp_ep_get_lane(ep, gdr_lane)->iface);
+        ucp_mem_type_pack(worker(), result.data(), address, length,
+                          UCS_MEMORY_TYPE_CUDA_MANAGED, nullptr);
+        EXPECT_EQ(1u, counter.count());
+        EXPECT_EQ(0, std::memcmp(source.data(), result.data(), length));
+
+        mem_buffer::memset(address, length, 0, UCS_MEMORY_TYPE_CUDA);
+        ucp_mem_type_unpack(worker(), address, source.data(), length,
+                            UCS_MEMORY_TYPE_CUDA_MANAGED, nullptr);
+        EXPECT_EQ(2u, counter.count());
+        EXPECT_TRUE(mem_buffer::compare(source.data(), address, length,
+                                        UCS_MEMORY_TYPE_CUDA));
+    }
+
     void test_short_copy_perf(const ucp_memory_info_t &remote_mem_info,
                               unsigned expected_cuda_count,
                               unsigned expected_managed_count)
@@ -1007,6 +1106,10 @@ protected:
     }
 };
 
+test_ucp_proto_cuda_async_short::scoped_short_copy_counter
+        *test_ucp_proto_cuda_async_short::scoped_short_copy_counter::m_active =
+                nullptr;
+
 test_ucp_proto_cuda_async_short::scoped_copy_perf_counter
         *test_ucp_proto_cuda_async_short::scoped_copy_perf_counter::m_active =
                 nullptr;
@@ -1032,6 +1135,10 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route) {
     }
     flags.set_required_flags(UCS_MEM_FLAG_GDR_CAPABLE |
                              UCS_MEM_FLAG_REGISTRABLE);
+    for (auto op : {UCT_EP_OP_GET_SHORT, UCT_EP_OP_PUT_SHORT}) {
+        EXPECT_EQ(cuda_ep, select(worker(), nullptr, op, &lane));
+        EXPECT_EQ(cuda_lane, lane);
+    }
     EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
     info.flags |= UCS_MEM_FLAG_REGISTRABLE;
     EXPECT_EQ(cuda_ep, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
@@ -1054,6 +1161,62 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route) {
     iface_attr->cap.flags &= ~UCT_IFACE_FLAG_GET_SHORT;
     EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
     EXPECT_EQ(cuda_ep, select(worker(), &info, UCT_EP_OP_PUT_SHORT, &lane));
+    EXPECT_EQ(nullptr, select(worker(), nullptr, UCT_EP_OP_GET_SHORT, &lane));
+    EXPECT_EQ(cuda_ep, select(worker(), nullptr, UCT_EP_OP_PUT_SHORT, &lane));
+    EXPECT_EQ(nullptr, select(worker(), nullptr, UCT_EP_OP_GET_ZCOPY, &lane));
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_required_flags,
+           "MEMTYPE_CACHE=y") {
+    ucp_ep_h cuda_ep, managed_ep;
+    ucp_lane_index_t cuda_lane, managed_lane;
+    get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+    auto *attr = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
+    scoped_md_flags flags(attr,
+                          attr->flags | UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY);
+    flags.set_required_flags(UCS_MEM_FLAG_GDR_CAPABLE |
+                             UCS_MEM_FLAG_REGISTRABLE);
+    test_unknown_short_copy(cuda_ep, cuda_lane,
+                            UCS_MEM_FLAG_CUDA_ASYNC | UCS_MEM_FLAG_REGISTRABLE);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_reselect,
+           "MEMTYPE_CACHE=y") {
+    ucp_ep_h cuda_ep, managed_ep;
+    ucp_lane_index_t cuda_lane, managed_lane;
+    get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+    auto *key    = &ucp_ep_config(cuda_ep)->key;
+    auto copy_md = ucp_ep_md_index(managed_ep, managed_lane);
+    auto *gdr_md = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
+    auto *copy_md_attr = &context()->tl_mds[copy_md].attr;
+    scoped_md_flags gdr_flags(gdr_md,
+                              gdr_md->flags |
+                                      UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY);
+    scoped_md_flags copy_flags(copy_md_attr,
+                               copy_md_attr->flags |
+                                       UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY);
+    copy_flags.set_required_flags(UCS_MEM_FLAG_REGISTRABLE);
+    unsigned i;
+    for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
+        if (ucp_ep_md_index(cuda_ep, key->rma_lanes[i]) == copy_md) {
+            break;
+        }
+    }
+    ASSERT_NE(UCP_NULL_LANE, key->rma_lanes[i]);
+    std::vector<ucp_lane_index_t> orig_lanes(
+            key->rma_lanes,
+            key->rma_lanes + ucs_static_array_size(key->rma_lanes));
+    ucs::handle<ucp_ep_config_key_t*> restore_lanes(
+            key,
+            [](ucp_ep_config_key_t *p, void *saved) {
+                auto &lanes = *static_cast<std::vector<ucp_lane_index_t>*>(
+                        saved);
+                std::memcpy(p->rma_lanes, lanes.data(),
+                            lanes.size() * sizeof(lanes[0]));
+            },
+            &orig_lanes);
+    std::swap(key->rma_lanes[0], key->rma_lanes[i]);
+    test_unknown_short_copy(cuda_ep, cuda_lane, UCS_MEM_FLAG_CUDA_ASYNC);
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_perf) {
