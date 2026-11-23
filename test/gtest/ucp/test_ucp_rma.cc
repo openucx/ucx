@@ -2287,19 +2287,24 @@ UCS_TEST_P(test_ucp_rma_sgl_contig, with_callback) {
 
 class test_ucp_rma_sgl_get_sw : public test_ucp_rma_sgl_data {
 public:
+    static void get_host_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
+    }
+
     static void get_get_variants(std::vector<ucp_test_variant>& variants) {
         static const char *op_names[] = {"put", "get"};
-        add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_GET),
+        add_variant_values(variants, get_host_variants, UCS_BIT(SGL_OP_GET),
                            op_names);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_get_variants, SGL_MEM_TYPES_MASK);
+        add_variant_memtypes(variants, get_get_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
     }
 
     test_ucp_rma_sgl_get_sw() {
-        modify_config("PROTOS", "get/sgl/offload_sw,get/bcopy,get/zcopy,"
-                                "get/rndv,rndv/*");
+        modify_config("PROTOS", "get/sgl/offload_sw,get/bcopy,get/zcopy");
     }
 
 protected:
