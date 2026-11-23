@@ -2717,6 +2717,57 @@ err:
     return status;
 }
 
+ucs_status_t
+ucp_worker_rkey_config_switch_ep(ucp_worker_h worker,
+                                 ucp_worker_cfg_index_t rkey_cfg_index,
+                                 ucp_worker_cfg_index_t ep_cfg_index,
+                                 ucp_worker_cfg_index_t *cfg_index_p)
+{
+    const ucp_rkey_config_t *rkey_config = ucp_worker_rkey_config(
+            worker, rkey_cfg_index);
+    ucp_rkey_config_key_t key            = rkey_config->key;
+    ucp_sys_dev_map_t sys_dev_map        = 0;
+    const ucp_ep_config_key_t *old_key, *new_key;
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucs_sys_dev_distance_t distance_by_dev[UCP_MAX_SYS_DEVICES];
+    ucs_sys_device_t sys_dev;
+    ucp_lane_index_t lane;
+    khiter_t khiter;
+
+    if (key.ep_cfg_index == ep_cfg_index) {
+        *cfg_index_p = rkey_cfg_index;
+        return UCS_OK;
+    }
+
+    old_key          = &ucp_worker_ep_config(worker, key.ep_cfg_index)->key;
+    key.ep_cfg_index = ep_cfg_index;
+    khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash, key);
+    if (khiter != kh_end(&worker->rkey_config_hash)) {
+        *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
+        return UCS_OK;
+    }
+
+    if (key.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return ucp_worker_add_rkey_config(worker, &key, NULL, cfg_index_p);
+    }
+
+    /* Collect the distance of each remote device from the old lanes. A lane to
+     * UCS_SYS_DEVICE_ID_UNKNOWN has the default distance. */
+    for (lane = 0; lane < old_key->num_lanes; ++lane) {
+        sys_dev = old_key->lanes[lane].dst_sys_dev;
+        if (sys_dev < UCP_MAX_SYS_DEVICES) {
+            distance_by_dev[sys_dev] = rkey_config->lanes_distance[lane];
+            sys_dev_map             |= UCS_BIT(sys_dev);
+        }
+    }
+
+    new_key = &ucp_worker_ep_config(worker, ep_cfg_index)->key;
+    ucp_rkey_set_lanes_distance(new_key, sys_dev_map, distance_by_dev,
+                                lanes_distance);
+    return ucp_worker_add_rkey_config(worker, &key, lanes_distance,
+                                      cfg_index_p);
+}
+
 static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
     worker->keepalive.timerfd     = -1;
