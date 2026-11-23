@@ -176,7 +176,8 @@ void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
  * Get the routing table entry which the kernel selects to send to a
  * destination address, as "ip route get fibmatch" does. Unlike the cached
  * routing table, the kernel applies policy routing rules and VRF. The result
- * is cached, unless it is an error other than UCS_ERR_UNREACHABLE.
+ * is cached for UCX_NETLINK_ROUTE_CACHE_TTL, unless it is an error other than
+ * UCS_ERR_UNREACHABLE.
  *
  * @param [in]  sa_remote        Pointer to the destination address.
  * @param [in]  sa_local         Optional pointer to the source address, of the

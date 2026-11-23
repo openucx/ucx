@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/config/global_opts.h>
 #include <ucs/sys/netlink.h>
 }
 
@@ -13,9 +14,13 @@ extern "C" {
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <libgen.h>
 #include <limits.h>
 #include <linux/rtnetlink.h>
+#include <sched.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
@@ -312,6 +317,167 @@ UCS_TEST_F(test_netlink, kernel_route_matches) {
 
     if_freenameindex(ifs);
     UCS_TEST_MESSAGE << num_defaults << " default routes checked";
+}
+
+class test_netlink_route_cache : private ucs::clear_dontcopy_regions,
+                                 public test_netlink {
+protected:
+    /* Exit code of the child process when it cannot change the routes */
+    static const int CHILD_SKIP = 77;
+
+    static int child_error(const std::string &msg)
+    {
+        UCS_TEST_MESSAGE << msg;
+        return 1;
+    }
+
+    static bool set_lo_up(int fd)
+    {
+        struct ifreq ifr = {};
+
+        strncpy(ifr.ifr_name, "lo", sizeof(ifr.ifr_name) - 1);
+        if (ioctl(fd, SIOCGIFFLAGS, &ifr) != 0) {
+            return false;
+        }
+
+        ifr.ifr_flags |= IFF_UP;
+        return ioctl(fd, SIOCSIFFLAGS, &ifr) == 0;
+    }
+
+    /* Add or delete the TEST-NET-2 route through the loopback device */
+    static bool change_test_net_2_route(int fd, unsigned long request)
+    {
+        struct rtentry rt = {};
+        struct sockaddr_in *sin;
+
+        sin                  = reinterpret_cast<sockaddr_in*>(&rt.rt_dst);
+        sin->sin_family      = AF_INET;
+        sin->sin_addr.s_addr = htonl(0xc6336400); /* 198.51.100.0 */
+        sin                  = reinterpret_cast<sockaddr_in*>(&rt.rt_genmask);
+        sin->sin_family      = AF_INET;
+        sin->sin_addr.s_addr = htonl(0xffffff00);
+        rt.rt_flags          = RTF_UP;
+        rt.rt_dev            = const_cast<char*>("lo");
+        return ioctl(fd, request, &rt) == 0;
+    }
+
+    static ucs_status_t
+    route_get(const char *ttl, ucs_netlink_route_t *route)
+    {
+        struct sockaddr_in sin = {};
+        ucs_status_t status;
+
+        status = ucs_global_opts_set_value("NETLINK_ROUTE_CACHE_TTL", ttl);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Lookups of 198.51.100.1 by other tests can be in the cache copied
+         * from the parent process */
+        sin.sin_family = AF_INET;
+        inet_pton(AF_INET, "198.51.100.2", &sin.sin_addr);
+        return ucs_netlink_route_get((struct sockaddr*)&sin, NULL,
+                                     if_nametoindex("lo"), route);
+    }
+
+    static int check_route_cache(int fd)
+    {
+        ucs_netlink_route_t route;
+        ucs_status_t status;
+
+        status = route_get("inf", &route);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            return CHILD_SKIP;
+        } else if (status != UCS_ERR_UNREACHABLE) {
+            return child_error(std::string("lookup without a route: ") +
+                               ucs_status_string(status));
+        }
+
+        if (!change_test_net_2_route(fd, SIOCADDRT)) {
+            return child_error(std::string("failed to add a route: ") +
+                               strerror(errno));
+        }
+
+        status = route_get("inf", &route);
+        if (status != UCS_ERR_UNREACHABLE) {
+            return child_error(std::string("cached lookup: ") +
+                               ucs_status_string(status));
+        }
+
+        usleep(20000);
+        status = route_get("10ms", &route);
+        if ((status != UCS_OK) || (route.prefix_len != 24)) {
+            return child_error(std::string("lookup after adding a route: ") +
+                               ucs_status_string(status));
+        }
+
+        if (!change_test_net_2_route(fd, SIOCDELRT)) {
+            return child_error(std::string("failed to delete a route: ") +
+                               strerror(errno));
+        }
+
+        status = route_get("inf", &route);
+        if (status != UCS_OK) {
+            return child_error(std::string("cached lookup of a route: ") +
+                               ucs_status_string(status));
+        }
+
+        status = route_get("0", &route);
+        if (status != UCS_ERR_UNREACHABLE) {
+            return child_error(std::string("lookup without the cache: ") +
+                               ucs_status_string(status));
+        }
+
+        usleep(20000);
+        status = route_get("10ms", &route);
+        if (status != UCS_ERR_UNREACHABLE) {
+            return child_error(std::string("lookup after deleting a route: ") +
+                               ucs_status_string(status));
+        }
+
+        return 0;
+    }
+
+    static int route_cache_child()
+    {
+        int fd, ret;
+
+        /* The process gets the capabilities of the new user namespace, which
+         * owns the new network namespace */
+        if (unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0) {
+            return CHILD_SKIP;
+        }
+
+        fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (fd < 0) {
+            return child_error(std::string("failed to create a socket: ") +
+                               strerror(errno));
+        }
+
+        /* The loopback device of a new network namespace is down */
+        ret = set_lo_up(fd) ? check_route_cache(fd) : CHILD_SKIP;
+        close(fd);
+        return ret;
+    }
+};
+
+UCS_TEST_F(test_netlink_route_cache, ttl) {
+    int status;
+    pid_t pid;
+
+    pid = fork();
+    ASSERT_NE(-1, pid) << strerror(errno);
+    if (pid == 0) {
+        _exit(route_cache_child());
+    }
+
+    ASSERT_EQ(pid, waitpid(pid, &status, 0));
+    ASSERT_TRUE(WIFEXITED(status)) << ucs::exit_status_info(status);
+    if (WEXITSTATUS(status) == CHILD_SKIP) {
+        UCS_TEST_SKIP_R("cannot change routes in a new network namespace");
+    }
+
+    EXPECT_EQ(0, WEXITSTATUS(status));
 }
 
 UCS_TEST_F(test_netlink, is_host_addr) {

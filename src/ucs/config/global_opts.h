@@ -155,6 +155,11 @@ typedef struct {
     size_t                     rcache_stat_min;
     size_t                     rcache_stat_max;
 
+    /* Kernel route cache TTL in seconds; 0 disables it. Global options are
+       parsed before the CPU clock is initialized, so the time cannot be stored
+       in clock units. */
+    double                     netlink_route_cache_ttl;
+
     /* Estimated latency and bandwidth between devices according to distance
        within the sysfs device tree */
     struct {

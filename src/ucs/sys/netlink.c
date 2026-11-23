@@ -10,12 +10,14 @@
 
 #include "netlink.h"
 
+#include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
+#include <ucs/time/time.h>
 #include <ucs/type/status.h>
 #include <ucs/type/init_once.h>
 
@@ -74,6 +76,7 @@ typedef struct {
 
 typedef struct {
     ucs_status_t        status;
+    ucs_time_t          lookup_time;
     ucs_netlink_route_t route;
 } ucs_netlink_route_result_t;
 
@@ -778,6 +781,7 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     ucs_netlink_route_key_t key;
     ucs_status_t status;
     size_t addr_size;
+    ucs_time_t now;
     khiter_t iter;
     int khret;
 
@@ -786,6 +790,10 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 
     if (!ucs_netlink_is_fib_match_supported()) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ucs_global_opts.netlink_route_cache_ttl == 0) {
+        return ucs_netlink_route_lookup(sa_remote, sa_local, if_index, route_p);
     }
 
     status = ucs_sockaddr_inet_addr_sizeof(sa_remote, &addr_size);
@@ -811,9 +819,13 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     }
 
     result = &kh_val(&ucs_netlink_route_cache, iter);
-    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+    now    = ucs_get_time();
+    if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
+        (ucs_time_to_sec(now - result->lookup_time) >=
+         ucs_global_opts.netlink_route_cache_ttl)) {
         result->status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
                                                   &result->route);
+        result->lookup_time = now;
     }
 
     status = result->status;
