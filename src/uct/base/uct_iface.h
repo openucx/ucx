@@ -1118,6 +1118,8 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_PUT_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_PUT_SGL_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_GET_SGL_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_ATOMIC_FETCH) |
                           UCS_BIT(UCT_EP_OP_EAGER_ZCOPY));
@@ -1127,14 +1129,16 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_get(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_GET_SHORT) |
                           UCS_BIT(UCT_EP_OP_GET_BCOPY) |
-                          UCS_BIT(UCT_EP_OP_GET_ZCOPY));
+                          UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_GET_SGL_ZCOPY));
 }
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_put(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_PUT_SHORT) |
                           UCS_BIT(UCT_EP_OP_PUT_BCOPY) |
-                          UCS_BIT(UCT_EP_OP_PUT_ZCOPY));
+                          UCS_BIT(UCT_EP_OP_PUT_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_PUT_SGL_ZCOPY));
 }
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_fetch(uct_ep_operation_t op)
@@ -1142,6 +1146,7 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_fetch(uct_ep_operation_t op)
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_GET_SHORT) |
                           UCS_BIT(UCT_EP_OP_GET_BCOPY) |
                           UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_GET_SGL_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_ATOMIC_FETCH));
 }
 

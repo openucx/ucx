@@ -597,17 +597,24 @@ protected:
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
     }
 
+    static void validate_iov(const uct_iov_t *iov, size_t iovcnt,
+                             const purge_ctx *ctx)
+    {
+        ASSERT_EQ(ctx->iovcnt, iovcnt);
+        for (size_t i = 0; i < iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].length, iov[i].length);
+            if (iov[i].length != 0) {
+                EXPECT_EQ(ctx->iov[i].buffer, iov[i].buffer);
+            }
+        }
+    }
+
     static void validate_rma_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         EXPECT_TRUE(info->rma.field_mask &
                     UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
-        for (size_t i = 0; i < ctx->iovcnt; ++i) {
-            EXPECT_EQ(ctx->iov[i].buffer,
-                      info->rma.payload.zcopy.iov[i].buffer);
-            EXPECT_EQ(ctx->iov[i].length,
-                      info->rma.payload.zcopy.iov[i].length);
-        }
+        validate_iov(info->rma.payload.zcopy.iov,
+                     info->rma.payload.zcopy.iovcnt, ctx);
     }
 
     static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -1155,15 +1162,69 @@ class test_uct_purge_sgl : public test_uct_purge_outstanding {
 protected:
     enum completion_mode_t { DEFERRED, INLINE, CANCELED, NO_COMP };
 
+    struct sgl_purge_ctx {
+        purge_ctx expected;
+        const uint64_t *remote_addrs;
+        const uct_rkey_t *rkeys;
+        bool with_comp;
+        bool complete_inline;
+        bool delivered;
+        unsigned initial_count;
+        uct_completion_t flush_comp;
+    };
+
+    static void sgl_purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        auto &ctx      = *static_cast<sgl_purge_ctx*>(arg);
+        auto &expected = ctx.expected;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        ASSERT_EQ(expected.operation, info->operation);
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL);
+        ASSERT_EQ(0u, expected.num_ops_purged);
+        validate_iov(info->sgl.iov, info->sgl.count, &expected);
+        for (size_t i = 0; i < info->sgl.count; ++i) {
+            EXPECT_EQ(ctx.remote_addrs[i], info->sgl.remote_addrs[i]);
+            EXPECT_EQ(uint32_t(ctx.rkeys[i]), uint32_t(info->sgl.rkeys[i]));
+#if HAVE_TL_RC
+            if (expected.iov[i].length != 0) {
+                EXPECT_EQ(static_cast<uct_ib_mem_t*>(expected.iov[i].memh)->lkey,
+                          static_cast<uct_ib_mem_t*>(info->sgl.iov[i].memh)->lkey);
+            }
+#endif
+        }
+        ++expected.num_ops_purged;
+        EXPECT_EQ(ctx.with_comp,
+                  !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
+        if (ctx.with_comp) {
+            EXPECT_EQ(&expected.comp, info->comp);
+            EXPECT_EQ(ctx.initial_count, unsigned(info->comp->count));
+            EXPECT_EQ(0u, expected.num_completions);
+            if (ctx.complete_inline) {
+                uct_invoke_completion(info->comp, UCS_OK);
+            }
+        }
+    }
+
+    static void sgl_flush_cb(uct_completion_t *comp)
+    {
+        auto &ctx = *ucs_container_of(comp, sgl_purge_ctx, flush_comp);
+        if (ctx.with_comp && (ctx.initial_count == 1) &&
+            (ctx.complete_inline || ctx.delivered)) {
+            EXPECT_EQ(1u, ctx.expected.num_completions);
+        }
+    }
+
     void test_sgl(bool is_put, unsigned delivered_prefix,
                   bool with_rx_token = true,
-                  completion_mode_t completion_mode = DEFERRED)
+                  completion_mode_t completion_mode = DEFERRED,
+                  unsigned initial_count = 1)
     {
         const unsigned count = 4;
         const size_t stride  = 16 * UCS_KBYTE;
         const bool with_comp = completion_mode != NO_COMP;
-        const auto operation = is_put ? UCT_EP_OP_PUT_ZCOPY :
-                                       UCT_EP_OP_GET_ZCOPY;
+        const auto operation = is_put ? UCT_EP_OP_PUT_SGL_ZCOPY :
+                                       UCT_EP_OP_GET_SGL_ZCOPY;
         const auto cap = is_put ? UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY :
                                  UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY;
         if (!m_sender->check_caps_v2(cap)) {
@@ -1171,6 +1232,8 @@ protected:
         }
         mapped_buffer local(count * stride, SEND_SEED, *m_sender);
         mapped_buffer remote(count * stride, RECV_SEED, *m_receiver);
+        mapped_buffer local2(count * stride, SEND_SEED, *m_sender);
+        mapped_buffer remote2(count * stride, RECV_SEED, *m_receiver);
         void *buffers[count];
         size_t lengths[count];
         uct_mem_h memhs[count];
@@ -1178,28 +1241,34 @@ protected:
         uct_rkey_t rkeys[count];
         uct_iov_t iov[count] = {};
         for (unsigned i = 0; i < count; ++i) {
-            buffers[i] = UCS_PTR_BYTE_OFFSET(local.ptr(), i * stride);
+            auto &src  = (i % 2) ? local2 : local;
+            auto &dst  = (i % 2) ? remote2 : remote;
+            buffers[i] = UCS_PTR_BYTE_OFFSET(src.ptr(), i * stride);
             lengths[i] = (is_put && (i == 1)) ? 0 :
                          ((i == 0) && (delivered_prefix == 0)) ? 8193 : 256;
-            memhs[i]   = local.memh();
-            addrs[i]   = remote.addr() + i * stride;
-            rkeys[i]   = remote.rkey();
+            memhs[i]   = src.memh();
+            addrs[i]   = dst.addr() + i * stride;
+            rkeys[i]   = dst.rkey();
             iov[i].buffer = buffers[i];
             iov[i].length = lengths[i];
+            iov[i].memh   = memhs[i];
         }
-        struct sgl_purge_ctx {
-            purge_ctx expected;
-            bool with_comp;
-            bool complete_inline;
-            unsigned count;
-            uct_completion_t flush_comp;
-        } ctx = {{this, operation, {completion_cb, 1, UCS_OK}}, with_comp,
-                  completion_mode == INLINE,
-                  count - ((is_put && with_rx_token) ? delivered_prefix : 0), {}};
-        unsigned first = count - ctx.count;
-        ctx.expected.iov         = iov + first;
-        ctx.expected.remote_addr = remote.addr() + first * stride;
-        ctx.expected.rkey        = remote.rkey();
+        sgl_purge_ctx ctx         = {};
+        ctx.expected.self        = this;
+        ctx.expected.operation   = operation;
+        ctx.expected.comp.func   = completion_cb;
+        ctx.expected.comp.count  = initial_count;
+        ctx.expected.comp.status = UCS_OK;
+        ctx.expected.iov         = iov;
+        ctx.expected.iovcnt      = count;
+        ctx.remote_addrs         = addrs;
+        ctx.rkeys                = rkeys;
+        ctx.with_comp            = with_comp;
+        ctx.complete_inline      = completion_mode == INLINE;
+        ctx.delivered            = is_put && with_rx_token &&
+                                   (delivered_prefix == count);
+        ctx.initial_count        = initial_count;
+        ctx.flush_comp.func      = sgl_flush_cb;
 
         /* Start after unrelated SQ traffic; a multi-packet element above
          * also makes WQE indices differ from PSN deltas. */
@@ -1230,12 +1299,6 @@ protected:
                                       addrs, rkeys, nullptr, nullptr, count,
                                       comp);
         ASSERT_EQ(UCS_INPROGRESS, status);
-        ctx.flush_comp.func = [](uct_completion_t *comp) {
-            auto &ctx = *ucs_container_of(comp, sgl_purge_ctx, flush_comp);
-            if (ctx.with_comp && (ctx.complete_inline || (ctx.count == 0))) {
-                EXPECT_EQ(1u, ctx.expected.num_completions);
-            }
-        };
         post_flush(m_sender->ep(0), &ctx.flush_comp);
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
@@ -1244,49 +1307,30 @@ protected:
         params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                             UCT_EP_OUTSTANDING_FIELD_ARG;
         params.arg = &ctx;
-        params.cb  = [](const uct_ep_op_info_t *info, void *arg) {
-            auto &ctx = *static_cast<sgl_purge_ctx*>(arg);
-            auto &expected = ctx.expected;
-            ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-            ASSERT_EQ(expected.operation, info->operation);
-            ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
-            validate_rma_addr(info, &expected);
-            ASSERT_LT(expected.num_ops_purged, ctx.count);
-            expected.iovcnt = expected.iov->length ? 1 : 0;
-            validate_rma_iov(info, &expected);
-            ++expected.num_ops_purged;
-            ++expected.iov;
-            expected.remote_addr += stride;
-            EXPECT_EQ(ctx.with_comp,
-                      !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
-            if (ctx.with_comp) {
-                EXPECT_EQ(&expected.comp, info->comp);
-                EXPECT_EQ(0u, expected.num_completions);
-                if (ctx.complete_inline) {
-                    uct_invoke_completion(info->comp, UCS_OK);
-                }
-            }
-        };
+        params.cb  = sgl_purge_cb;
         if (with_rx_token) {
             params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
             params.rx_token    = rx_token.data();
         }
         ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0), &params));
         EXPECT_EQ(0, ctx.flush_comp.count);
-        ASSERT_EQ(count - first, ctx.expected.num_ops_purged);
+        ASSERT_EQ(ctx.delivered ? 0u : 1u, ctx.expected.num_ops_purged);
         if (!with_comp) {
             return;
         }
-        EXPECT_EQ(ctx.complete_inline ? 0u : count - first, comp->count);
-        EXPECT_EQ((ctx.complete_inline || (first == count)) ? 1u : 0u,
+        bool completed = ctx.delivered || ctx.complete_inline;
+        EXPECT_EQ(initial_count - unsigned(completed), unsigned(comp->count));
+        EXPECT_EQ((completed && (initial_count == 1)) ? 1u : 0u,
                   ctx.expected.num_completions);
-        /* Complete the transferred references after purge returns. The UCP
-         * tests cover restarting the transfer on the recovered endpoint. */
-        for (unsigned i = first; !ctx.complete_inline && (i < count); ++i) {
+        if (!completed) {
+            uct_invoke_completion(comp, (completion_mode == CANCELED) ?
+                                       UCS_ERR_CANCELED : UCS_OK);
+        }
+        /* Other operations may share this completion. Purge consumes only
+         * the original SGL reference. */
+        for (unsigned i = 1; i < initial_count; ++i) {
             EXPECT_EQ(0u, ctx.expected.num_completions);
-            uct_invoke_completion(comp,
-                    ((completion_mode == CANCELED) && (i == count - 1)) ?
-                    UCS_ERR_CANCELED : UCS_OK);
+            uct_invoke_completion(comp, UCS_OK);
         }
         EXPECT_EQ(0, comp->count);
         EXPECT_EQ(completion_mode == CANCELED ? UCS_ERR_CANCELED : UCS_OK,
@@ -1363,6 +1407,16 @@ UCS_TEST_P(test_uct_purge_sgl, put_canceled)
 UCS_TEST_P(test_uct_purge_sgl, get_canceled)
 {
     test_sgl(false, 0, true, CANCELED);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, put_shared_comp)
+{
+    test_sgl(true, 2, true, INLINE, 3);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, get_shared_comp)
+{
+    test_sgl(false, 2, true, DEFERRED, 3);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_purge_sgl, rc_mlx5)

@@ -1646,6 +1646,7 @@ uct_rc_mlx5_op_info_fill(uct_rc_mlx5_iface_common_t *iface,
                          uct_ep_op_info_t *info)
 {
     memset(info, 0, sizeof(*info));
+
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
         return UCS_ERR_NO_ELEM;
@@ -1890,12 +1891,66 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
     }
 }
 
+/* Reconstruct the original SGL with the existing element parsers. Nothing is
+ * retained on the posting path, and the caller's completion is not modified. */
+static void uct_rc_mlx5_op_info_fill_sgl(
+        uct_rc_mlx5_iface_common_t *iface, const uct_ib_mlx5_txwq_t *txwq,
+        uct_rc_iface_send_op_t *op, uint16_t *pi, uint16_t end_pi,
+        size_t *wqe_size, uint32_t *num_packets, void *buffer, size_t max_count,
+        uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
+{
+    uct_iov_t *iov        = buffer;
+    uct_ib_mem_t *memh    = (void*)(iov + max_count);
+    uint64_t *addrs      = (void*)(memh + max_count);
+    uct_rkey_t *rkeys    = (void*)(addrs + max_count);
+    const struct mlx5_wqe_ctrl_seg *ctrl;
+    uct_ep_op_info_t element;
+    ucs_status_t status;
+    size_t i;
+
+    *num_packets = 0;
+    for (i = 0;; ++i) {
+        ucs_assert_always((*pi != end_pi) && (i < max_count));
+        ctrl      = uct_ib_mlx5_txwq_get_wqe(txwq, *pi);
+        *wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        status    = uct_rc_mlx5_op_info_fill(iface, txwq, op, ctrl, *wqe_size,
+                                              callback_data, &element);
+        ucs_assert_always(status == UCS_OK);
+        ucs_assert_always(element.rma.payload.zcopy.iovcnt <= 1);
+        memset(&iov[i], 0, sizeof(iov[i]));
+        iov[i].count = 1;
+        if (element.rma.payload.zcopy.iovcnt != 0) {
+            iov[i]      = element.rma.payload.zcopy.iov[0];
+            memh[i]     = *(uct_ib_mem_t*)iov[i].memh;
+            iov[i].memh = &memh[i];
+        }
+        addrs[i] = element.rma.remote_addr;
+        rkeys[i] = element.rma.rkey;
+        *num_packets += uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
+                                                     ctrl, *wqe_size);
+        if (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
+            break;
+        }
+        *pi = uct_ib_mlx5_txwq_next_wqe_index(*pi, *wqe_size);
+    }
+
+    memset(info, 0, sizeof(*info));
+    info->field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
+                             UCT_EP_OP_INFO_FIELD_SGL;
+    info->operation        = (element.operation == UCT_EP_OP_PUT_ZCOPY) ?
+                             UCT_EP_OP_PUT_SGL_ZCOPY : UCT_EP_OP_GET_SGL_ZCOPY;
+    info->sgl.iov          = iov;
+    info->sgl.remote_addrs = addrs;
+    info->sgl.rkeys        = rkeys;
+    info->sgl.count        = i + 1;
+    uct_rc_mlx5_op_info_fill_user_comp(op, info);
+}
+
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
-    uct_rc_iface_send_op_t *sgl_op = NULL;
     uct_rc_iface_send_op_t *op;
     uct_completion_t *comp;
     const uct_rc_mlx5_rx_token_t *rx_token;
@@ -1906,8 +1961,12 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
+    size_t max_sgl_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
+    size_t sgl_size = max_sgl_count * (sizeof(uct_iov_t) + sizeof(uct_ib_mem_t) +
+                                       sizeof(uint64_t) + sizeof(uct_rkey_t));
+    void *sgl_buffer;
     void *callback_arg;
-    int delivered;
+    int delivered, is_sgl;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1962,12 +2021,18 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         delivered         = 0;
     }
 
+    sgl_buffer = ucs_alloc_on_stack(sgl_size, "rc_purge_sgl");
+    if (sgl_buffer == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
 #if HAVE_IBV_DM
     if (iface->dm.dm != NULL) {
         callback_data.dm_data = ucs_malloc(ucs_align_up(iface->dm.seg_len,
                                                         sizeof(uint64_t)),
                                            "rc_purge_dm");
         if (callback_data.dm_data == NULL) {
+            ucs_free_on_stack(sgl_buffer, sgl_size);
             ucs_error("rc mlx5: ep %p qp 0x%x failed to allocate dm data", ep,
                       txwq->super.qp_num);
             return UCS_ERR_NO_MEMORY;
@@ -1986,16 +2051,24 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
 
-        op = sgl_op;
-        if (op == NULL) {
-            op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
-            if ((op != NULL) && uct_rc_mlx5_send_op_is_sgl_zcopy(op)) {
-                sgl_op = op;
-                ucs_queue_pull_non_empty(&ep->super.txqp.outstanding);
+        op     = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+        is_sgl = (op != NULL) && uct_rc_mlx5_send_op_is_sgl_zcopy(op);
+        if (is_sgl) {
+            uct_rc_mlx5_op_info_fill_sgl(iface, txwq, op, &pi, end_pi, &wqe_size,
+                                          &num_packets, sgl_buffer,
+                                          max_sgl_count, &callback_data, &info);
+            delivered = (rx_token != NULL) &&
+                        (info.operation == UCT_EP_OP_PUT_SGL_ZCOPY) &&
+                        uct_ib_mlx5_wqe_is_delivered(wqe_first_psn,
+                                                      receiver_next_psn,
+                                                      num_packets);
+            comp = op->user_comp;
+            ucs_queue_pull_non_empty(&ep->super.txqp.outstanding);
+            uct_rc_mlx5_ep_outstanding_release_send_op(&iface->super, op);
+            if (delivered && (comp != NULL)) {
+                uct_invoke_completion(comp, UCS_OK);
             }
-        }
-
-        if ((rx_token != NULL) && (num_packets != 0)) {
+        } else if ((rx_token != NULL) && (num_packets != 0)) {
             /*
              * receiver_next_psn only proves the read request was accepted by
              * the responder. The response data travels in the opposite
@@ -2015,14 +2088,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         }
 
         if (!delivered && !uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi)) {
-            status = uct_rc_mlx5_op_info_fill(iface, txwq, op, ctrl,
-                                              wqe_size, &callback_data, &info);
+            status = is_sgl ? UCS_OK :
+                     uct_rc_mlx5_op_info_fill(iface, txwq, op, ctrl, wqe_size,
+                                                &callback_data, &info);
             if (status == UCS_OK) {
-                /* The original reference keeps the SGL alive even when a
-                 * replay callback completes an element synchronously. */
-                if ((sgl_op != NULL) && (sgl_op->user_comp != NULL)) {
-                    ++sgl_op->user_comp->count;
-                }
                 params->cb(&info, callback_arg);
             } else if (status != UCS_ERR_NO_ELEM) {
                 ucs_fatal("rc mlx5: ep %p qp 0x%x failed to parse outstanding "
@@ -2033,26 +2102,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
         }
 
-        /* Only the final WQE of an SGL operation requests a CQ update.
-         * Release its reference before later ops attached to that WQE. */
-        if ((sgl_op != NULL) && (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
-            comp = sgl_op->user_comp;
-            uct_rc_mlx5_ep_outstanding_release_send_op(&iface->super, sgl_op);
-            sgl_op = NULL;
-            if (comp != NULL) {
-                uct_invoke_completion(comp, UCS_OK);
-            }
-        }
-
         uct_rc_mlx5_ep_outstanding_complete_send_ops(
                 &iface->super, ep, pi, delivered ? UCS_OK : UCS_ERR_CANCELED);
 
         wqe_first_psn = (wqe_first_psn + num_packets) & UCT_IB_MLX5_PSN_MASK;
     }
 
-    ucs_assert(sgl_op == NULL);
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
+    ucs_free_on_stack(sgl_buffer, sgl_size);
     ucs_free(callback_data.dm_data);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
