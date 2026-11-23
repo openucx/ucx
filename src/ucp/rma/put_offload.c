@@ -18,6 +18,9 @@
 #include <ucp/proto/proto_single.inl>
 
 
+extern ucp_proto_t ucp_put_am_bcopy_proto;
+
+
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,

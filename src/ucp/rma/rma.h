@@ -87,9 +87,6 @@ extern ucp_amo_proto_t ucp_amo_sw_proto;
 extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
 
-extern ucp_proto_t ucp_put_am_bcopy_proto;
-
-
 /**
  * Common implementation of the SGL protocols which send each element as a
  * contiguous operation of the same type
