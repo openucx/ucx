@@ -280,7 +280,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 {
     perftest_params_t params;
     ucx_perf_result_t result;
-    ucs_status_t status;
+    ucs_status_t status, test_status;
     FILE *batch_file;
     int line_num;
 
@@ -313,9 +313,18 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                  &line_num, &params,
                                  &ctx->test_names[depth]);
         if (status == UCS_OK) {
-            run_test_recurs(ctx, &params, depth + 1);
+            test_status = run_test_recurs(ctx, &params, depth + 1);
             free(ctx->test_names[depth]);
             ctx->test_names[depth] = NULL;
+
+            /* Stop on an I/O error of a test with -V, which is how the test
+             * reports wrong data, or of an inner batch. Go on after any other
+             * failure, e.g. of an unsupported test, as without -V. */
+            if ((test_status == UCS_ERR_IO_ERROR) &&
+                ((params.super.flags & UCX_PERF_TEST_FLAG_VALIDATE) ||
+                 ((depth + 1) < ctx->num_batch_files))) {
+                status = test_status;
+            }
         }
 
         free(params.super.msg_size_list);

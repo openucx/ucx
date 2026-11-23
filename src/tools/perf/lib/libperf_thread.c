@@ -102,16 +102,9 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 {
     ucx_perf_thread_context_t* tctx = perf->ucp.tctx;   /* all the thread contexts on perf */
     int ti, thread_count            = perf->params.thread_count;
-    ucs_status_t* statuses;
     ucs_status_t status;
 
     omp_set_num_threads(thread_count);
-
-    statuses = calloc(thread_count, sizeof(ucs_status_t));
-    if (statuses == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
 
 #pragma omp parallel private(ti)
 {
@@ -128,10 +121,12 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
         }
     }
 
-    ucx_perf_thread_report_aggregated_results(perf);
+    /* Fail the test on all peers if it failed on any of them */
+    status = ucx_perf_test_exchange_status(perf, status);
+    if (status == UCS_OK) {
+        ucx_perf_thread_report_aggregated_results(perf);
+    }
 
-    free(statuses);
-out:
     return status;
 }
 
