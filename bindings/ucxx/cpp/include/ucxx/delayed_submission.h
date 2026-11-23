@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
@@ -122,7 +122,9 @@ class BaseDelayedSubmissionCollection {
    */
   [[nodiscard]] virtual ItemIdType schedule(T item)
   {
-    if (!_enabled) throw std::runtime_error("Resource is disabled.");
+    if (!_enabled) {
+      throw std::runtime_error("Resource is disabled.");
+    }
 
     ItemIdType id;
     {
@@ -157,7 +159,9 @@ class BaseDelayedSubmissionCollection {
         std::lock_guard<std::mutex> lock(_mutex);
         item = std::move(_collection.front());
         _collection.pop_front();
-        if (_canceled.erase(item.first)) continue;
+        if (_canceled.erase(item.first)) {
+          continue;
+        }
         _processing = std::optional<ItemIdType>{item.first};
       }
 
@@ -185,8 +189,9 @@ class BaseDelayedSubmissionCollection {
   void cancel(ItemIdType id)
   {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_processing.has_value() && _processing.value() == id)
+    if (_processing.has_value() && _processing.value() == id) {
       throw std::runtime_error("Cannot cancel, item is being processed.");
+    }
 
     _canceled.insert(id);
     ucxx_trace_req("Canceled item: %lu", id);

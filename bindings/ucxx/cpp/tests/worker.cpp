@@ -67,14 +67,18 @@ class PausedProgressThread {
   ~PausedProgressThread()
   {
     resume();
-    if (_worker->isProgressThreadRunning()) _worker->stopProgressThread();
+    if (_worker->isProgressThreadRunning()) {
+      _worker->stopProgressThread();
+    }
   }
 
   void resume()
   {
     {
       std::lock_guard<std::mutex> lock(_barrier.mutex);
-      if (_barrier.released) return;
+      if (_barrier.released) {
+        return;
+      }
       _barrier.released = true;
     }
     _barrier.condition.notify_one();
@@ -140,7 +144,9 @@ class WorkerTest : public ::testing::Test {
   {
     loopWithTimeout(std::chrono::milliseconds(5000), [&]() {
       transfer.sendWorker->progress();
-      if (progressReceiver) transfer.recvWorker->progress();
+      if (progressReceiver) {
+        transfer.recvWorker->progress();
+      }
       return request->isCompleted();
     });
   }
@@ -181,12 +187,13 @@ class WorkerProgressTest
 
     _worker = _context->workerBuilder().delayedSubmission(_enableDelayedSubmission).build();
 
-    if (_progressMode == ProgressMode::Blocking)
+    if (_progressMode == ProgressMode::Blocking) {
       _worker->initBlockingProgressMode();
-    else if (_progressMode == ProgressMode::ThreadPolling)
+    } else if (_progressMode == ProgressMode::ThreadPolling) {
       _worker->startProgressThread(true);
-    else if (_progressMode == ProgressMode::ThreadBlocking)
+    } else if (_progressMode == ProgressMode::ThreadBlocking) {
       _worker->startProgressThread(false);
+    }
 
     _progressWorker = getProgressFunction(_worker, _progressMode);
   }
@@ -194,8 +201,9 @@ class WorkerProgressTest
   void TearDown()
   {
     if (_progressMode == ProgressMode::ThreadPolling ||
-        _progressMode == ProgressMode::ThreadBlocking)
+        _progressMode == ProgressMode::ThreadBlocking) {
       _worker->stopProgressThread();
+    }
   }
 };
 
@@ -701,8 +709,9 @@ TEST_P(WorkerProgressTest, ProgressAmReceiverCallback)
                        .build());
   waitRequests(_worker, requests, _progressWorker);
 
-  while (receivedRequests.size() < 1)
+  while (receivedRequests.size() < 1) {
     _progressWorker();
+  }
 
   {
     std::lock_guard<std::mutex> lock(mutex);
@@ -961,10 +970,11 @@ TEST_P(WorkerGenericCallbackSingleTest, RegisterGenericPreUncancelable)
 
     // This will submit the callback and attempt to cancel once every 1ms,
     // a warning is logged when multiples of 10 attempts to cancel are made.
-    if (_extraParams.genericCallbackType == GenericCallbackType::Pre)
+    if (_extraParams.genericCallbackType == GenericCallbackType::Pre) {
       ASSERT_TRUE(_worker->registerGenericPre(threadCallback, 1000000 /* 1ms */));
-    else if (_extraParams.genericCallbackType == GenericCallbackType::Post)
+    } else if (_extraParams.genericCallbackType == GenericCallbackType::Post) {
       ASSERT_TRUE(_worker->registerGenericPost(threadCallback, 1000000 /* 1ms */));
+    }
   });
 
   loopWithTimeout(std::chrono::milliseconds(5000), [&match] {

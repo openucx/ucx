@@ -43,7 +43,9 @@ class ListenerContext {
 
   void createEndpointFromConnRequest(ucp_conn_request_h conn_request)
   {
-    if (!isAvailable()) throw std::runtime_error("Listener context already has an endpoint");
+    if (!isAvailable()) {
+      throw std::runtime_error("Listener context already has an endpoint");
+    }
 
     static bool endpoint_error_handling = true;
     _endpoint                           = _listener->endpointBuilder(conn_request)
@@ -208,8 +210,9 @@ void waitRequests(ProgressMode progressMode,
   auto progress = getProgressFunction(worker, progressMode);
   // Wait until all messages are completed
   for (auto& r : requests) {
-    while (!r->isCompleted())
+    while (!r->isCompleted()) {
       progress();
+    }
     r->checkError();
   }
 }
@@ -273,7 +276,9 @@ auto verify_buffers(ucxx::Buffer* expected, ucxx::Buffer* actual)
 int main(int argc, char** argv)
 {
   args args;
-  if (args.parse(argc, argv) != UCS_OK) return -1;
+  if (args.parse(argc, argv) != UCS_OK) {
+    return -1;
+  }
 
   // Setup: create UCP context, worker, listener and client endpoint.
   auto context      = ucxx::contextBuilder(ucxx::Context::defaultFeatureFlags).build();
@@ -286,18 +291,20 @@ int main(int argc, char** argv)
     worker->endpointBuilder("127.0.0.1", args.listener_port).endpointErrorHandling().build();
 
   // Initialize worker progress
-  if (args.progress_mode == ProgressMode::Blocking)
+  if (args.progress_mode == ProgressMode::Blocking) {
     worker->initBlockingProgressMode();
-  else if (args.progress_mode == ProgressMode::ThreadBlocking)
+  } else if (args.progress_mode == ProgressMode::ThreadBlocking) {
     worker->startProgressThread(false);
-  else if (args.progress_mode == ProgressMode::ThreadPolling)
+  } else if (args.progress_mode == ProgressMode::ThreadPolling) {
     worker->startProgressThread(true);
+  }
 
   auto progress = getProgressFunction(worker, args.progress_mode);
 
   // Block until client connects
-  while (listener_ctx->isAvailable())
+  while (listener_ctx->isAvailable()) {
     progress();
+  }
 
   // now, we have a connection between the listener ctx endpoint and the client endpoint
 
@@ -320,8 +327,9 @@ int main(int argc, char** argv)
   auto recvWireupBuffer =
     allocateBuffer(ucxx::BufferType::Host, sendWireupBuffer->getSize());  // host wireup buffer
   std::vector<std::shared_ptr<ucxx::Buffer>> recvBuffers;
-  for (const auto& v : sendBuffers)
+  for (const auto& v : sendBuffers) {
     recvBuffers.push_back(allocateBuffer(args.recv_buf_type, v->getSize()));
+  }
 
   // Schedule small wireup messages to let UCX identify capabilities between endpoints
   requests.push_back(
@@ -379,8 +387,9 @@ int main(int argc, char** argv)
 
   // Stop progress thread
   if (args.progress_mode == ProgressMode::ThreadBlocking ||
-      args.progress_mode == ProgressMode::ThreadPolling)
+      args.progress_mode == ProgressMode::ThreadPolling) {
     worker->stopProgressThread();
+  }
 
   std::cout << "Example completed successfully" << std::endl;
 

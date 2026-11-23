@@ -23,12 +23,14 @@ RequestStream::RequestStream(std::shared_ptr<Endpoint> endpoint,
 {
   std::visit(data::dispatch{
                [this](data::StreamSend) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("A valid endpoint is required to send stream messages.");
+                 }
                },
                [this](data::StreamReceive) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("A valid endpoint is required to receive stream messages.");
+                 }
                },
                [](auto) { throw std::runtime_error("Unreachable"); },
              },
@@ -118,12 +120,14 @@ void RequestStream::populateDelayedSubmissionImpl()
                  [](auto) -> decltype(terminate) { throw std::runtime_error("Unreachable"); },
                },
                _requestData);
-  if (terminate) return;
+  if (terminate) {
+    return;
+  }
 
   request();
 
   auto log = [this](const void* buffer, const size_t length) {
-    if (_enablePythonFuture)
+    if (_enablePythonFuture) {
       ucxx_trace_req_f(
         _ownerString.c_str(),
         this,
@@ -134,7 +138,7 @@ void RequestStream::populateDelayedSubmissionImpl()
         length,
         _future.get(),
         _future->getHandle());
-    else
+    } else {
       ucxx_trace_req_f(_ownerString.c_str(),
                        this,
                        _request,
@@ -142,6 +146,7 @@ void RequestStream::populateDelayedSubmissionImpl()
                        "populateDelayedSubmission, buffer %p, size %lu",
                        buffer,
                        length);
+    }
   };
 
   std::visit(

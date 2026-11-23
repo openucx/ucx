@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <atomic>
@@ -68,7 +68,9 @@ bool CallbackNotifier::wait(uint64_t period,
             lock, std::chrono::duration<uint64_t, std::nano>(signalInterval), [this]() {
               return _flag.load(std::memory_order_relaxed) == true;
             });
-          if (signalWorkerFunction) signalWorkerFunction();
+          if (signalWorkerFunction) {
+            signalWorkerFunction();
+          }
         }
         return ret;
       } else {

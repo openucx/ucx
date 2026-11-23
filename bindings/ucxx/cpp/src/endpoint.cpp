@@ -69,9 +69,10 @@ static std::shared_ptr<Worker> getWorker(std::shared_ptr<Component> workerOrList
   auto worker = std::dynamic_pointer_cast<Worker>(workerOrListener);
   if (worker == nullptr) {
     auto listener = std::dynamic_pointer_cast<Listener>(workerOrListener);
-    if (listener == nullptr)
+    if (listener == nullptr) {
       throw std::invalid_argument(
         "Invalid object, it's not a shared_ptr to either ucxx::Worker nor ucxx::Listener");
+    }
 
     worker = std::static_pointer_cast<Worker>(listener->getParent());
   }
@@ -80,16 +81,22 @@ static std::shared_ptr<Worker> getWorker(std::shared_ptr<Component> workerOrList
 
 void endpointErrorCallback(void* arg, ucp_ep_h ep, ucs_status_t status)
 {
-  if (arg == nullptr) return;
+  if (arg == nullptr) {
+    return;
+  }
 
   std::unique_ptr<EndpointErrorCallbackContext> ctx(
     static_cast<EndpointErrorCallbackContext*>(arg));
   auto endpoint = ctx->endpoint.lock();
   // Endpoint has been destroyed.
-  if (!endpoint) return;
+  if (!endpoint) {
+    return;
+  }
 
   // Endpoint is already closing.
-  if (endpoint->_closing.exchange(true)) return;
+  if (endpoint->_closing.exchange(true)) {
+    return;
+  }
 
   endpoint->_status = status;
   auto worker       = ::ucxx::getWorker(endpoint->_parent);
@@ -109,20 +116,21 @@ void endpointErrorCallback(void* arg, ucp_ep_h ep, ucs_status_t status)
 
   // Connection reset and timeout often represent just a normal remote
   // endpoint disconnect, log only in debug mode.
-  if (status == UCS_ERR_CONNECTION_RESET || status == UCS_ERR_ENDPOINT_TIMEOUT)
+  if (status == UCS_ERR_CONNECTION_RESET || status == UCS_ERR_ENDPOINT_TIMEOUT) {
     ucxx_debug("ucxx::Endpoint::%s: %p, UCP handle: %p, error callback called with status %d: %s",
                __func__,
                endpoint.get(),
                ep,
                status,
                ucs_status_string(status));
-  else
+  } else {
     ucxx_error("ucxx::Endpoint::%s: %p, UCP handle: %p, error callback called with status %d: %s",
                __func__,
                endpoint.get(),
                ep,
                status,
                ucs_status_string(status));
+  }
 }
 
 Endpoint::Endpoint(std::shared_ptr<Component> workerOrListener, bool endpointErrorHandling)
@@ -130,8 +138,9 @@ Endpoint::Endpoint(std::shared_ptr<Component> workerOrListener, bool endpointErr
 {
   auto worker = ::ucxx::getWorker(workerOrListener);
 
-  if (worker == nullptr || worker->getHandle() == nullptr)
+  if (worker == nullptr || worker->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
+  }
 
   setParent(workerOrListener);
 }
@@ -160,8 +169,9 @@ void Endpoint::create(ucp_ep_params_t* params)
             [this, &worker, &params, &status]() {
               status = ucp_ep_create(worker->getHandle(), params, &_handle);
             },
-            3000000000 /* 3s */))
+            3000000000 /* 3s */)) {
         break;
+      }
 
       if (i == maxAttempts - 1) {
         status = UCS_ERR_TIMED_OUT;
@@ -185,8 +195,9 @@ void Endpoint::create(ucp_ep_params_t* params)
 std::shared_ptr<Endpoint> detail::ConstructorFactory::createEndpointFromHostname(
   std::shared_ptr<Worker> worker, std::string ipAddress, uint16_t port, bool endpointErrorHandling)
 {
-  if (worker == nullptr || worker->getHandle() == nullptr)
+  if (worker == nullptr || worker->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
+  }
 
   ucp_ep_params_t params = {.field_mask = UCP_EP_PARAM_FIELD_FLAGS | UCP_EP_PARAM_FIELD_SOCK_ADDR |
                                           UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
@@ -205,8 +216,9 @@ std::shared_ptr<Endpoint> detail::ConstructorFactory::createEndpointFromHostname
 std::shared_ptr<Endpoint> detail::ConstructorFactory::createEndpointFromConnRequest(
   std::shared_ptr<Listener> listener, ucp_conn_request_h connRequest, bool endpointErrorHandling)
 {
-  if (listener == nullptr || listener->getHandle() == nullptr)
+  if (listener == nullptr || listener->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
+  }
 
   ucp_ep_params_t params = {
     .field_mask = UCP_EP_PARAM_FIELD_FLAGS | UCP_EP_PARAM_FIELD_CONN_REQUEST |
@@ -222,10 +234,12 @@ std::shared_ptr<Endpoint> detail::ConstructorFactory::createEndpointFromConnRequ
 std::shared_ptr<Endpoint> detail::ConstructorFactory::createEndpointFromWorkerAddress(
   std::shared_ptr<Worker> worker, std::shared_ptr<Address> address, bool endpointErrorHandling)
 {
-  if (worker == nullptr || worker->getHandle() == nullptr)
+  if (worker == nullptr || worker->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
-  if (address == nullptr || address->getHandle() == nullptr || address->getLength() == 0)
+  }
+  if (address == nullptr || address->getHandle() == nullptr || address->getLength() == 0) {
     throw ucxx::Error("Address not initialized");
+  }
 
   ucp_ep_params_t params = {.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
                                           UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
@@ -255,7 +269,9 @@ std::shared_ptr<RequestEndpointClose> Endpoint::closeRequest(
   EndpointCloseCallbackUserFunction callbackFunction,
   EndpointCloseCallbackUserData callbackData)
 {
-  if (_closing.exchange(true) || _handle == nullptr) return nullptr;
+  if (_closing.exchange(true) || _handle == nullptr) {
+    return nullptr;
+  }
 
   auto endpoint = std::static_pointer_cast<Endpoint>(shared_from_this());
 
@@ -263,7 +279,9 @@ std::shared_ptr<RequestEndpointClose> Endpoint::closeRequest(
                                     ucs_status_t status,
                                     EndpointCloseCallbackUserData /* callbackData */) {
     _status = status;
-    if (callbackFunction) callbackFunction(status, callbackData);
+    if (callbackFunction) {
+      callbackFunction(status, callbackData);
+    }
     {
       std::lock_guard<std::mutex> lock(_mutex);
       if (_closeCallback) {
@@ -282,7 +300,9 @@ std::shared_ptr<RequestEndpointClose> Endpoint::closeRequest(
 
 void Endpoint::closeBlocking(uint64_t period, uint64_t maxAttempts)
 {
-  if (_closing.exchange(true) || _handle == nullptr) return;
+  if (_closing.exchange(true) || _handle == nullptr) {
+    return;
+  }
 
   size_t canceled = cancelInflightRequestsBlocking(3000000000 /* 3s */, 3);
   ucxx_debug("ucxx::Endpoint::%s, Endpoint: %p, UCP handle: %p, canceled %lu requests",
@@ -292,8 +312,9 @@ void Endpoint::closeBlocking(uint64_t period, uint64_t maxAttempts)
              canceled);
 
   ucp_request_param_t param{};
-  if (_endpointErrorHandling)
+  if (_endpointErrorHandling) {
     param = {.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS, .flags = UCP_EP_CLOSE_FLAG_FORCE};
+  }
 
   auto worker             = ::ucxx::getWorker(_parent);
   ucs_status_ptr_t status = nullptr;
@@ -329,12 +350,15 @@ void Endpoint::closeBlocking(uint64_t period, uint64_t maxAttempts)
                 status = ucp_ep_close_nbx(_handle, &param);
                 updateCloseStatus();
               },
-              period))
+              period)) {
           continue;
+        }
         submitted = true;
       }
 
-      if (!closeComplete && !worker->registerGenericPost(updateCloseStatus, period)) continue;
+      if (!closeComplete && !worker->registerGenericPost(updateCloseStatus, period)) {
+        continue;
+      }
     }
 
     if (!closeComplete) {
@@ -357,7 +381,9 @@ void Endpoint::closeBlocking(uint64_t period, uint64_t maxAttempts)
   }
   ucxx_trace("ucxx::Endpoint::%s, Endpoint: %p, UCP handle: %p, closed", __func__, this, _handle);
 
-  if (UCS_PTR_IS_PTR(status)) ucp_request_free(status);
+  if (UCS_PTR_IS_PTR(status)) {
+    ucp_request_free(status);
+  }
 
   {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -379,7 +405,9 @@ ucp_ep_h Endpoint::getHandle() { return _handle; }
 
 bool Endpoint::isAlive() const
 {
-  if (!_endpointErrorHandling) return true;
+  if (!_endpointErrorHandling) {
+    return true;
+  }
 
   return _status == UCS_INPROGRESS;
 }
@@ -388,7 +416,9 @@ void Endpoint::raiseOnError()
 {
   ucs_status_t status = _status;
 
-  if (status == UCS_OK || status == UCS_INPROGRESS || !_endpointErrorHandling) return;
+  if (status == UCS_OK || status == UCS_INPROGRESS || !_endpointErrorHandling) {
+    return;
+  }
 
   std::string statusString{ucs_status_string(status)};
   std::stringstream errorMsgStream;
@@ -402,8 +432,9 @@ void Endpoint::setCloseCallback(EndpointCloseCallbackUserFunction closeCallback,
 {
   std::lock_guard<std::mutex> lock(_mutex);
 
-  if (_closing.load() && closeCallback != nullptr && closeCallbackArg != nullptr)
+  if (_closing.load() && closeCallback != nullptr && closeCallbackArg != nullptr) {
     throw std::runtime_error("Endpoint is closing or has already closed.");
+  }
 
   _closeCallback    = closeCallback;
   _closeCallbackArg = closeCallbackArg;
@@ -411,7 +442,9 @@ void Endpoint::setCloseCallback(EndpointCloseCallbackUserFunction closeCallback,
 
 std::shared_ptr<Request> Endpoint::registerInflightRequest(std::shared_ptr<Request> request)
 {
-  if (!request->isCompleted()) _inflightRequests->insert(request);
+  if (!request->isCompleted()) {
+    _inflightRequests->insert(request);
+  }
 
   /**
    * If the endpoint closed or errored while the request was being submitted, the error
@@ -440,29 +473,33 @@ size_t Endpoint::cancelInflightRequestsBlocking(uint64_t period, uint64_t maxAtt
 
   if (std::this_thread::get_id() == worker->getProgressThreadId()) {
     canceled = _inflightRequests->cancelAll();
-    for (uint64_t i = 0; i < maxAttempts && _inflightRequests->getCancelingSize() > 0; ++i)
+    for (uint64_t i = 0; i < maxAttempts && _inflightRequests->getCancelingSize() > 0; ++i) {
       worker->progress();
+    }
   } else if (worker->isProgressThreadRunning()) {
     bool cancelSuccess = false;
     for (uint64_t i = 0; i < maxAttempts && !cancelSuccess; ++i) {
       if (!worker->registerGenericPre(
-            [this, &canceled]() { canceled += _inflightRequests->cancelAll(); }, period))
+            [this, &canceled]() { canceled += _inflightRequests->cancelAll(); }, period)) {
         continue;
+      }
 
       if (!worker->registerGenericPost(
             [this, &cancelSuccess]() {
               cancelSuccess = _inflightRequests->getCancelingSize() == 0;
             },
-            period))
+            period)) {
         continue;
+      }
     }
-    if (!cancelSuccess)
+    if (!cancelSuccess) {
       ucxx_debug(
         "ucxx::Endpoint::%s, Endpoint: %p, UCP handle: %p, all attempts to "
         "cancel inflight requests failed",
         __func__,
         this,
         _handle);
+    }
   } else {
     canceled = _inflightRequests->cancelAll();
   }

@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -26,7 +26,9 @@ void WorkerProgressThread::progressUntilSync(
    */
   setThreadId();
 
-  if (startCallback) startCallback(startCallbackArg);
+  if (startCallback) {
+    startCallback(startCallbackArg);
+  }
 
   while (!stop->load(std::memory_order_acquire)) {
     delayedSubmissionCollection->processPre();

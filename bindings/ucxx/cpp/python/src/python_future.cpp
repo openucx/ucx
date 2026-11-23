@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -35,8 +35,9 @@ std::shared_ptr<::ucxx::Future> createFuture(std::shared_ptr<::ucxx::Notifier> n
 std::shared_ptr<::ucxx::Future> createFutureWithEventLoop(
   PyObject* asyncioEventLoop, std::shared_ptr<::ucxx::Notifier> notifier)
 {
-  if (asyncioEventLoop == nullptr)
+  if (asyncioEventLoop == nullptr) {
     throw std::runtime_error("The asyncio event loop cannot be a nullptr");
+  }
   return std::shared_ptr<::ucxx::Future>(new ::ucxx::python::Future(asyncioEventLoop, notifier));
 }
 
@@ -52,7 +53,9 @@ Future::~Future()
 
 void Future::set(ucs_status_t status)
 {
-  if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+  if (_handle == nullptr) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   ucxx_trace_req("ucxx::python::Future::%s, Future: %p, _handle: %p, status: %s",
                  __func__,
@@ -60,26 +63,30 @@ void Future::set(ucs_status_t status)
                  _handle,
                  ucs_status_string(status));
   if (status == UCS_OK) {
-    if (_asyncioEventLoop == nullptr)
+    if (_asyncioEventLoop == nullptr) {
       std::ignore = future_set_result(_handle, Py_True);
-    else
+    } else {
       std::ignore = future_set_result_with_event_loop(_asyncioEventLoop, _handle, Py_True);
+    }
   } else {
-    if (_asyncioEventLoop == nullptr)
+    if (_asyncioEventLoop == nullptr) {
       std::ignore = future_set_exception(
         _handle, get_python_exception_from_ucs_status(status), ucs_status_string(status));
-    else
+    } else {
       std::ignore =
         future_set_exception_with_event_loop(_asyncioEventLoop,
                                              _handle,
                                              get_python_exception_from_ucs_status(status),
                                              ucs_status_string(status));
+    }
   }
 }
 
 void Future::notify(ucs_status_t status)
 {
-  if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+  if (_handle == nullptr) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   auto s = shared_from_this();
 
@@ -94,14 +101,18 @@ void Future::notify(ucs_status_t status)
 
 void* Future::getHandle()
 {
-  if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+  if (_handle == nullptr) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   return _handle;
 }
 
 void* Future::release()
 {
-  if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+  if (_handle == nullptr) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   return std::exchange(_handle, nullptr);
 }

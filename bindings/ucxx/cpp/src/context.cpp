@@ -66,8 +66,9 @@ Context::Context(const ConfigMap ucxConfig, const uint64_t featureFlags)
   }
 
   ucxx_info("UCP initialized using config: ");
-  for (const auto& kv : configMap)
+  for (const auto& kv : configMap) {
     ucxx_info("  %s: %s", kv.first.c_str(), kv.second.c_str());
+  }
 }
 
 std::shared_ptr<Context> detail::ConstructorFactory::createContext(const ConfigMap ucxConfig,
@@ -78,7 +79,9 @@ std::shared_ptr<Context> detail::ConstructorFactory::createContext(const ConfigM
 
 Context::~Context()
 {
-  if (_handle != nullptr) ucp_cleanup(_handle);
+  if (_handle != nullptr) {
+    ucp_cleanup(_handle);
+  }
   ucxx_trace("ucxx::Context destroyed: %p, UCP handle: %p", this, _handle);
 }
 

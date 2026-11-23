@@ -82,8 +82,9 @@ RequestTag::RequestTag(
 {
   std::visit(data::dispatch{
                [this](data::TagSend) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("An endpoint is required to send tag messages");
+                 }
                },
                [](data::TagReceive) {},
                [](data::TagReceiveWithHandle) {},
@@ -185,7 +186,9 @@ void RequestTag::populateDelayedSubmissionImpl()
 {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
 
-  if (_status != UCS_INPROGRESS || _request != nullptr) return;
+  if (_status != UCS_INPROGRESS || _request != nullptr) {
+    return;
+  }
 
   bool terminate =
     std::visit(data::dispatch{
@@ -216,12 +219,14 @@ void RequestTag::populateDelayedSubmissionImpl()
                  [](auto) -> decltype(terminate) { throw std::runtime_error("Unreachable"); },
                },
                _requestData);
-  if (terminate) return;
+  if (terminate) {
+    return;
+  }
 
   request();
 
   auto log = [this](const void* buffer, const size_t length, const Tag tag, const TagMask tagMask) {
-    if (_enablePythonFuture)
+    if (_enablePythonFuture) {
       ucxx_trace_req_f(_ownerString.c_str(),
                        this,
                        _request,
@@ -234,7 +239,7 @@ void RequestTag::populateDelayedSubmissionImpl()
                        tagMask,
                        _future.get(),
                        _future->getHandle());
-    else
+    } else {
       ucxx_trace_req_f(
         _ownerString.c_str(),
         this,
@@ -245,6 +250,7 @@ void RequestTag::populateDelayedSubmissionImpl()
         length,
         tag,
         tagMask);
+    }
   };
 
   std::visit(data::dispatch{
@@ -265,7 +271,9 @@ void RequestTag::populateDelayedSubmissionImpl()
              _requestData);
 
   process();
-  if (_cancelRequested) Request::cancel();
+  if (_cancelRequested) {
+    Request::cancel();
+  }
 }
 
 }  // namespace ucxx

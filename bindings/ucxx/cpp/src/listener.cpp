@@ -25,8 +25,9 @@ Listener::Listener(std::shared_ptr<Worker> worker,
                    ucp_listener_conn_callback_t callback,
                    void* callbackArgs)
 {
-  if (worker == nullptr || worker->getHandle() == nullptr)
+  if (worker == nullptr || worker->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
+  }
 
   ucp_listener_params_t params = {
     .field_mask   = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR | UCP_LISTENER_PARAM_FIELD_CONN_HANDLER,

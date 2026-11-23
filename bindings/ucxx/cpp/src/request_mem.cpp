@@ -68,12 +68,14 @@ RequestMem::RequestMem(std::shared_ptr<Endpoint> endpoint,
 {
   std::visit(data::dispatch{
                [this](data::MemPut) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("A valid endpoint is required to send memory messages.");
+                 }
                },
                [this](data::MemGet) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("A valid endpoint is required to receive memory messages.");
+                 }
                },
                [](auto) { throw std::runtime_error("Unreachable"); },
              },
@@ -154,14 +156,16 @@ void RequestMem::populateDelayedSubmissionImpl()
                  [](auto) -> decltype(terminate) { throw std::runtime_error("Unreachable"); },
                },
                _requestData);
-  if (terminate) return;
+  if (terminate) {
+    return;
+  }
 
   request();
 
   auto log =
     [this](
       const void* buffer, const size_t length, const uint64_t remoteAddr, const ucp_rkey_h rkey) {
-      if (_enablePythonFuture)
+      if (_enablePythonFuture) {
         ucxx_trace_req_f(
           _ownerString.c_str(),
           this,
@@ -175,7 +179,7 @@ void RequestMem::populateDelayedSubmissionImpl()
           rkey,
           _future.get(),
           _future->getHandle());
-      else
+      } else {
         ucxx_trace_req_f(
           _ownerString.c_str(),
           this,
@@ -186,6 +190,7 @@ void RequestMem::populateDelayedSubmissionImpl()
           length,
           remoteAddr,
           rkey);
+      }
     };
 
   std::visit(data::dispatch{

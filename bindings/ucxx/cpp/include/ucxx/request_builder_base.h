@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
@@ -57,7 +57,9 @@ class RequestBuilderBase {
    */
   void markBuilt()
   {
-    if (_built) throw std::logic_error("Builder::build() called more than once");
+    if (_built) {
+      throw std::logic_error("Builder::build() called more than once");
+    }
     _built = true;
   }
 

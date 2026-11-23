@@ -40,8 +40,9 @@ Worker::Worker(std::shared_ptr<Context> context,
                const bool enableFuture)
   : _enableFuture(enableFuture)
 {
-  if (context == nullptr || context->getHandle() == nullptr)
+  if (context == nullptr || context->getHandle() == nullptr) {
     throw std::runtime_error("Context not initialized");
+  }
 #if UCXX_ENABLE_CCCL
   _cudaBufferType = BufferType::CCCL;
 #endif
@@ -84,7 +85,9 @@ Worker::Worker(std::shared_ptr<Context> context,
 void Worker::drainWorkerTagRecv()
 {
   auto context = std::static_pointer_cast<Context>(_parent);
-  if (!(context->getFeatureFlags() & UCP_FEATURE_TAG)) return;
+  if (!(context->getFeatureFlags() & UCP_FEATURE_TAG)) {
+    return;
+  }
 
   ucp_tag_message_h message;
   ucp_tag_recv_info_t info;
@@ -108,8 +111,9 @@ void Worker::drainWorkerTagRecv()
       ucp_tag_msg_recv_nbx(_handle, buf.data(), info.length, message, &param);
 
     if (UCS_PTR_IS_PTR(status)) {
-      while (ucp_request_check_status(status) == UCS_INPROGRESS)
+      while (ucp_request_check_status(status) == UCS_INPROGRESS) {
         progress();
+      }
 
       ucp_request_free(status);
     } else if (UCS_PTR_IS_ERR(status)) {
@@ -132,7 +136,9 @@ std::shared_ptr<RequestAm> Worker::getAmRecv(
   if (reqs != recvPool.end() && !reqs->second.empty()) {
     auto req = reqs->second.front();
     reqs->second.pop();
-    if (reqs->second.empty()) recvPool.erase(reqs);
+    if (reqs->second.empty()) {
+      recvPool.erase(reqs);
+    }
     return req;
   } else {
     auto req        = createAmRecvRequestFunction();
@@ -187,7 +193,9 @@ Worker::~Worker()
   ucp_worker_destroy(_handle);
   ucxx_trace("Worker destroyed: %p, UCP handle: %p", this, _handle);
 
-  if (_epollFileDescriptor >= 0) close(_epollFileDescriptor);
+  if (_epollFileDescriptor >= 0) {
+    close(_epollFileDescriptor);
+  }
 }
 
 ucp_worker_h Worker::getHandle() { return _handle; }
@@ -228,8 +236,9 @@ BufferType Worker::getCudaBufferType() const { return _cudaBufferType; }
 
 void Worker::setCudaBufferType(BufferType bufferType)
 {
-  if (bufferType != BufferType::CCCL)
+  if (bufferType != BufferType::CCCL) {
     throw std::invalid_argument("cudaBufferType must be BufferType::CCCL");
+  }
   _cudaBufferType = bufferType;
 }
 
@@ -242,14 +251,18 @@ void Worker::initBlockingProgressMode()
   int err;
 
   // Return if blocking progress mode was already initialized
-  if (_epollFileDescriptor >= 0) return;
+  if (_epollFileDescriptor >= 0) {
+    return;
+  }
 
   utils::ucsErrorThrow(ucp_worker_get_efd(_handle, &_workerFileDescriptor));
 
   arm();
 
   _epollFileDescriptor = epoll_create(1);
-  if (_epollFileDescriptor == -1) throw std::ios_base::failure("epoll_create(1) returned -1");
+  if (_epollFileDescriptor == -1) {
+    throw std::ios_base::failure("epoll_create(1) returned -1");
+  }
 
   epoll_event workerEvent = {.events = EPOLLIN,
                              .data   = {
@@ -264,8 +277,9 @@ void Worker::initBlockingProgressMode()
 
 int Worker::getEpollFileDescriptor()
 {
-  if (_epollFileDescriptor == 0)
+  if (_epollFileDescriptor == 0) {
     throw std::runtime_error("Worker not running in blocking progress mode");
+  }
 
   return _epollFileDescriptor;
 }
@@ -273,7 +287,9 @@ int Worker::getEpollFileDescriptor()
 bool Worker::arm()
 {
   ucs_status_t status = ucp_worker_arm(_handle);
-  if (status == UCS_ERR_BUSY) return false;
+  if (status == UCS_ERR_BUSY) {
+    return false;
+  }
   utils::ucsErrorThrow(status);
   return true;
 }
@@ -283,9 +299,13 @@ bool Worker::progressWorkerEvent(const int epollTimeout)
   int ret;
   epoll_event ev;
 
-  if (progress()) return true;
+  if (progress()) {
+    return true;
+  }
 
-  if ((_epollFileDescriptor == -1) || !arm()) return false;
+  if ((_epollFileDescriptor == -1) || !arm()) {
+    return false;
+  }
 
   do {
     ret = epoll_wait(_epollFileDescriptor, &ev, 1, epollTimeout);
@@ -326,10 +346,14 @@ bool Worker::progress()
     progressScheduledCancel =
       _inflightRequestsToCancel != nullptr && _inflightRequestsToCancel->size() > 0;
   }
-  if (progressScheduledCancel) ret |= progressPending();
+  if (progressScheduledCancel) {
+    ret |= progressPending();
+  }
 
   // Requests that were not completed now must be canceled.
-  if (cancelInflightRequests(3000000000 /* 3s */, 3) > 0) ret |= progressPending();
+  if (cancelInflightRequests(3000000000 /* 3s */, 3) > 0) {
+    ret |= progressPending();
+  }
 
   return ret;
 }
@@ -384,14 +408,17 @@ bool Worker::registerGenericPre(DelayedSubmissionCallbackType callback, uint64_t
       auto ret = callbackNotifier.wait(period, signalWorkerFunction);
 
       try {
-        if (!ret) _delayedSubmissionCollection->cancelGenericPre(id);
+        if (!ret) {
+          _delayedSubmissionCollection->cancelGenericPre(id);
+        }
         return ret;
       } catch (const std::runtime_error& e) {
-        if (++retryCount % 10 == 0)
+        if (++retryCount % 10 == 0) {
           ucxx_warn(
             "Could not cancel after %lu attempts, the callback has not returned and the process "
             "may stop responding.",
             retryCount);
+        }
       }
     }
   }
@@ -431,14 +458,17 @@ bool Worker::registerGenericPost(DelayedSubmissionCallbackType callback, uint64_
       auto ret = callbackNotifier.wait(period, signalWorkerFunction);
 
       try {
-        if (!ret) _delayedSubmissionCollection->cancelGenericPost(id);
+        if (!ret) {
+          _delayedSubmissionCollection->cancelGenericPost(id);
+        }
         return ret;
       } catch (const std::runtime_error& e) {
-        if (++retryCount % 10 == 0)
+        if (++retryCount % 10 == 0) {
           ucxx_warn(
             "Could not cancel after %lu attempts, the callback has not returned and the process "
             "may stop responding.",
             retryCount);
+        }
       }
     }
   }
@@ -520,15 +550,16 @@ void Worker::stopProgressThreadNoWarn()
 
 void Worker::stopProgressThread()
 {
-  if (!isProgressThreadRunning())
+  if (!isProgressThreadRunning()) {
     ucxx_debug(
       "ucxx::Worker::%s, Worker: %p, UCP handle: %p, worker progress thread not "
       "running or already stopped",
       __func__,
       this,
       _handle);
-  else
+  } else {
     stopProgressThreadNoWarn();
+  }
 }
 
 bool Worker::isProgressThreadRunning()
@@ -553,8 +584,9 @@ size_t Worker::cancelInflightRequests(uint64_t period, uint64_t maxAttempts)
 
   if (std::this_thread::get_id() == getProgressThreadId()) {
     canceled = inflightRequestsToCancel->cancelAll();
-    for (uint64_t i = 0; i < maxAttempts && inflightRequestsToCancel->getCancelingSize() > 0; ++i)
+    for (uint64_t i = 0; i < maxAttempts && inflightRequestsToCancel->getCancelingSize() > 0; ++i) {
       progressPending();
+    }
   } else if (isProgressThreadRunning()) {
     bool cancelSuccess = false;
     for (uint64_t i = 0; i < maxAttempts && !cancelSuccess; ++i) {
@@ -562,24 +594,27 @@ size_t Worker::cancelInflightRequests(uint64_t period, uint64_t maxAttempts)
             [&canceled, &inflightRequestsToCancel]() {
               canceled += inflightRequestsToCancel->cancelAll();
             },
-            period))
+            period)) {
         continue;
+      }
 
       if (!registerGenericPost(
             [this, &inflightRequestsToCancel, &cancelSuccess]() {
               cancelSuccess = inflightRequestsToCancel->getCancelingSize() == 0;
             },
-            period))
+            period)) {
         continue;
+      }
     }
 
-    if (!cancelSuccess)
+    if (!cancelSuccess) {
       ucxx_debug(
         "ucxx::Worker::%s, Worker: %p, UCP handle: %p, all attempts to cancel "
         "inflight requests failed",
         __func__,
         this,
         _handle);
+    }
   } else {
     canceled = inflightRequestsToCancel->cancelAll();
   }
@@ -648,7 +683,9 @@ RequestTagBuilder Worker::tagRecvBuilder(void* buffer, size_t length, Tag tag, T
 RequestTagBuilder Worker::tagRecvWithHandleBuilder(void* buffer,
                                                    std::shared_ptr<TagProbeInfo> probeInfo)
 {
-  if (!probeInfo->isMatched()) { throw std::invalid_argument("TagProbeInfo must be matched"); }
+  if (!probeInfo->isMatched()) {
+    throw std::invalid_argument("TagProbeInfo must be matched");
+  }
   const auto length = probeInfo->getInfo().length;
   return tagRecvWithHandleBuilder(buffer, length, std::move(probeInfo));
 }
@@ -657,7 +694,9 @@ RequestTagBuilder Worker::tagRecvWithHandleBuilder(void* buffer,
                                                    size_t length,
                                                    std::shared_ptr<TagProbeInfo> probeInfo)
 {
-  if (!probeInfo->isMatched()) { throw std::invalid_argument("TagProbeInfo must be matched"); }
+  if (!probeInfo->isMatched()) {
+    throw std::invalid_argument("TagProbeInfo must be matched");
+  }
 
   // getHandle() will throw runtime_error if handle is nullptr or consumed
   try {
@@ -697,20 +736,25 @@ ListenerBuilder Worker::listenerBuilder(uint16_t port,
 
 void Worker::registerAmAllocator(ucs_memory_type_t memoryType, AmAllocatorType allocator)
 {
-  if (_amData == nullptr)
+  if (_amData == nullptr) {
     throw std::runtime_error("Active Messages was not enabled during context creation");
+  }
   _amData->_allocators.insert_or_assign(memoryType, allocator);
 }
 
 void Worker::registerAmReceiverCallback(AmReceiverCallbackInfo info,
                                         AmReceiverCallbackType callback)
 {
-  if (info.owner == "ucxx") throw std::runtime_error("The owner name 'ucxx' is reserved.");
-  if (_amData->_receiverCallbacks.find(info.owner) == _amData->_receiverCallbacks.end())
+  if (info.owner == "ucxx") {
+    throw std::runtime_error("The owner name 'ucxx' is reserved.");
+  }
+  if (_amData->_receiverCallbacks.find(info.owner) == _amData->_receiverCallbacks.end()) {
     _amData->_receiverCallbacks[info.owner] = {};
+  }
   if (_amData->_receiverCallbacks[info.owner].find(info.id) !=
-      _amData->_receiverCallbacks[info.owner].end())
+      _amData->_receiverCallbacks[info.owner].end()) {
     throw std::runtime_error("Callback with given owner and identifier is already registered");
+  }
 
   _amData->_receiverCallbacks[info.owner][info.id] = callback;
 }

@@ -58,8 +58,9 @@ std::shared_ptr<Worker> WorkerBuilder::build()
   auto worker = detail::ConstructorFactory::createWorker(
     _impl->context, _impl->enableDelayedSubmission, _impl->enableFuture);
   worker->_enableRequestAttributes = _impl->enableRequestAttributes;
-  if (_impl->cudaBufferType != BufferType::Invalid)
+  if (_impl->cudaBufferType != BufferType::Invalid) {
     worker->setCudaBufferType(_impl->cudaBufferType);
+  }
   return worker;
 }
 

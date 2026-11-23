@@ -57,10 +57,11 @@ class RmaTest : public ::testing::TestWithParam<std::tuple<ucs_memory_type_t, si
   void* preallocate()
   {
     if (_preallocateBuffer) {
-      if (_memoryType == UCS_MEMORY_TYPE_HOST)
+      if (_memoryType == UCS_MEMORY_TYPE_HOST) {
         return malloc(_messageSize);
-      else
+      } else {
         throw std::runtime_error("Unsupported memory type");
+      }
     }
     return nullptr;
   }
@@ -68,7 +69,9 @@ class RmaTest : public ::testing::TestWithParam<std::tuple<ucs_memory_type_t, si
   void release()
   {
     if (_preallocateBuffer && _buffer != nullptr) {
-      if (_memoryType == UCS_MEMORY_TYPE_HOST) free(_buffer);
+      if (_memoryType == UCS_MEMORY_TYPE_HOST) {
+        free(_buffer);
+      }
     }
   }
 };
@@ -95,10 +98,11 @@ TEST_P(RmaTest, MemoryHandle)
 {
   auto memoryHandle = _context->memoryHandleBuilder(_messageSize).buffer(_buffer).build();
   ASSERT_GE(memoryHandle->getSize(), _messageSize);
-  if (_messageSize == 0)
+  if (_messageSize == 0) {
     ASSERT_EQ(memoryHandle->getBaseAddress(), 0);
-  else
+  } else {
     ASSERT_NE(memoryHandle->getBaseAddress(), 0);
+  }
 
   ASSERT_NE(memoryHandle->getHandle(), nullptr);
 }

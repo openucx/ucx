@@ -143,3 +143,29 @@ outside GitHub Actions:
 - Scripts download artifacts from earlier jobs with `rapids-download-from-github` and
   configure S3-backed sccache with `rapids-configure-sccache`; outside GitHub Actions these
   need to be replaced or stubbed.
+
+## Crash diagnostics
+
+Test scripts (`run_python.sh`, `run_cpp.sh`) help diagnose crashes and hangs:
+
+- **Fail fast on pytest-xdist worker crashes.** Tests using `pytest -n` pass
+  `--max-worker-restart=0`: a crashed worker fails the run immediately. Replacing it with
+  `--dist loadgroup` may otherwise hang the session until the `timeout_with_stack.py`
+  timeout (observed with pytest-xdist 3.8.0).
+- **Native backtraces on fatal signals.** `configure_crash_backtraces` (in
+  `test_common.sh`) configures UCX's error handler for every process that loads UCX,
+  including pytest-xdist workers and their subprocesses. On SIGSEGV, SIGBUS, SIGILL or
+  SIGFPE, if GDB can attach to the process (Yama `ptrace_scope=0`, or CAP_SYS_PTRACE as
+  in CI's `--cap-add CAP_SYS_PTRACE`), UCX runs `crash_backtrace.sh`, which prints the
+  native stacks of all threads to stderr. Otherwise UCX prints the native stack of the
+  crashing thread (`UCX_HANDLE_ERRORS=bt`). Python's faulthandler output follows in both
+  cases, and nothing is printed on success. Set `UCX_HANDLE_ERRORS` before running
+  the scripts to override this. Core dumps are not used, since `core_pattern` is set by
+  the host and can't be changed from the container.
+- **Stacks on timeout.** `timeout_with_stack.py` prints native and Python stacks of
+  every process when a test times out.
+- GDB is available in all test jobs: `rapidsai/citestwheel` images ship it and conda
+  test environments install it (see `dependencies.yaml`). Test jobs run as root with
+  `--cap-add CAP_SYS_PTRACE` (`container-options` in `.github/workflows/`), which allows
+  GDB to attach to other processes of the container regardless of the host's Yama
+  `ptrace_scope` (unless it is `3`).

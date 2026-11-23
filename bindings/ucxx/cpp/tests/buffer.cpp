@@ -138,7 +138,9 @@ TEST_P(BufferAllocator, TestThrowAfterRelease)
 TEST_P(BufferAllocator, TestUsableOnNonBlockingStream)
 {
 #if UCXX_ENABLE_CCCL
-  if (_type != ucxx::BufferType::CCCL) GTEST_SKIP() << "Requires a CCCL device buffer";
+  if (_type != ucxx::BufferType::CCCL) {
+    GTEST_SKIP() << "Requires a CCCL device buffer";
+  }
 
   cudaStream_t stream;
   ASSERT_EQ(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), cudaSuccess);

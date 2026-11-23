@@ -21,7 +21,7 @@ repos:
     rev: v20.1.8
     hooks:
       - id: clang-format
-        files: \.(h|cpp)$
+        files: \.(h|hpp|cpp|cu|cuh)$
         types_or: [file]
         args: ['-fallback-style=none', '-style=file', '-i']
   - repo: https://github.com/cpplint/cpplint

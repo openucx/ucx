@@ -34,10 +34,12 @@ Request::Request(std::shared_ptr<Component> endpointOrWorker,
   _worker =
     _endpoint ? _endpoint->getWorker() : std::dynamic_pointer_cast<Worker>(endpointOrWorker);
 
-  if (_worker == nullptr || _worker->getHandle() == nullptr)
+  if (_worker == nullptr || _worker->getHandle() == nullptr) {
     throw ucxx::Error("Worker not initialized");
-  if (_endpoint != nullptr && _endpoint->getHandle() == nullptr)
+  }
+  if (_endpoint != nullptr && _endpoint->getHandle() == nullptr) {
     throw ucxx::Error("Endpoint not initialized");
+  }
 
   _enablePythonFuture &= _worker->isFutureEnabled();
   if (_enablePythonFuture) {
@@ -107,7 +109,9 @@ void Request::cancel()
 void Request::populateDelayedSubmission()
 {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
-  if (_status != UCS_INPROGRESS) return;
+  if (_status != UCS_INPROGRESS) {
+    return;
+  }
   populateDelayedSubmissionImpl();
 }
 
@@ -149,7 +153,7 @@ void Request::callback(void* request, ucs_status_t status)
     ucxx_debug("ucxx::Request: %p destroyed before callback() was executed", this);
     return;
   }
-  if (_status != UCS_INPROGRESS)
+  if (_status != UCS_INPROGRESS) {
     ucxx_trace_req_f(_ownerString.c_str(),
                      this,
                      request,
@@ -159,6 +163,7 @@ void Request::callback(void* request, ucs_status_t status)
                      ucs_status_string(_status),
                      status,
                      ucs_status_string(status));
+  }
 
   ucxx_trace_req_f(_ownerString.c_str(), this, request, _operationName.c_str(), "completed");
   setStatus(status);
@@ -213,7 +218,9 @@ void Request::setStatus(ucs_status_t status)
     std::lock_guard<std::recursive_mutex> lock(_mutex);
 
     auto requestPtr = std::static_pointer_cast<Request>(shared_from_this());
-    if (_endpoint != nullptr) _endpoint->removeInflightRequest(requestPtr);
+    if (_endpoint != nullptr) {
+      _endpoint->removeInflightRequest(requestPtr);
+    }
     _worker->removeInflightRequest(requestPtr);
 
     ucxx_trace_req_f(_ownerString.c_str(),
@@ -224,7 +231,7 @@ void Request::setStatus(ucs_status_t status)
                      status,
                      ucs_status_string(status));
 
-    if (_status != UCS_INPROGRESS)
+    if (_status != UCS_INPROGRESS) {
       ucxx_error(
         "ucxx::Request: %p, setStatus called with status: %d (%s) but status: %d (%s) was "
         "already set",
@@ -233,6 +240,7 @@ void Request::setStatus(ucs_status_t status)
         ucs_status_string(status),
         _status,
         ucs_status_string(_status));
+    }
     _status = status;
 
     if (_enablePythonFuture) {
@@ -268,7 +276,9 @@ void Request::publishRequest(void* request)
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   _request = request;
 
-  if (_requestAttr.memoryType != UCS_MEMORY_TYPE_UNKNOWN) return;
+  if (_requestAttr.memoryType != UCS_MEMORY_TYPE_UNKNOWN) {
+    return;
+  }
 
   ucp_request_attr_t result;
 
@@ -294,14 +304,17 @@ void Request::publishRequest(void* request)
 
 Request::Attributes Request::queryAttributes()
 {
-  if (!_worker->isRequestAttributesEnabled())
+  if (!_worker->isRequestAttributesEnabled()) {
     throw ucxx::UnsupportedError(
       "Request attributes querying is disabled on the owning worker; build the worker "
       "with `ucxx::WorkerBuilder::requestAttributes(true)` to enable it");
+  }
 
   std::lock_guard<std::recursive_mutex> lock(_mutex);
 
-  if (_requestAttr.memoryType != UCS_MEMORY_TYPE_UNKNOWN) return _requestAttr;
+  if (_requestAttr.memoryType != UCS_MEMORY_TYPE_UNKNOWN) {
+    return _requestAttr;
+  }
 
   throw ucxx::NoElemError(
     "Request attributes are not available for this request: UCX took an inline-completion "

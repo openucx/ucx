@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -30,7 +30,9 @@ bool loopWithTimeout(std::chrono::milliseconds timeout, std::function<bool()> f)
   auto endTime   = startTime + std::chrono::milliseconds(timeout);
 
   while (std::chrono::system_clock::now() < endTime) {
-    if (f()) return true;
+    if (f()) {
+      return true;
+    }
   }
   return false;
 }

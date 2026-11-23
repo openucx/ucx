@@ -34,20 +34,23 @@ RequestTagMulti::RequestTagMulti(
       endpoint, data::getRequestData(requestData), std::move(operationName), enablePythonFuture)
 {
   auto worker = endpoint->getWorker();
-  if (enablePythonFuture) _future = worker->getFuture();
+  if (enablePythonFuture) {
+    _future = worker->getFuture();
+  }
 }
 
 RequestTagMulti::~RequestTagMulti()
 {
   for (auto& br : _bufferRequests) {
     const auto& ptr = br->request.get();
-    if (ptr != nullptr)
+    if (ptr != nullptr) {
       ucxx_trace_req_f(_ownerString.c_str(),
                        this,
                        _request,
                        _operationName.c_str(),
                        "destroying BufferRequest: %p",
                        br->request.get());
+    }
 
     /**
      * FIXME: The `BufferRequest`s destructor should be doing this, but it seems a
@@ -134,8 +137,9 @@ void RequestTagMulti::recvFrames()
       auto bufferRequest = std::make_shared<BufferRequest>();
       _bufferRequests.push_back(bufferRequest);
       const auto bufferType = h.isCUDA[i] ? _worker->getCudaBufferType() : ucxx::BufferType::Host;
-      if (h.isCUDA[i] && bufferType == ucxx::BufferType::Invalid)
+      if (h.isCUDA[i] && bufferType == ucxx::BufferType::Invalid) {
         throw std::runtime_error("CUDA buffer support not enabled, no buffer type configured");
+      }
       auto buf               = allocateBuffer(bufferType, h.size[i]);
       bufferRequest->request = static_cast<std::shared_ptr<Request>>(
         _endpoint->tagRecvBuilder(buf->data(), buf->getSize(), tagPair.first, tagPair.second)
@@ -202,7 +206,9 @@ void RequestTagMulti::markCompleted(ucs_status_t status)
 
   std::lock_guard<std::mutex> lock(_completedRequestsMutex);
 
-  if (_finalStatus == UCS_OK && status != UCS_OK) _finalStatus = status;
+  if (_finalStatus == UCS_OK && status != UCS_OK) {
+    _finalStatus = status;
+  }
 
   if (++_completedRequests == _totalRequests) {
     setStatus(_finalStatus);
@@ -310,17 +316,20 @@ void RequestTagMulti::recvCallback(ucs_status_t status)
                        tagPair.second);
 
       _status = status;
-      if (_future) _future->notify(status);
+      if (_future) {
+        _future->notify(status);
+      }
 
       return;
     }
 
     auto header = Header(*_bufferRequests.back()->stringBuffer);
 
-    if (header.next)
+    if (header.next) {
       recvHeader();
-    else
+    } else {
       recvFrames();
+    }
   }
 }
 
@@ -377,8 +386,11 @@ void RequestTagMulti::populateDelayedSubmissionImpl() {}
 
 void RequestTagMulti::cancel()
 {
-  for (auto& br : _bufferRequests)
-    if (br->request) br->request->cancel();
+  for (auto& br : _bufferRequests) {
+    if (br->request) {
+      br->request->cancel();
+    }
+  }
 }
 
 }  // namespace ucxx

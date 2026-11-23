@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -32,8 +32,9 @@ void PythonFutureTaskCollector::collect()
 
   {
     std::lock_guard<std::mutex> lock(_mutex);
-    for (auto& handle : _toCollect)
+    for (auto& handle : _toCollect) {
       Py_XDECREF(handle);
+    }
     ucxx_trace("ucxx::python::PythonFutureTaskCollector::%s, collected %lu PythonFutureTasks",
                __func__,
                _toCollect.size());
@@ -50,9 +51,10 @@ PythonFutureTaskCollector::~PythonFutureTaskCollector()
   {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    if (_toCollect.size() > 0)
+    if (_toCollect.size() > 0) {
       ucxx_warn("Destroying PythonFutureTaskCollector with %lu uncollected tasks",
                 _toCollect.size());
+    }
   }
 }
 

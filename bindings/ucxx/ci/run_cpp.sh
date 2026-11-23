@@ -10,6 +10,7 @@ TIMEOUT_TOOL_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"/timeout_with_st
 source "$(dirname "$0")/test_common.sh"
 
 configure_ucx_tls
+configure_crash_backtraces
 
 # Support invoking run_pytests.sh outside the script directory
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"/../

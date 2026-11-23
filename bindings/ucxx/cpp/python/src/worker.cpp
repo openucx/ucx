@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <functional>
@@ -44,7 +44,9 @@ Worker::Worker(std::shared_ptr<Context> context,
                const bool enableFuture)
   : ::ucxx::Worker(context, enableDelayedSubmission, enableFuture)
 {
-  if (_enableFuture) _notifier = createNotifier();
+  if (_enableFuture) {
+    _notifier = createNotifier();
+  }
 }
 
 std::shared_ptr<::ucxx::Worker> createWorker(std::shared_ptr<Context> context,
@@ -85,15 +87,18 @@ void Worker::populateFuturesPool()
   size_t futuresNeeded         = 0;
   {
     std::lock_guard<std::mutex> lock(_futuresPoolMutex);
-    if (_futuresPool.size() >= minPoolSize) return;
+    if (_futuresPool.size() >= minPoolSize) {
+      return;
+    }
     futuresNeeded = maxPoolSize - _futuresPool.size();
   }
 
   decltype(_futuresPool) newFuturesPool;
   {
     GilState gil;
-    for (size_t i = 0; i < futuresNeeded; ++i)
+    for (size_t i = 0; i < futuresNeeded; ++i) {
       newFuturesPool.emplace(createFuture(_notifier));
+    }
   }
 
   std::lock_guard<std::mutex> lock(_futuresPoolMutex);
@@ -128,7 +133,9 @@ std::shared_ptr<::ucxx::Future> Worker::getFuture()
 
   auto popFuture = [this]() -> std::shared_ptr<::ucxx::Future> {
     std::lock_guard<std::mutex> lock(_futuresPoolMutex);
-    if (_futuresPool.empty()) return nullptr;
+    if (_futuresPool.empty()) {
+      return nullptr;
+    }
 
     auto ret = _futuresPool.front();
     _futuresPool.pop();

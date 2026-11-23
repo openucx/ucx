@@ -27,8 +27,9 @@ RequestAmBuilder& RequestAmBuilder::receiverCallbackInfo(
   std::optional<AmReceiverCallbackInfo> info) &
 {
   auto* amSend = std::get_if<data::AmSend>(&_requestData);
-  if (amSend == nullptr)
+  if (amSend == nullptr) {
     throw std::logic_error("receiverCallbackInfo() is only valid for active message sends");
+  }
 
   auto params                 = AmSendParams{};
   params.flags                = amSend->_flags;

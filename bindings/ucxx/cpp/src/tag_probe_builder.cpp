@@ -34,8 +34,9 @@ UCXX_BUILDER_PIMPL_DEFAULTS(TagProbeInfoBuilder, TagProbeInfo)
 
 std::shared_ptr<TagProbeInfo> TagProbeInfoBuilder::build()
 {
-  if (_impl->matched)
+  if (_impl->matched) {
     return detail::ConstructorFactory::createTagProbeInfo(_impl->info, _impl->handle);
+  }
   return detail::ConstructorFactory::createTagProbeInfo();
 }
 

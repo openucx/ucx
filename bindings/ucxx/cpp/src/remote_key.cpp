@@ -100,9 +100,10 @@ SerializedRemoteKey RemoteKey::serialize() const
 {
   std::stringstream ss;
 
-  if (_packedRemoteKeySize > std::numeric_limits<std::streamsize>::max())
+  if (_packedRemoteKeySize > std::numeric_limits<std::streamsize>::max()) {
     // We should never have a remote key this big, but just in case.
     throw std::overflow_error("Remote key is too large to deserialize");
+  }
 
   ss.write(reinterpret_cast<char const*>(&_packedRemoteKeySize), sizeof(_packedRemoteKeySize));
   ss.write(reinterpret_cast<char const*>(_packedRemoteKey),
@@ -134,8 +135,9 @@ void RemoteKey::deserialize(const SerializedRemoteKey& serializedRemoteKey)
   ss.read(reinterpret_cast<char*>(&expectedHash), sizeof(expectedHash));
   std::hash<std::string> hasher;
   SerializedRemoteKeyHash actualHash = hasher(serializedRemoteKeyData);
-  if (actualHash != expectedHash)
+  if (actualHash != expectedHash) {
     throw std::runtime_error("Checksum error of serialized remote key");
+  }
 
   ss = std::stringstream{std::string(serializedRemoteKey.begin() + sizeof(SerializedRemoteKeyHash),
                                      serializedRemoteKey.end())};
@@ -145,8 +147,9 @@ void RemoteKey::deserialize(const SerializedRemoteKey& serializedRemoteKey)
   const size_t fixedFieldsSize =
     sizeof(_packedRemoteKeySize) + sizeof(_memoryBaseAddress) + sizeof(_memorySize);
   if (serializedRemoteKeyData.size() < fixedFieldsSize ||
-      _packedRemoteKeySize > serializedRemoteKeyData.size() - fixedFieldsSize)
+      _packedRemoteKeySize > serializedRemoteKeyData.size() - fixedFieldsSize) {
     throw std::overflow_error("Packed remote key size exceeds serialized data length");
+  }
 
   _packedRemoteKeyVector = std::vector<char>(_packedRemoteKeySize);
   _packedRemoteKey       = _packedRemoteKeyVector.data();

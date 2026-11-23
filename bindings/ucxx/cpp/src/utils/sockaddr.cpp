@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <arpa/inet.h>
@@ -32,10 +32,12 @@ std::unique_ptr<struct addrinfo, void (*)(struct addrinfo*)> get_addrinfo(const 
     hints.ai_flags = AI_NUMERICSERV | AI_PASSIVE;
 
     int portsLength = ::snprintf(ports, sizeof(ports), "%u", port);
-    if (portsLength < 0 || static_cast<size_t>(portsLength) > sizeof(ports))
+    if (portsLength < 0 || static_cast<size_t>(portsLength) > sizeof(ports)) {
       throw ucxx::Error(std::string("Invalid port"));
-    if (::getaddrinfo(ip_address, ports, &hints, &result))
+    }
+    if (::getaddrinfo(ip_address, ports, &hints, &result)) {
       throw ucxx::Error(std::string("Invalid IP address or hostname"));
+    }
     info.reset(result);
   }
   return info;

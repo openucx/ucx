@@ -168,13 +168,16 @@ class AmReceiverCallbackOwnerType {
   /** @brief Construct from a null-terminated C string. Throws if length exceeds the limit. */
   AmReceiverCallbackOwnerType(const char* s)  // NOLINT(runtime/explicit)
   {
-    if (s == nullptr) return;
+    if (s == nullptr) {
+      return;
+    }
     const size_t len = std::strlen(s);
-    if (len > AmReceiverCallbackOwnerMaxLen)
+    if (len > AmReceiverCallbackOwnerMaxLen) {
       throw std::invalid_argument(
         "AmReceiverCallbackOwnerType: owner name exceeds "
         "maximum length of " +
         std::to_string(AmReceiverCallbackOwnerMaxLen) + " characters");
+    }
     std::memcpy(_data.data(), s, len);
   }
 
@@ -280,11 +283,14 @@ struct AmSendParams {
    */
   void setUserHeader(const void* data, size_t size)
   {
-    if (size > 0 && data == nullptr)
+    if (size > 0 && data == nullptr) {
       throw std::invalid_argument(
         "AmSendParams::setUserHeader received null data with non-zero size");
+    }
     userHeader.resize(size);
-    if (size > 0) memcpy(userHeader.data(), data, size);
+    if (size > 0) {
+      memcpy(userHeader.data(), data, size);
+    }
   }
 
   /**

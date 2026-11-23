@@ -467,7 +467,7 @@ dependencies:
     common:
       - output_types: conda
         packages:
-          - &libucxx_unsuffixed libucxx==0.53.*,>=0.0.0a0
+          - &libucxx_unsuffixed libucxx==0.54.*,>=0.0.0a0
     specific:
       - output_types: [requirements, constraints, pyproject]
         matrices:
@@ -475,12 +475,12 @@ dependencies:
               cuda: "12.*"
               cuda_suffixed: "true"
             packages:
-              - libucxx-cu12==0.53.*,>=0.0.0a0
+              - libucxx-cu12==0.54.*,>=0.0.0a0
           - matrix:
               cuda: "13.*"
               cuda_suffixed: "true"
             packages:
-              - libucxx-cu13==0.53.*,>=0.0.0a0
+              - libucxx-cu13==0.54.*,>=0.0.0a0
           - matrix:
               cuda_suffixed: "false"
             packages:
@@ -489,17 +489,17 @@ dependencies:
     common:
       - output_types: conda
         packages:
-          - libucxx-examples==0.53.*,>=0.0.0a0
+          - libucxx-examples==0.54.*,>=0.0.0a0
   depends_on_libucxx_tests:
     common:
       - output_types: conda
         packages:
-          - libucxx-tests==0.53.*,>=0.0.0a0
+          - libucxx-tests==0.54.*,>=0.0.0a0
   depends_on_ucxx:
     common:
       - output_types: conda
         packages:
-          - &ucxx_unsuffixed ucxx==0.53.*,>=0.0.0a0
+          - &ucxx_unsuffixed ucxx==0.54.*,>=0.0.0a0
     specific:
       - output_types: [requirements, constraints, pyproject]
         matrices:
@@ -507,12 +507,12 @@ dependencies:
               cuda: "12.*"
               cuda_suffixed: "true"
             packages:
-              - ucxx-cu12==0.53.*,>=0.0.0a0
+              - ucxx-cu12==0.54.*,>=0.0.0a0
           - matrix:
               cuda: "13.*"
               cuda_suffixed: "true"
             packages:
-              - ucxx-cu13==0.53.*,>=0.0.0a0
+              - ucxx-cu13==0.54.*,>=0.0.0a0
           - matrix:
               cuda_suffixed: "false"
             packages:
@@ -521,7 +521,7 @@ dependencies:
     common:
       - output_types: conda
         packages:
-          - ucxx-tests==0.53.*,>=0.0.0a0
+          - ucxx-tests==0.54.*,>=0.0.0a0
   # The 'no_libucx: "true"' entries below omit UCX entirely, for building/testing against a
   # UCX installation not provided by conda or wheels. Enabled in ci/ scripts with
   # UCXX_NO_LIBUCX=true; see ci/README.md for requirements and known limitations.
@@ -555,7 +555,7 @@ dependencies:
           - matrix:
             packages:
               - libucx>=1.20.0,<1.20.1
-  # UCX 1.22.0 is excluded: it can segfault inside libcuda in
+  # UCX 1.22.* is excluded: it can segfault inside libcuda in
   # cuMemGetHandleForAddressRange. Fixed on UCX main (openucx/ucx#11922).
   # See https://github.com/rapidsai/ucxx/issues/783
   depends_on_ucx_run:
@@ -567,7 +567,7 @@ dependencies:
             packages:
           - matrix:
             packages:
-              - ucx>=1.20.0,<1.23,!=1.22.0
+              - ucx>=1.20.0,<1.23,!=1.22.*
       - output_types: [requirements, constraints, pyproject]
         matrices:
           - matrix:
@@ -577,12 +577,12 @@ dependencies:
               cuda: "12.*"
               cuda_suffixed: "true"
             packages:
-              - libucx-cu12>=1.20.0,<1.23,!=1.22.0
+              - libucx-cu12>=1.20.0,<1.23,!=1.22.*
           - matrix:
               cuda: "13.*"
               cuda_suffixed: "true"
             packages:
-              - libucx-cu13>=1.20.0,<1.23,!=1.22.0
+              - libucx-cu13>=1.20.0,<1.23,!=1.22.*
           - matrix:
             packages:
-              - libucx>=1.20.0,<1.23,!=1.22.0
+              - libucx>=1.20.0,<1.23,!=1.22.*

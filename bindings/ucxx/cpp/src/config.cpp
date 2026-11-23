@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <cstdio>
@@ -26,11 +26,12 @@ void Config::readUCXConfig(ConfigMap userOptions)
     if (status != UCS_OK) {
       ucp_config_release(_handle);
 
-      if (status == UCS_ERR_NO_ELEM)
+      if (status == UCS_ERR_NO_ELEM) {
         utils::ucsErrorThrow(status,
                              std::string("Option ") + kv.first + std::string("doesn't exist"));
-      else
+      } else {
         utils::ucsErrorThrow(status);
+      }
     }
   }
 }
@@ -59,7 +60,9 @@ Config::Config(ConfigMap userOptions) { readUCXConfig(userOptions); }
 
 Config::~Config()
 {
-  if (_handle != nullptr) ucp_config_release(_handle);
+  if (_handle != nullptr) {
+    ucp_config_release(_handle);
+  }
 }
 
 ConfigMap Config::get() { return ucxConfigToMap(); }
