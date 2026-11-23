@@ -1896,6 +1896,13 @@ UCS_TEST_P(test_ucp_rma_sgl_data, various_lengths) {
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
+UCS_TEST_P(test_ucp_rma_sgl_data, various_lengths_no_inline_resp) {
+    cleanup();
+    modify_config("IB_TX_INLINE_RESP", "0", SETENV_IF_NOT_EXIST);
+    test_ucp_rma::init();
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
 UCS_TEST_P(test_ucp_rma_sgl_data, with_callback) {
     test_sgl(10, UCS_KBYTE, true, true);
 }
