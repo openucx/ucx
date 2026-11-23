@@ -1015,7 +1015,8 @@ static int uct_rc_mlx5_send_op_is_short_dm(const uct_rc_iface_send_op_t *op)
 
 static int uct_rc_mlx5_send_op_is_put_zcopy(const uct_rc_iface_send_op_t *op)
 {
-    return op->handler == uct_rc_ep_put_zcopy_completion_handler;
+    return (op->handler == uct_rc_ep_put_zcopy_completion_handler) ||
+           (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler);
 }
 
 static int uct_rc_mlx5_send_op_is_get_bcopy(const uct_rc_iface_send_op_t *op)
@@ -1026,7 +1027,8 @@ static int uct_rc_mlx5_send_op_is_get_bcopy(const uct_rc_iface_send_op_t *op)
 
 static int uct_rc_mlx5_send_op_is_get_zcopy(const uct_rc_iface_send_op_t *op)
 {
-    return op->handler == uct_rc_ep_get_zcopy_completion_handler;
+    return (op->handler == uct_rc_ep_get_zcopy_completion_handler) ||
+           (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler);
 }
 
 static int uct_rc_mlx5_send_op_is_am_zcopy(const uct_rc_iface_send_op_t *op)
@@ -1639,11 +1641,26 @@ static ucs_status_t
 uct_rc_mlx5_op_info_fill(uct_rc_mlx5_iface_common_t *iface,
                          uct_rc_mlx5_base_ep_t *ep,
                          const uct_ib_mlx5_txwq_t *txwq, uint16_t pi,
+                         uct_rc_iface_send_op_t *sgl_op,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data,
                          uct_ep_op_info_t *info)
 {
+    const struct mlx5_wqe_raddr_seg *raddr;
+    const struct mlx5_wqe_inl_data_seg *inl;
+    const struct mlx5_wqe_data_seg *dptr;
+    size_t inline_length, num_dseg;
+
     memset(info, 0, sizeof(*info));
+    if (sgl_op != NULL) {
+        uct_rc_mlx5_wqe_rma_segs(txwq, ctrl, wqe_size, &raddr, &inl,
+                                 &inline_length, &dptr, &num_dseg);
+        uct_rc_mlx5_op_info_fill_rma_zcopy(
+                txwq, uct_rc_mlx5_send_op_is_put_zcopy(sgl_op) ?
+                              UCT_EP_OP_PUT_ZCOPY : UCT_EP_OP_GET_ZCOPY,
+                sgl_op, raddr, dptr, num_dseg, callback_data, info);
+        return UCS_OK;
+    }
 
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
@@ -1893,7 +1910,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
+    uct_rc_iface_send_op_t *sgl_op = NULL;
+    uct_rc_iface_send_op_t *op;
+    uct_completion_t *comp;
     const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_rc_mlx5_op_callback_data_t callback_data;
@@ -1982,6 +2002,17 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
 
+        if (sgl_op == NULL) {
+            op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+            if ((op != NULL) &&
+                ((op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
+                 (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler))) {
+                sgl_op = ucs_queue_pull_elem_non_empty(
+                        &ep->super.txqp.outstanding, uct_rc_iface_send_op_t,
+                        queue);
+            }
+        }
+
         if ((rx_token != NULL) && (num_packets != 0)) {
             /*
              * receiver_next_psn only proves the read request was accepted by
@@ -2002,9 +2033,14 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         }
 
         if (!delivered && !uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi)) {
-            status = uct_rc_mlx5_op_info_fill(iface, ep, txwq, pi, ctrl,
+            status = uct_rc_mlx5_op_info_fill(iface, ep, txwq, pi, sgl_op, ctrl,
                                               wqe_size, &callback_data, &info);
             if (status == UCS_OK) {
+                /* The original reference keeps the SGL alive even when a
+                 * replay callback completes a fragment synchronously. */
+                if ((sgl_op != NULL) && (sgl_op->user_comp != NULL)) {
+                    ++sgl_op->user_comp->count;
+                }
                 params->cb(&info, callback_arg);
             } else if (status != UCS_ERR_NO_ELEM) {
                 ucs_fatal("rc mlx5: ep %p qp 0x%x failed to parse outstanding "
@@ -2018,9 +2054,20 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_rc_mlx5_ep_outstanding_complete_send_ops(
                 &iface->super, ep, pi, delivered ? UCS_OK : UCS_ERR_CANCELED);
 
+        /* Only the final WQE of an SGL batch requests a CQ update. */
+        if ((sgl_op != NULL) && (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
+            comp = sgl_op->user_comp;
+            uct_rc_mlx5_ep_outstanding_release_send_op(&iface->super, sgl_op);
+            sgl_op = NULL;
+            if (comp != NULL) {
+                uct_invoke_completion(comp, UCS_OK);
+            }
+        }
+
         wqe_first_psn = (wqe_first_psn + num_packets) & UCT_IB_MLX5_PSN_MASK;
     }
 
+    ucs_assert(sgl_op == NULL);
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
     ucs_free(callback_data.dm_data);
