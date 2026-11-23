@@ -27,6 +27,8 @@ credentials:
 env:
   DOCKER_IMAGE: "${registry_host}#${registry_path}/aarch64/dl-base:${CI_IMAGE_TAG}"
   RUN_TESTS: "yes"
+  # No MPI on the DL cluster yet.
+  RUN_MPI_TESTS: "no"
   TEST_PERF: "1"
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
@@ -134,6 +136,7 @@ steps:
       containerName: "ucx-ci-dl-${BUILD_NUMBER}-w${worker}"
       slurmEnv: [
         "RUN_TESTS=${RUN_TESTS}",
+        "RUN_MPI_TESTS=${RUN_MPI_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
