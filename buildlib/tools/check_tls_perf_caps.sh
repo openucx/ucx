@@ -40,8 +40,13 @@ do
 
       old_caps=$(echo "$old_tl_caps" | grep -A 7 "Device: $device" || true)
       new_caps=$(echo "$new_tl_caps" | grep -A 7 "Device: $device" || true)
-      for cap in bandwidth
+      for cap in bandwidth overhead
       do
+        # These UD overhead defaults changed intentionally.
+        case "${tl_name}/${cap}" in
+          ud_verbs/overhead|ud_mlx5/overhead) continue ;;
+        esac
+
         old_cap=$(echo "$old_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
         new_cap=$(echo "$new_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
         if [ "$old_cap" != "$new_cap" ]
