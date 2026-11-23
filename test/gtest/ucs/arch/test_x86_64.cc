@@ -185,6 +185,13 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     }
 }
 
+UCS_TEST_F(test_arch, cpu_flag_avx2) {
+    const bool expected = __builtin_cpu_supports("avx2");
+    const bool detected = !!(ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_AVX2);
+
+    EXPECT_EQ(expected, detected);
+}
+
 #if ENABLE_BUILTIN_MEMCPY
 UCS_TEST_F(test_arch, nt_buffer_transfer_explicit_threshold) {
     const size_t configured_max = 8 * UCS_MBYTE;
