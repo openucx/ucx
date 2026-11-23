@@ -1031,6 +1031,12 @@ static int uct_rc_mlx5_send_op_is_get_zcopy(const uct_rc_iface_send_op_t *op)
            (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler);
 }
 
+static int uct_rc_mlx5_send_op_is_sgl_zcopy(const uct_rc_iface_send_op_t *op)
+{
+    return (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
+           (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler);
+}
+
 static int uct_rc_mlx5_send_op_is_am_zcopy(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_am_zcopy_completion_handler;
@@ -1633,18 +1639,13 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
 
 static ucs_status_t
 uct_rc_mlx5_op_info_fill(uct_rc_mlx5_iface_common_t *iface,
-                         uct_rc_mlx5_base_ep_t *ep,
-                         const uct_ib_mlx5_txwq_t *txwq, uint16_t pi,
+                         const uct_ib_mlx5_txwq_t *txwq,
                          uct_rc_iface_send_op_t *op,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data,
                          uct_ep_op_info_t *info)
 {
     memset(info, 0, sizeof(*info));
-    if (op == NULL) {
-        op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
-    }
-
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
         return UCS_ERR_NO_ELEM;
@@ -1985,14 +1986,12 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
 
-        if (sgl_op == NULL) {
+        op = sgl_op;
+        if (op == NULL) {
             op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
-            if ((op != NULL) &&
-                ((op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
-                 (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler))) {
-                sgl_op = ucs_queue_pull_elem_non_empty(
-                        &ep->super.txqp.outstanding, uct_rc_iface_send_op_t,
-                        queue);
+            if ((op != NULL) && uct_rc_mlx5_send_op_is_sgl_zcopy(op)) {
+                sgl_op = op;
+                ucs_queue_pull_non_empty(&ep->super.txqp.outstanding);
             }
         }
 
@@ -2016,11 +2015,11 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         }
 
         if (!delivered && !uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi)) {
-            status = uct_rc_mlx5_op_info_fill(iface, ep, txwq, pi, sgl_op, ctrl,
+            status = uct_rc_mlx5_op_info_fill(iface, txwq, op, ctrl,
                                               wqe_size, &callback_data, &info);
             if (status == UCS_OK) {
                 /* The original reference keeps the SGL alive even when a
-                 * replay callback completes a fragment synchronously. */
+                 * replay callback completes an element synchronously. */
                 if ((sgl_op != NULL) && (sgl_op->user_comp != NULL)) {
                     ++sgl_op->user_comp->count;
                 }
@@ -2034,10 +2033,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
         }
 
-        uct_rc_mlx5_ep_outstanding_complete_send_ops(
-                &iface->super, ep, pi, delivered ? UCS_OK : UCS_ERR_CANCELED);
-
-        /* Only the final WQE of an SGL batch requests a CQ update. */
+        /* Only the final WQE of an SGL operation requests a CQ update.
+         * Release its reference before later ops attached to that WQE. */
         if ((sgl_op != NULL) && (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
             comp = sgl_op->user_comp;
             uct_rc_mlx5_ep_outstanding_release_send_op(&iface->super, sgl_op);
@@ -2046,6 +2043,9 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                 uct_invoke_completion(comp, UCS_OK);
             }
         }
+
+        uct_rc_mlx5_ep_outstanding_complete_send_ops(
+                &iface->super, ep, pi, delivered ? UCS_OK : UCS_ERR_CANCELED);
 
         wqe_first_psn = (wqe_first_psn + num_packets) & UCT_IB_MLX5_PSN_MASK;
     }

@@ -1919,10 +1919,10 @@ typedef struct uct_ep_op_info {
     uct_ep_operation_t operation;
 
     /**
-     * Original completion, when @ref UCT_EP_OP_INFO_FIELD_COMP is set. For an
-     * SGL batch, each reported element transfers one reference to the callback,
-     * which must complete it exactly once.
-     * The transport separately releases its original batch reference.
+     * Original completion, when @ref UCT_EP_OP_INFO_FIELD_COMP is set.
+     * Each reported operation or SGL element transfers one reference to the
+     * callback, which must complete it exactly once. For an SGL operation,
+     * the transport separately releases its original completion reference.
      */
     uct_completion_t   *comp;
 
@@ -2055,7 +2055,10 @@ typedef struct {
      */
     const void                          *rx_token;
 
-    /** Callback invoked once per undelivered outstanding operation. */
+    /**
+     * Callback invoked once per undelivered outstanding operation, or once per
+     * undelivered element of an SGL operation.
+     */
     uct_ep_outstanding_purge_callback_t cb;
 
     /**
@@ -2072,6 +2075,8 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ * An SGL PUT or GET is reported once per undelivered element, as
+ * @ref UCT_EP_OP_PUT_ZCOPY or @ref UCT_EP_OP_GET_ZCOPY, respectively.
  *
  * @note This routine should be called only after the error handler for @a ep
  *       returns @ref UCS_INPROGRESS. It can be used only if the interface

@@ -1152,13 +1152,6 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
 
 /* rc_mlx5 RX tokens contain the next expected 24-bit packet sequence number. */
 class test_uct_purge_sgl : public test_uct_purge_outstanding {
-public:
-    void init() override {
-        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
-        modify_config("RC_FENCE", "none");
-        test_uct_purge_outstanding::init();
-    }
-
 protected:
     enum completion_mode_t { DEFERRED, INLINE, CANCELED, NO_COMP };
 
@@ -1199,9 +1192,10 @@ protected:
             bool with_comp;
             bool complete_inline;
             unsigned count;
+            uct_completion_t flush_comp;
         } ctx = {{this, operation, {completion_cb, 1, UCS_OK}}, with_comp,
                   completion_mode == INLINE,
-                  count - ((is_put && with_rx_token) ? delivered_prefix : 0)};
+                  count - ((is_put && with_rx_token) ? delivered_prefix : 0), {}};
         unsigned first = count - ctx.count;
         ctx.expected.iov         = iov + first;
         ctx.expected.remote_addr = remote.addr() + first * stride;
@@ -1212,7 +1206,10 @@ protected:
         ASSERT_UCS_OK(uct_ep_put_short(m_sender->ep(0), local.ptr(), 1,
                                        remote.addr() + count * stride - 1,
                                        remote.rkey()));
-        flush();
+        uct_completion_t seed_comp = {[](uct_completion_t*) {}, 0, UCS_OK};
+        post_flush(m_sender->ep(0), &seed_comp);
+        wait_for_value(&seed_comp.count, 0, true);
+        ASSERT_UCS_OK(seed_comp.status);
         auto rx_token = get_rx_token();
         ASSERT_EQ(sizeof(uint32_t), rx_token.size());
         uint32_t psn;
@@ -1233,6 +1230,13 @@ protected:
                                       addrs, rkeys, nullptr, nullptr, count,
                                       comp);
         ASSERT_EQ(UCS_INPROGRESS, status);
+        ctx.flush_comp.func = [](uct_completion_t *comp) {
+            auto &ctx = *ucs_container_of(comp, sgl_purge_ctx, flush_comp);
+            if (ctx.with_comp && (ctx.complete_inline || (ctx.count == 0))) {
+                EXPECT_EQ(1u, ctx.expected.num_completions);
+            }
+        };
+        post_flush(m_sender->ep(0), &ctx.flush_comp);
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
 
@@ -1268,6 +1272,7 @@ protected:
             params.rx_token    = rx_token.data();
         }
         ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0), &params));
+        EXPECT_EQ(0, ctx.flush_comp.count);
         ASSERT_EQ(count - first, ctx.expected.num_ops_purged);
         if (!with_comp) {
             return;
@@ -1290,31 +1295,73 @@ protected:
     }
 };
 
-UCS_TEST_P(test_uct_purge_sgl, put_none) { test_sgl(true, 0); }
-UCS_TEST_P(test_uct_purge_sgl, put_prefix) { test_sgl(true, 2); }
-UCS_TEST_P(test_uct_purge_sgl, put_all) { test_sgl(true, 4); }
-UCS_TEST_P(test_uct_purge_sgl, put_no_token) { test_sgl(true, 0, false); }
-UCS_TEST_P(test_uct_purge_sgl, put_no_comp) {
+UCS_TEST_P(test_uct_purge_sgl, put_none)
+{
+    test_sgl(true, 0);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, put_prefix)
+{
+    test_sgl(true, 2);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, put_all)
+{
+    test_sgl(true, 4);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, put_no_token)
+{
+    test_sgl(true, 0, false);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, put_no_comp)
+{
     test_sgl(true, 0, true, NO_COMP);
 }
-UCS_TEST_P(test_uct_purge_sgl, get_none) { test_sgl(false, 0); }
-UCS_TEST_P(test_uct_purge_sgl, get_prefix) { test_sgl(false, 2); }
-UCS_TEST_P(test_uct_purge_sgl, get_all) { test_sgl(false, 4); }
-UCS_TEST_P(test_uct_purge_sgl, get_no_token) { test_sgl(false, 0, false); }
-UCS_TEST_P(test_uct_purge_sgl, get_no_comp) {
+
+UCS_TEST_P(test_uct_purge_sgl, get_none)
+{
+    test_sgl(false, 0);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, get_prefix)
+{
+    test_sgl(false, 2);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, get_all)
+{
+    test_sgl(false, 4);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, get_no_token)
+{
+    test_sgl(false, 0, false);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, get_no_comp)
+{
     test_sgl(false, 0, true, NO_COMP);
 }
 
-UCS_TEST_P(test_uct_purge_sgl, put_inline) {
+UCS_TEST_P(test_uct_purge_sgl, put_inline)
+{
     test_sgl(true, 0, true, INLINE);
 }
-UCS_TEST_P(test_uct_purge_sgl, get_inline) {
+
+UCS_TEST_P(test_uct_purge_sgl, get_inline)
+{
     test_sgl(false, 0, true, INLINE);
 }
-UCS_TEST_P(test_uct_purge_sgl, put_canceled) {
+
+UCS_TEST_P(test_uct_purge_sgl, put_canceled)
+{
     test_sgl(true, 0, true, CANCELED);
 }
-UCS_TEST_P(test_uct_purge_sgl, get_canceled) {
+
+UCS_TEST_P(test_uct_purge_sgl, get_canceled)
+{
     test_sgl(false, 0, true, CANCELED);
 }
 
