@@ -20,7 +20,6 @@ extern "C" {
 #include <linux/rtnetlink.h>
 #include <sched.h>
 #include <sys/ioctl.h>
-#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -486,37 +485,13 @@ protected:
         return ret;
     }
 
-    static int failed_lookup_child()
+    /* A lookup which reaches the kernel fails to create a netlink socket, and
+     * logs an error */
+    static int check_lookups_without_files(unsigned lo_index)
     {
-        /* Getting the interface index requires a socket */
-        unsigned lo_index = if_nametoindex("lo");
-        scoped_log_handler slh(hide_errors_logger);
-        struct rlimit rlim, no_files;
         ucs_netlink_route_t route;
         ucs_status_t status;
         size_t num_errors;
-
-        status = route_get("inf", "127.0.0.1", lo_index, &route);
-        if (status == UCS_ERR_UNSUPPORTED) {
-            return CHILD_SKIP;
-        } else if (status != UCS_OK) {
-            return child_error("lookup of a local address: " +
-                               status_str(status));
-        }
-
-        if (getrlimit(RLIMIT_NOFILE, &rlim) != 0) {
-            return child_error(std::string("failed to get open files limit: ") +
-                               strerror(errno));
-        }
-
-        /* A lookup which reaches the kernel fails to create a netlink socket,
-         * and logs an error */
-        no_files          = rlim;
-        no_files.rlim_cur = 0;
-        if (setrlimit(RLIMIT_NOFILE, &no_files) != 0) {
-            return child_error(std::string("failed to limit open files: ") +
-                               strerror(errno));
-        }
 
         num_errors = m_errors.size();
         status     = route_get("inf", "127.0.0.1", lo_index, &route);
@@ -525,7 +500,8 @@ protected:
         }
 
         status = route_get("0", "127.0.0.1", lo_index, &route);
-        if ((status != UCS_ERR_IO_ERROR) || (m_errors.size() == num_errors)) {
+        if ((status != UCS_ERR_NO_RESOURCE) ||
+            (m_errors.size() == num_errors)) {
             return child_error("lookup without the cache: " +
                                status_str(status));
         }
@@ -539,14 +515,41 @@ protected:
         }
 
         status = route_get("inf", "127.0.0.2", lo_index, &route);
-        if (status != UCS_ERR_IO_ERROR) {
+        if (status != UCS_ERR_NO_RESOURCE) {
             return child_error("failed lookup of a new destination: " +
                                status_str(status));
         }
 
-        if (setrlimit(RLIMIT_NOFILE, &rlim) != 0) {
-            return child_error(std::string("failed to restore open files: ") +
-                               strerror(errno));
+        return 0;
+    }
+
+    static int failed_lookup_child()
+    {
+        /* Getting the interface index requires a socket */
+        unsigned lo_index = if_nametoindex("lo");
+        scoped_log_handler slh(hide_errors_logger);
+        ucs_netlink_route_t route;
+        ucs_status_t status;
+        int ret;
+
+        status = route_get("inf", "127.0.0.1", lo_index, &route);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            return CHILD_SKIP;
+        } else if (status != UCS_OK) {
+            return child_error("lookup of a local address: " +
+                               status_str(status));
+        }
+
+        {
+            ucs::rlimit_setter no_files(RLIMIT_NOFILE, 0);
+
+            ret = (no_files.limit() == 0) ?
+                          check_lookups_without_files(lo_index) :
+                          child_error("failed to limit open files");
+        }
+
+        if (ret != 0) {
+            return ret;
         }
 
         status = route_get("inf", "127.0.0.2", lo_index, &route);
@@ -653,7 +656,7 @@ UCS_TEST_F(test_netlink, parse_msg) {
     /* An error reply to a request is logged with the requested log level */
     append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
     count = 0;
-    EXPECT_EQ(UCS_ERR_REJECTED,
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
               ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
                                     &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
     EXPECT_EQ(0, count);
@@ -675,17 +678,15 @@ UCS_TEST_F(test_netlink, parse_msg) {
     EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(-EHOSTUNREACH, RTM_GETROUTE, 0));
     EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(-ENETUNREACH, RTM_GETROUTE, 0));
 
-    /* A route lookup which selects a prohibit or blackhole route fails with
-     * errors which other requests return for other failures */
-    for (int error : {-EACCES, -EINVAL}) {
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(error, RTM_GETROUTE, 0))
-                << strerror(-error);
-        EXPECT_EQ(UCS_ERR_REJECTED,
-                  parse_error(error, RTM_GETROUTE, NLM_F_DUMP))
-                << strerror(-error);
-        EXPECT_EQ(UCS_ERR_REJECTED, parse_error(error, RTM_GETLINK, 0))
-                << strerror(-error);
-    }
+    /* A route lookup which selects a prohibit route fails with an error which
+     * other requests return for other failures */
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, parse_error(-EACCES, RTM_GETROUTE, 0));
+    EXPECT_EQ(UCS_ERR_IO_ERROR, parse_error(-EACCES, RTM_GETROUTE, NLM_F_DUMP));
+    EXPECT_EQ(UCS_ERR_IO_ERROR, parse_error(-EACCES, RTM_GETLINK, 0));
+
+    /* The kernel also rejects invalid route lookups with EINVAL, as it does
+     * lookups which select a blackhole route */
+    EXPECT_EQ(UCS_ERR_IO_ERROR, parse_error(-EINVAL, RTM_GETROUTE, 0));
 
     EXPECT_EQ(UCS_ERR_NO_MEMORY, parse_error(-ENOBUFS, RTM_GETROUTE, 0));
     EXPECT_TRUE(m_errors.empty());
@@ -694,7 +695,7 @@ UCS_TEST_F(test_netlink, parse_msg) {
     dump.resize(done_offset);
     append_nlmsg(dump, NLMSG_DONE, &done_error, sizeof(done_error));
     count = 0;
-    EXPECT_EQ(UCS_ERR_REJECTED,
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
               ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
                                     &count, UCS_LOG_LEVEL_ERROR, &msg_done));
     EXPECT_EQ(2, count);
@@ -716,7 +717,7 @@ UCS_TEST_F(test_netlink, send_request) {
     /* The kernel replies with ENODEV to a query of a missing device */
     ifi.ifi_index = INT_MAX;
     count         = 0;
-    EXPECT_EQ(UCS_ERR_REJECTED,
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
               ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, 0, &ifi,
                                        sizeof(ifi), count_msg_cb, &count,
                                        UCS_LOG_LEVEL_DEBUG));

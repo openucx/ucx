@@ -158,16 +158,14 @@ ucs_netlink_error_status(const struct nlmsghdr *nlh, int err)
         /* Route lookups fail with these errors when the kernel has no route */
         return UCS_ERR_UNREACHABLE;
     case -EACCES:
-    case -EINVAL:
-        /* Route lookups fail with these errors on prohibit and blackhole
-         * routes */
+        /* Route lookups fail with this error on prohibit routes */
         return ucs_netlink_is_route_lookup_error(nlh) ? UCS_ERR_UNREACHABLE :
-                                                        UCS_ERR_REJECTED;
+                                                        UCS_ERR_IO_ERROR;
     case -ENOBUFS:
     case -ENOMEM:
         return UCS_ERR_NO_MEMORY;
     default:
-        return UCS_ERR_REJECTED;
+        return UCS_ERR_IO_ERROR;
     }
 }
 
@@ -180,12 +178,13 @@ static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
     if (status != UCS_OK) {
         ucs_error("failed to create netlink socket: %s",
                   ucs_status_string(status));
+        status = UCS_ERR_NO_RESOURCE;
         goto err;
     }
 
     if (bind(*fd_p, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         ucs_error("failed to bind netlink socket %d: %m", *fd_p);
-        status = UCS_ERR_IO_ERROR;
+        status = UCS_ERR_NO_RESOURCE;
         goto err_close_socket;
     }
 
@@ -280,6 +279,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     if (status != UCS_OK) {
         ucs_error("failed to send netlink message on fd=%d: %s",
                   netlink_fd, ucs_status_string(status));
+        status = UCS_ERR_NO_RESOURCE;
         goto out;
     }
 
@@ -291,6 +291,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         if (status != UCS_OK) {
             ucs_error("failed to get netlink message size %d (%s)",
                     status, ucs_status_string(status));
+            status = UCS_ERR_NO_RESOURCE;
             goto out;
         }
 
@@ -307,6 +308,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
             ucs_error("failed to receive netlink message on fd=%d: %s",
                     netlink_fd, ucs_status_string(status));
             ucs_free(recv_msg);
+            status = UCS_ERR_NO_RESOURCE;
             goto out;
         }
 
@@ -759,7 +761,7 @@ static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
 
     if (route.type == RTN_UNSPEC) {
         ucs_debug("netlink reply to a route request has no route");
-        return UCS_ERR_REJECTED;
+        return UCS_ERR_IO_ERROR;
     }
 
     *route_p = route;
@@ -809,6 +811,7 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 {
     ucs_netlink_route_result_t *result;
     ucs_netlink_route_key_t key;
+    ucs_netlink_route_t route;
     ucs_status_t status;
     size_t addr_size;
     ucs_time_t now;
@@ -853,14 +856,17 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
         (ucs_time_to_sec(now - result->lookup_time) >=
          ucs_global_opts.netlink_route_cache_ttl)) {
-        /* The route is written only when it is found */
         status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
-                                          &result->route);
+                                          &route);
+        if (status == UCS_OK) {
+            result->route = route;
+        }
+
         if ((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE)) {
             result->status      = status;
             result->lookup_time = now;
         } else if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
-                   ((status != UCS_ERR_IO_ERROR) &&
+                   ((status != UCS_ERR_NO_RESOURCE) &&
                     (status != UCS_ERR_NO_MEMORY))) {
             kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
             goto out_unlock;

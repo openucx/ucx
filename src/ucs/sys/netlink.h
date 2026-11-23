@@ -62,7 +62,7 @@ typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
  * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
  *         interrupted (NLM_F_DUMP_INTR), UCS_ERR_UNREACHABLE if the kernel
  *         replied that it has no usable route, UCS_ERR_NO_MEMORY if the kernel
- *         ran out of memory, UCS_ERR_REJECTED if the kernel replied with
+ *         ran out of memory, UCS_ERR_IO_ERROR if the kernel replied with
  *         another error, or the error returned by the parse callback.
  */
 ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
@@ -85,8 +85,9 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
  * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
  *         interrupted (NLM_F_DUMP_INTR) and should be retried,
  *         UCS_ERR_UNREACHABLE if the kernel replied that it has no usable
- *         route, UCS_ERR_REJECTED if the kernel replied with another error, or
- *         error code otherwise, e.g. if the request could not be sent.
+ *         route, UCS_ERR_NO_RESOURCE if the request could not be sent or its
+ *         reply could not be received, UCS_ERR_IO_ERROR if the kernel replied
+ *         with another error, or error code otherwise.
  */
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                                       unsigned short nlmsg_flags,
