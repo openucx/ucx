@@ -3,9 +3,14 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <uct/uct_test.h>
 
 extern "C" {
+#include <ucs/sys/sys.h>
 #include <uct/ze/base/ze_base.h>
 #include <uct/ze/ze_ipc/ze_ipc_md.h>
 }
@@ -13,7 +18,9 @@ extern "C" {
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -219,7 +226,11 @@ protected:
     enum {
         MSG_PUT_DONE,
         MSG_GET_READY,
-        MSG_DONE
+        MSG_DONE,
+        /* Skips of md_open_allows_peers, the round field carries the errno */
+        MSG_SKIP_NO_PIDFD_GETFD,
+        MSG_SKIP_PEERS_ALLOWED,
+        MSG_SKIP_PEERS_DENIED
     };
 
     struct op_msg {
@@ -628,6 +639,182 @@ protected:
             run_importer(atoi(peer_fd), collide_fd);
         }
     }
+
+#if defined(SYS_pidfd_open) && defined(SYS_pidfd_getfd) && \
+        HAVE_DECL_PR_SET_PTRACER
+    /* Takes @a fd from process @a pid with pidfd_getfd() and closes the copy.
+     * Async-signal-safe. Returns 0 on success or the errno of the failed
+     * call */
+    static int take_fd(pid_t pid, int fd)
+    {
+        int ret = 0;
+        int local_fd;
+        int pidfd;
+
+        pidfd = syscall(SYS_pidfd_open, pid, 0);
+        if (pidfd < 0) {
+            return errno;
+        }
+
+        local_fd = syscall(SYS_pidfd_getfd, pidfd, fd, 0);
+        if (local_fd < 0) {
+            ret = errno;
+        } else {
+            close(local_fd);
+        }
+
+        close(pidfd);
+        return ret;
+    }
+
+    /* Reaps @a pid, retrying on EINTR. Returns false after reporting a
+     * failure */
+    static bool wait_child(pid_t pid, int *status_p)
+    {
+        pid_t ret;
+        int err;
+
+        do {
+            ret = waitpid(pid, status_p, 0);
+        } while ((ret < 0) && (errno == EINTR));
+
+        if (ret != pid) {
+            err = errno;
+            ADD_FAILURE() << "waitpid(" << pid << ") failed: " << strerror(err);
+            return false;
+        }
+
+        return true;
+    }
+
+    /* Takes @a fd from this process in a child, which is not an ancestor of
+     * this process, like an importer on the same node. Returns 0 on success,
+     * the errno of the failed call, or -1 after reporting a failure */
+    static int peer_take_fd(int fd)
+    {
+        int status;
+        pid_t pid;
+        int err;
+
+        pid = fork();
+        if (pid == 0) {
+            /* Async-signal-safe calls only */
+            _exit(take_fd(getppid(), fd));
+        }
+
+        if (pid < 0) {
+            err = errno;
+            ADD_FAILURE() << "fork() failed: " << strerror(err);
+            return -1;
+        }
+
+        if (!wait_child(pid, &status)) {
+            return -1;
+        }
+
+        if (!WIFEXITED(status)) {
+            ADD_FAILURE() << "probe" << ucs::exit_status_info(status);
+            return -1;
+        }
+
+        return WEXITSTATUS(status);
+    }
+
+    /* Runs in an exec'd copy of the test, so that changing its ptracer
+     * exception does not affect the test process */
+    void check_md_open_allows_peers(int fd)
+    {
+        int ret;
+
+        /* A process passes the ptrace check against itself whatever the Yama
+         * scope, so a failure here comes from a missing syscall or a filter */
+        ret = take_fd(getpid(), fd);
+        if ((ret == ENOSYS) || (ret == EPERM)) {
+            send_op(fd, MSG_SKIP_NO_PIDFD_GETFD, ret);
+            return;
+        }
+
+        ASSERT_EQ(0, ret) << strerror(ret);
+
+        /* Drop the exception granted before the ze_ipc MD is opened, e.g. by
+         * the CMA resource query */
+        ASSERT_EQ(0, prctl(PR_SET_PTRACER, 0, 0, 0, 0)) << strerror(errno);
+        ret = peer_take_fd(fd);
+        if (ret == 0) {
+            send_op(fd, MSG_SKIP_PEERS_ALLOWED, 0);
+            return;
+        }
+
+        ASSERT_EQ(EPERM, ret) << strerror(ret);
+
+        entity *e = uct_test::create_entity(0);
+        m_entities.push_back(e);
+
+        ret = peer_take_fd(fd);
+        if (ret == EPERM) {
+            /* Tell a missing exception from a denial no exception can lift */
+            ASSERT_EQ(0, prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0))
+                    << strerror(errno);
+            ret = peer_take_fd(fd);
+            ASSERT_NE(0, ret) << "opening the ze_ipc MD did not let peers take "
+                                 "fds, but PR_SET_PTRACER_ANY did";
+            if (ret == EPERM) {
+                send_op(fd, MSG_SKIP_PEERS_DENIED, ret);
+                return;
+            }
+        }
+
+        ASSERT_EQ(0, ret) << strerror(ret);
+        send_op(fd, MSG_DONE, 0);
+    }
+
+    void test_md_open_allows_peers()
+    {
+        const char *peer_fd = getenv(PEER_FD_ENV);
+        op_msg msg          = {};
+        peer_process peer;
+        char scope[4];
+        ssize_t nread;
+        int status;
+
+        if (peer_fd != NULL) {
+            check_md_open_allows_peers(atoi(peer_fd));
+            return;
+        }
+
+        nread = ucs_read_file(scope, sizeof(scope), 1,
+                              "/proc/sys/kernel/yama/ptrace_scope");
+        if ((nread < 1) || (scope[0] != '1')) {
+            UCS_TEST_SKIP_R("needs Yama ptrace_scope 1");
+        }
+
+        ASSERT_NO_FATAL_FAILURE(start_importer(peer));
+        ASSERT_EQ(sizeof(msg), recv_msg(peer.fd, &msg, sizeof(msg)));
+        ASSERT_TRUE(wait_child(peer.pid, &status));
+        peer.pid = -1;
+        EXPECT_TRUE(WIFEXITED(status) && (WEXITSTATUS(status) == 0))
+                << "peer" << ucs::exit_status_info(status);
+
+        switch (msg.op) {
+        case MSG_SKIP_NO_PIDFD_GETFD:
+            UCS_TEST_SKIP_R(
+                    std::string("pidfd_getfd() fails on this process: ") +
+                    strerror(msg.round));
+        case MSG_SKIP_PEERS_ALLOWED:
+            UCS_TEST_SKIP_R("peers pass the ptrace check without an exception");
+        case MSG_SKIP_PEERS_DENIED:
+            UCS_TEST_SKIP_R("peers fail the ptrace check even with "
+                            "PR_SET_PTRACER_ANY");
+        default:
+            EXPECT_EQ(MSG_DONE, msg.op);
+        }
+    }
+#else
+    void test_md_open_allows_peers()
+    {
+        UCS_TEST_SKIP_R("no pidfd_getfd() or PR_SET_PTRACER");
+    }
+#endif
 };
 
 const char *test_ze_ipc_rma_xproc::PEER_FD_ENV = "UCT_ZE_IPC_TEST_PEER_FD";
@@ -656,6 +843,10 @@ UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_after_other_device_access)
 UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_importer_fd_equals_export_fd)
 {
     test_put_get(false, true);
+}
+
+UCS_TEST_P(test_ze_ipc_rma_xproc, md_open_allows_peers) {
+    test_md_open_allows_peers();
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ze_ipc_rma_xproc, ze_ipc)
