@@ -173,7 +173,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
     uint64_t *rseg_ptr  = (uint64_t*)wqe_ptr + 2;
     uint64_t *atseg_ptr = (uint64_t*)wqe_ptr + 4;
     int ds              = 3 + is_atomic;
-    struct doca_gpu_dev_verbs_wqe_ctrl_seg cseg;
+    struct doca_gpunetio_ib_mlx5_wqe_ctrl_seg cseg;
     struct mlx5_wqe_raddr_seg rseg;
     struct mlx5_wqe_data_seg dseg;
     struct mlx5_wqe_atomic_seg atseg;
