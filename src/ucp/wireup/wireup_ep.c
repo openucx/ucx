@@ -111,20 +111,6 @@ ucp_rsc_index_t ucp_wireup_ep_get_msg_rsc_index(ucp_wireup_ep_t *wireup_ep)
     return rsc_index;
 }
 
-static void ucp_wireup_ep_proxy_req_free(ucp_request_t *proxy_req)
-{
-    ucp_request_t *req;
-
-    if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
-        req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
-                               send.uct);
-        ucs_free(req->send.buffer);
-        ucp_request_mem_free(req);
-    }
-
-    ucs_free(proxy_req);
-}
-
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -141,9 +127,9 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     } else if (status == UCS_ERR_NO_RESOURCE) {
         ucs_atomic_add32(&wireup_ep->pending_count, +1);
     } else {
-        ucs_error("wireup message request %p returned %s, dropping it", req,
-                  ucs_status_string(status));
-        ucp_wireup_ep_proxy_req_free(proxy_req);
+        ucs_bug("wireup message request %p returned %s", req,
+                ucs_status_string(status));
+        ucp_request_mem_free(proxy_req);
         status = UCS_OK;
     }
     return status;
@@ -155,9 +141,18 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
     ucp_request_t   *proxy_req = ucs_container_of(self, ucp_request_t,
                                                   send.uct);
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
+    ucp_request_t   *req;
 
     ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-    ucp_wireup_ep_proxy_req_free(proxy_req);
+
+    if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
+        req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
+                               send.uct);
+        ucs_free(req->send.buffer);
+        ucp_request_mem_free(req);
+    }
+
+    ucs_free(proxy_req);
 }
 
 static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
