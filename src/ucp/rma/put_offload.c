@@ -758,9 +758,9 @@ static int ucp_proto_rma_sgl_contig_has_native(
 }
 
 /* Fallback for memory without a direct SGL path: send each element as a
- * contiguous operation, which can use any contig protocol (e.g. rndv). If
- * emulation_proto is not NULL, it is not used, since the SGL operation has its
- * own emulation. */
+ * contiguous operation, which can use any contig protocol (e.g. rndv). The
+ * @a emulation_proto protocol, if not NULL, is excluded, since the SGL
+ * operation has its own emulation. */
 void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
                                     ucp_operation_id_t op_id,
                                     const ucp_proto_t *emulation_proto)
