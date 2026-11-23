@@ -66,7 +66,8 @@ Add a review process report when something in the review did not work as
 expected. The report makes the problem visible, so that it does not stay
 hidden.
 
-Add the report if one of these occurred:
+Add the report if one of these occurred and left a part of the review
+unchecked:
 
 - A tool call or another action failed, timed out, or returned output that
   was cut.
@@ -75,6 +76,8 @@ Add the report if one of these occurred:
 - Parts of the supplied input did not agree with each other.
 - A check that the review needed could not run, or you stopped before the
   review was complete.
+
+Do not report a problem that did not affect the review.
 
 Report two kinds of problems, each as one finding with no file and no line:
 
