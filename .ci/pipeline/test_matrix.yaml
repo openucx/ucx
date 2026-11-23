@@ -11,7 +11,8 @@ kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
   limits: "{memory: 16Gi, cpu: 6000m}"
-  requests: "{memory: 16Gi, cpu: 6000m}"
+  # Requests follow the measured use; the limits allow bursts
+  requests: "{memory: 10Gi, cpu: 3000m}"
 
 runs_on_dockers:
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
