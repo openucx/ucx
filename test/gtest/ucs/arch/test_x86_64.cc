@@ -192,6 +192,17 @@ UCS_TEST_F(test_arch, cpu_flag_avx2) {
     EXPECT_EQ(expected, detected);
 }
 
+/* GCC 5 and older do not accept the "avx512bw" feature name */
+#if defined(__clang__) || (__GNUC__ >= 6)
+UCS_TEST_F(test_arch, cpu_flag_avx512bw) {
+    const bool expected = __builtin_cpu_supports("avx512bw");
+    const bool detected = !!(ucs_arch_get_cpu_flag() &
+                             UCS_CPU_FLAG_AVX512BW);
+
+    EXPECT_EQ(expected, detected);
+}
+#endif
+
 #if ENABLE_BUILTIN_MEMCPY
 UCS_TEST_F(test_arch, nt_buffer_transfer_explicit_threshold) {
     const size_t configured_max = 8 * UCS_MBYTE;
