@@ -2735,21 +2735,14 @@ ucp_worker_rkey_config_switch_ep(ucp_worker_h worker,
     }
 
     /* A lane takes the distance of an old lane to the same remote device, as
-     * ucp_rkey_unpack_lanes_distance() sets it. Prefer the same local
-     * resource: an rkey configuration made for rndv protocol estimation has
-     * the distances of local devices. */
+     * ucp_rkey_unpack_lanes_distance() sets it */
     new_key = &ucp_worker_ep_config(worker, ep_cfg_index)->key;
     for (lane = 0; lane < new_key->num_lanes; ++lane) {
         lanes_distance[lane] = ucs_topo_default_distance;
         for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
-            if (old_key->lanes[old_lane].dst_sys_dev !=
+            if (old_key->lanes[old_lane].dst_sys_dev ==
                 new_key->lanes[lane].dst_sys_dev) {
-                continue;
-            }
-
-            lanes_distance[lane] = rkey_config->lanes_distance[old_lane];
-            if (old_key->lanes[old_lane].rsc_index ==
-                new_key->lanes[lane].rsc_index) {
+                lanes_distance[lane] = rkey_config->lanes_distance[old_lane];
                 break;
             }
         }
