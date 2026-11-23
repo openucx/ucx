@@ -1408,6 +1408,83 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
 
+/* A zero-copy request with an IOV datatype restarts when one of its fragments
+ * completes with an error. */
+class test_ucp_fault_tolerance_iov : public test_ucp_fault_tolerance {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT, "put");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET, "get");
+    }
+};
+
+UCS_TEST_P(test_ucp_fault_tolerance_iov, zcopy_restart) {
+    /* At least one zero-copy fragment per element */
+    const size_t iov_count = 8;
+    const size_t size      = iov_count * UCS_MBYTE;
+    const unsigned op_mask = get_variant_value();
+    const bool put         = op_mask & TEST_OP_PUT;
+    ucp_ep_h ep            = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_dt_iov_t iov[iov_count];
+    ucp_proto_query_attr_t attr;
+    ucp_request_param_t param;
+    ucs_status_ptr_t sptr;
+    ucs_status_t status;
+    ucp_request_t *req;
+
+    flush_workers();
+    get_lanes(op_mask);
+
+    mem_buffer lbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+    mem_buffer &src              = put ? lbuf : rbuf;
+    mem_buffer &dst              = put ? rbuf : lbuf;
+
+    for (size_t i = 0; i < iov_count; ++i) {
+        iov[i].buffer = UCS_PTR_BYTE_OFFSET(lbuf.ptr(), i * UCS_MBYTE);
+        iov[i].length = UCS_MBYTE;
+    }
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = ucp_dt_make_iov();
+    src.pattern_fill(m_seed);
+
+    auto send_iov = [&]() {
+        return put ? ucp_put_nbx(ep, iov, iov_count, uintptr_t(rbuf.ptr()),
+                                 rkey, &param) :
+                     ucp_get_nbx(ep, iov, iov_count, uintptr_t(rbuf.ptr()),
+                                 rkey, &param);
+    };
+
+    /* RMA protocols may use fewer lanes than the endpoint has, so take a lane
+     * which the protocol of the request sends on */
+    sptr = send_iov();
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    req = static_cast<ucp_request_t*>(sptr) - 1;
+    ucp_proto_config_query(sender().worker(), req->send.proto_config, size,
+                           &attr);
+    ASSERT_UCS_OK(request_wait(sptr));
+    ASSERT_NE(0u, attr.lane_map);
+
+    /* Fragments on the invalidated lane complete with an error */
+    status = uct_ep_invalidate(ucp_ep_get_lane(ep, ucs_ffs64(attr.lane_map)),
+                               0);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
+    }
+
+    ASSERT_UCS_OK(status);
+    dst.memset(0);
+    ASSERT_UCS_OK(request_wait(send_iov()));
+    dst.pattern_check(m_seed, size);
+
+    test_recovery(op_mask);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_iov, rcx, "rc_x")
+
 /* A send on a FAILOVER endpoint is canceled locally when the user closes the
  * endpoint or destroys the worker while the send is still pending or in flight.
  * The send must complete once, without a restart on the endpoint which is going
