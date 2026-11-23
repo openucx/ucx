@@ -657,9 +657,15 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         goto err_uar;
     }
 
+    /* The CQ doorbell must be written to the UAR page given by uar_page. When a
+     * system page holds several UAR pages, base_addr is the address of the
+     * first one, so take the page of the doorbell register instead. */
     uct_ib_mlx5_init_cq_common(cq, attr->cq_size, attr->cqe_size,
                                UCT_IB_MLX5DV_GET(create_cq_out, out, cqn),
-                               cq->devx.cq_buf, cq->devx.uar->uar->base_addr,
+                               cq->devx.cq_buf,
+                               ucs_align_down_pow2_ptr(
+                                       cq->devx.uar->uar->reg_addr,
+                                       UCT_IB_MLX5_UAR_PAGE_SIZE),
                                cq->devx.dbrec->db,
                                !!(attr->flags & UCT_IB_MLX5_CQ_CQE_ZIP));
 
