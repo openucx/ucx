@@ -18,12 +18,11 @@ jobs:
       displayName: Checkout
       retryCountOnTaskFailure: 5
     - bash: |
-        set -x
-        # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
-        gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$')
-        [ -z "$gofiles" ] && exit 0
-
-        unformatted=$(gofmt -l $gofiles)
+        set -xeE
+        source buildlib/az-helpers.sh
+        az_init_modules
+        az_module_load dev/go-latest
+        unformatted=$(gofmt -l $(git ls-files '*.go'))
         [ -z "$unformatted" ] && exit 0
 
         # Some files are not gofmt'd. Print message and fail.

@@ -5,9 +5,9 @@
 package goucxtests
 
 import (
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"net"
 	"testing"
-	. "github.com/openucx/ucx/bindings/go/src/ucx"
 )
 
 var connReq *UcpConnectionRequest = nil

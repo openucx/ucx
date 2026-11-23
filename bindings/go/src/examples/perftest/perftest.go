@@ -8,16 +8,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "github.com/openucx/ucx/bindings/go/src/cuda"
-	"runtime"
 )
 
 type PerfTestParams struct {
@@ -247,7 +247,7 @@ func serverAmRecvHandler(header unsafe.Pointer, headerSize uint64, data *UcpAmDa
 	tid := *(*uint)(header)
 	if !data.IsDataValid() {
 		request, _ := data.Receive(getAddressOffsetForThread(tid), perfTestParams.messageSize,
-			     (&UcpRequestParams{}).SetMemType(perfTestParams.memType))
+			(&UcpRequestParams{}).SetMemType(perfTestParams.memType))
 		request.Close()
 	}
 	atomic.AddInt32(&perfTest.numCompletedRequests, 1)
@@ -341,7 +341,7 @@ func clientStart() error {
 			start = time.Now()
 		} else if perfTest.numCompletedRequests == int32(perfTestParams.numIterations) {
 			break
-		} else if perfTest.numCompletedRequests > int32(perfTestParams.numIterations - perfTestParams.numThreads) {
+		} else if perfTest.numCompletedRequests > int32(perfTestParams.numIterations-perfTestParams.numThreads) {
 			threads = perfTestParams.numIterations - uint(perfTest.numCompletedRequests)
 		}
 		perfTest.wg.Add(int(threads))

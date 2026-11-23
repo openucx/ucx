@@ -128,7 +128,7 @@ func (c *UcpContext) Query(attrs ...UcpContextAttr) (*C.ucp_context_attr_t, erro
 func (c *UcpContext) NewWorker(workerParams *UcpWorkerParams) (*UcpWorker, error) {
 	var ucp_worker C.ucp_worker_h
 
-	if ((workerParams.params.field_mask & C.UCP_WORKER_PARAM_FIELD_THREAD_MODE) == 0) {
+	if (workerParams.params.field_mask & C.UCP_WORKER_PARAM_FIELD_THREAD_MODE) == 0 {
 		workerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
 	}
 

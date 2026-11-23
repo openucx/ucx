@@ -70,14 +70,13 @@ func (p *UcpMmapParams) SetProtection(prot UcpProtection) *UcpMmapParams {
 // It is an optimization hint to avoid memory type detection for map buffer.
 // The meaning of this field depends on the operation type.
 //
-// - Memory allocation: (UcpMmapParams.Allocate() is set) This field
-//   specifies the type of memory to allocate. If it's not set
-//   UCS_MEMORY_TYPE_HOST will be assumed by default.
+//   - Memory allocation: (UcpMmapParams.Allocate() is set) This field
+//     specifies the type of memory to allocate. If it's not set
+//     UCS_MEMORY_TYPE_HOST will be assumed by default.
 //
-// - Memory registration: This field specifies the type of memory which is
-//   pointed by UcpMmapParams.SetAddress(). If it's not set,
-//   or set to UCS_MEMORY_TYPE_UNKNOWN, the memory type will be detected internally.
-//
+//   - Memory registration: This field specifies the type of memory which is
+//     pointed by UcpMmapParams.SetAddress(). If it's not set,
+//     or set to UCS_MEMORY_TYPE_UNKNOWN, the memory type will be detected internally.
 func (p *UcpMmapParams) SetMemoryType(memType UcsMemoryType) *UcpMmapParams {
 	p.params.field_mask |= C.UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE
 	p.params.memory_type = C.ucs_memory_type_t(memType)

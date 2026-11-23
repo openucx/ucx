@@ -36,7 +36,7 @@ func (m UcsMemoryType) String() string {
 	return C.GoString(C.ucxgo_get_ucs_mem_type_name(C.ucs_memory_type_t(m)))
 }
 
-func (m *UcsMemoryType) Set (value string) error {
+func (m *UcsMemoryType) Set(value string) error {
 	cValue := unsafe.Pointer(C.CString(value))
 	res := C.ucxgo_parse_ucs_mem_type_name(cValue)
 	if res == -1 {
