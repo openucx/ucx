@@ -176,3 +176,11 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bindings-arm
+    jjb_proj: "ucx-test-bindings-arm-oss"
+    jjb_conf_file: ".ci/pipeline/test_bindings_arm_matrix.yaml"
+    jjb_description: "UCX JUCX tests on DL cluster (GB200/aarch64) (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
