@@ -1611,3 +1611,406 @@ UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_force_close)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, tcp, "tcp")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rc, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rcx, "rc_x")
+
+/* Token failover holds a failed lane until the peer returns its token: the
+ * operations outstanding on the lane wait to be reposted, and the requests from
+ * the pending queue of the lane wait in the recovery queue. */
+class test_ucp_ft_tf_hold : public test_ucp_fault_tolerance_tf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA | UCP_FEATURE_AM,
+                               TEST_MSG_SIZE_MEDIUM, "rma");
+    }
+
+    test_ucp_ft_tf_hold()
+    {
+        modify_config("MAX_EAGER_LANES", "8");
+        modify_config("RECOVERY_RETRIES", "1000");
+        m_self = this;
+    }
+
+protected:
+    void cleanup() override
+    {
+        /* Before the workers and the contexts which own them */
+        m_mock.cleanup();
+        m_rkey.reset();
+        m_lbuf.reset();
+        m_rbuf.reset();
+        test_ucp_fault_tolerance_tf::cleanup();
+    }
+
+    /* Map the buffers of a contiguous 'op_id' of 'size' bytes, and return the
+     * lanes which serve it, if they are 'num_lanes' with the protocol 'proto',
+     * if given, and token failover can hold the first of them */
+    ucp_lane_map_t init_rma(size_t size,
+                            ucp_operation_id_t op_id = UCP_OP_ID_PUT,
+                            const std::string &proto = "",
+                            unsigned num_lanes = 1)
+    {
+        ucp_worker_h worker                      = sender().worker();
+        const ucp_proto_threshold_elem_t *thresh = nullptr;
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_query_attr_t query_attr;
+        ucp_proto_select_t *proto_select;
+        ucp_memory_info_t mem_info;
+        ucp_lane_index_t lane;
+        std::string name;
+
+        flush_workers();
+        m_op_id = op_id;
+        m_ep    = sender().ep(0, INJECTED_EP_INDEX);
+        m_lbuf.reset(new mapped_buffer(size, sender()));
+        m_rbuf.reset(new mapped_buffer(size, receiver()));
+        m_rkey = m_rbuf->rkey(sender());
+        ((op_id == UCP_OP_ID_PUT) ? m_lbuf : m_rbuf)->pattern_fill(m_seed);
+        ((op_id == UCP_OP_ID_PUT) ? m_rbuf : m_lbuf)->memset(0);
+
+        proto_select = ucp_proto_select_get(worker, m_ep->cfg_index,
+                                            m_rkey->cfg_index, &rkey_cfg_index);
+        ucp_memory_info_set_host(&mem_info);
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        if (proto_select != nullptr) {
+            thresh = ucp_proto_select_lookup(worker, proto_select,
+                                             m_ep->cfg_index, rkey_cfg_index,
+                                             &select_param, size);
+        }
+
+        if ((thresh == nullptr) ||
+            (thresh->proto_config.proto->flags & UCP_PROTO_FLAG_INVALID)) {
+            UCS_TEST_ABORT("no protocol for " << size << " bytes");
+        }
+
+        ucp_proto_config_query(worker, &thresh->proto_config, size,
+                               &query_attr);
+        name = thresh->proto_config.proto->name;
+        if ((!proto.empty() && (name != proto)) ||
+            (ucs_popcount(query_attr.lane_map) != num_lanes)) {
+            UCS_TEST_SKIP_R(name + " of " + std::to_string(size) +
+                            " bytes uses " +
+                            std::to_string(ucs_popcount(query_attr.lane_map)) +
+                            " lanes");
+        }
+
+        m_lane   = ucs_ffs64(query_attr.lane_map);
+        m_uct_ep = ucp_ep_get_lane(m_ep, m_lane);
+        if (!(ucp_worker_iface(worker, ucp_ep_get_rsc_index(m_ep, m_lane))
+                      ->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            UCS_TEST_SKIP_R("token failover is not supported");
+        }
+
+        /* Token failover does not hold the last AM lane */
+        for (lane = 0; lane < ucp_ep_num_lanes(m_ep); ++lane) {
+            if ((lane != m_lane) &&
+                (ucp_ep_config(m_ep)->key.lanes[lane].lane_types &
+                 UCS_BIT(UCP_LANE_TYPE_AM))) {
+                break;
+            }
+        }
+
+        if (lane == ucp_ep_num_lanes(m_ep)) {
+            UCS_TEST_SKIP_R("lane " + std::to_string(unsigned(m_lane)) +
+                            " is the last AM lane");
+        }
+
+        UCS_TEST_MESSAGE << name << " of " << size << " bytes on lanes 0x"
+                         << std::hex << query_attr.lane_map;
+        return query_attr.lane_map;
+    }
+
+    bool is_delivered() const
+    {
+        return mem_buffer::compare(m_lbuf->ptr(), m_rbuf->ptr(),
+                                   m_lbuf->size(), UCS_MEMORY_TYPE_HOST);
+    }
+
+    /* The failed lane is purged, or not held */
+    bool purged() const
+    {
+        return !ucp_ep_tf_is_held(m_ep, m_lane, m_uct_ep) ||
+               ucp_ep_recovery_arg(m_ep)->tf[m_lane].purged;
+    }
+
+    /* Fail the lane, and post the RMA operation. The lane takes 'posts' RMA
+     * operations of the request, which are not delivered, and then has no
+     * resources, so the request waits in a pending queue which only the test
+     * holds. Wait until the hold moves the request to the recovery queue,
+     * before the peer returns the token of the lane. */
+    void *post_parked(int posts, const ucp_request_param_t &param)
+    {
+        uct_iface_ops_t *ops = &m_uct_ep->iface->ops;
+        void *req;
+
+        m_rma_posts      = posts;
+        m_pending_uct_ep = m_uct_ep;
+        m_orig_purge     = ops->ep_pending_purge;
+        m_mock.setup(&ops->ep_pending_add, pending_add);
+        m_mock.setup(&ops->ep_pending_purge, pending_purge);
+        m_mock.setup(&ops->ep_put_zcopy, zcopy<&uct_iface_ops_t::ep_put_zcopy>);
+        m_mock.setup(&ops->ep_get_zcopy, zcopy<&uct_iface_ops_t::ep_get_zcopy>);
+        m_mock.setup(&ops->ep_get_bcopy, get_bcopy);
+        if (uct_ep_invalidate(m_uct_ep, 0) != UCS_OK) {
+            UCS_TEST_ABORT("uct_ep_invalidate failed");
+        }
+
+        req = (m_op_id == UCP_OP_ID_PUT) ?
+                      ucp_put_nbx(m_ep, m_lbuf->ptr(), m_lbuf->size(),
+                                  uintptr_t(m_rbuf->ptr()), m_rkey, &param) :
+                      ucp_get_nbx(m_ep, m_lbuf->ptr(), m_lbuf->size(),
+                                  uintptr_t(m_rbuf->ptr()), m_rkey, &param);
+        if (!UCS_PTR_IS_PTR(req) ||
+            (m_pending_req != &ucp_req(req)->send.uct)) {
+            UCS_TEST_ABORT("request does not wait in the pending queue of lane "
+                           << unsigned(m_lane));
+        }
+
+        wait_for_cond(
+                [this]() { return ucp_ep_tf_is_held(m_ep, m_lane, m_uct_ep); },
+                [this]() { progress(); });
+        if (purged() || (m_pending_req != NULL)) {
+            UCS_TEST_ABORT("lane " << unsigned(m_lane) << " is not held, is"
+                           << " purged, or kept the request in its pending"
+                           << " queue");
+        }
+
+        m_mock.cleanup();
+        EXPECT_FALSE(
+                ucs_queue_is_empty(&ucp_ep_recovery_arg(m_ep)->tf_pending_q));
+        return req;
+    }
+
+    /* A request of several fragments posts some of them on the failed lane, and
+     * then waits in its pending queue. Token failover moves the request to the
+     * recovery queue while the fragments are outstanding on the held lane, and
+     * with two lanes, while a fragment is in flight on the other lane. The
+     * request must complete once, after all of its data arrived. */
+    void test_parked_rma(ucp_operation_id_t op_id, const std::string &proto,
+                         unsigned num_lanes = 1)
+    {
+        const size_t size          = 32 * UCS_KBYTE;
+        const unsigned op          = (op_id == UCP_OP_ID_PUT) ? TEST_OP_PUT :
+                                                                TEST_OP_GET;
+        const ucp_lane_map_t lanes = init_rma(size, op_id, proto, num_lanes);
+        mapped_buffer &dst         = (op == TEST_OP_PUT) ? *m_rbuf : *m_lbuf;
+        ucp_lane_index_t live_lane = UCP_NULL_LANE;
+        std::vector<uint8_t> zeros(size, 0);
+        ucp_request_param_t param;
+        ucp_request_t *req;
+
+        /* The restarted request needs another lane */
+        get_lanes(op);
+
+        /* The memory handle is registered on every memory domain, so the token
+         * purge could send a zero copy fragment again on any lane */
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                             UCP_OP_ATTR_FIELD_MEMH;
+        param.cb.send      = rma_cb;
+        param.memh         = m_lbuf->memh();
+        if (num_lanes > 1) {
+            live_lane     = ucs_ffs64(lanes & ~UCS_BIT(m_lane));
+            m_live_uct_ep = ucp_ep_get_lane(m_ep, live_lane);
+            m_mock.setup(&m_live_uct_ep->iface->ops.ep_put_zcopy,
+                         zcopy<&uct_iface_ops_t::ep_put_zcopy>);
+            m_mock.setup(&m_live_uct_ep->iface->ops.ep_get_zcopy,
+                         zcopy<&uct_iface_ops_t::ep_get_zcopy>);
+        }
+
+        /* With two lanes, one fragment on the failed lane is enough to leave
+         * another one in flight on the live lane */
+        req = ucp_req(post_parked((num_lanes == 1) ? 2 : 1, param));
+        EXPECT_LT(m_rma_posts, 0) << "posted less fragments on lane "
+                                  << unsigned(m_lane);
+        if (num_lanes > 1) {
+            EXPECT_NE(0u, m_live_count) << "posted no fragment on lane "
+                                        << unsigned(live_lane);
+
+            /* Neither the purge nor the replay may restart the request while
+             * its fragment is in flight */
+            wait_for_cond([this]() { return purged(); },
+                          [this]() { progress(); });
+            wait_for_cond([this]() { return m_completions != 0; },
+                          [this]() { progress(); }, 0.1);
+            EXPECT_EQ(0u, m_completions) << "completed while " << m_live_count
+                                         << " fragments were in flight on lane "
+                                         << unsigned(live_lane);
+            for (; (m_live_count > 0) && (m_live_comp->count > 0);
+                 --m_live_count) {
+                uct_invoke_completion(m_live_comp, UCS_OK);
+            }
+
+            EXPECT_EQ(0u, m_live_count) << "completed before " << m_live_count
+                                        << " fragments in flight";
+        }
+
+        /* The receiver returns the token: the purge, and then the replay. No
+         * operation of the request may complete after it, or write to its
+         * destination. */
+        wait_for_cond([this]() { return m_completions != 0; },
+                      [this]() { progress(); });
+        dst.memset(0);
+        short_progress_loop();
+        EXPECT_EQ(1u, m_completions);
+        /* Without assertions, a late completion only decrements the count */
+        EXPECT_EQ(0, req->send.state.uct_comp.count)
+                << "completed with operations in flight";
+        EXPECT_UCS_OK(m_status);
+        EXPECT_TRUE(m_arrived) << "completed before its data arrived";
+        EXPECT_TRUE(mem_buffer::compare(zeros.data(), dst.ptr(), size,
+                                        UCS_MEMORY_TYPE_HOST))
+                << "wrote to its destination after it completed";
+        ucp_request_free(req + 1);
+        EXPECT_EQ(0u, total_err_count());
+        test_recovery(op);
+    }
+
+    /* Count the completions, and check the data at the first one */
+    static void rma_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        if (m_self->m_completions++ == 0) {
+            m_self->m_status  = status;
+            m_self->m_arrived = m_self->is_delivered();
+        }
+    }
+
+    static ucp_request_t *ucp_req(void *req)
+    {
+        return static_cast<ucp_request_t*>(req) - 1;
+    }
+
+    /* The failed lane takes 'm_rma_posts' more operations, and then has no
+     * resources */
+    static bool no_resource(uct_ep_h ep)
+    {
+        return (ep == m_self->m_pending_uct_ep) && (m_self->m_rma_posts-- <= 0);
+    }
+
+    /* A zero copy operation of 'm_live_uct_ep' stays in flight until the test
+     * completes it */
+    template<uct_ep_put_zcopy_func_t uct_iface_ops_t::*op>
+    static ucs_status_t
+    zcopy(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
+          uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        if (no_resource(ep)) {
+            return UCS_ERR_NO_RESOURCE;
+        } else if ((ep != m_self->m_live_uct_ep) || (comp == NULL)) {
+            return m_self->m_mock.orig_func(&(ep->iface->ops.*op), ep, iov,
+                                            iovcnt, remote_addr, rkey, comp);
+        }
+
+        m_self->m_live_comp = comp;
+        ++m_self->m_live_count;
+        return UCS_INPROGRESS;
+    }
+
+    static ucs_status_t
+    get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb, void *arg,
+              size_t length, uint64_t remote_addr, uct_rkey_t rkey,
+              uct_completion_t *comp)
+    {
+        return no_resource(ep) ? UCS_ERR_NO_RESOURCE :
+               m_self->m_mock.orig_func(&ep->iface->ops.ep_get_bcopy, ep,
+                                        unpack_cb, arg, length, remote_addr,
+                                        rkey, comp);
+    }
+
+    static ucs_status_t
+    pending_add(uct_ep_h ep, uct_pending_req_t *req, unsigned flags)
+    {
+        if ((ep != m_self->m_pending_uct_ep) ||
+            (m_self->m_pending_req != NULL)) {
+            return m_self->m_mock.orig_func(&ep->iface->ops.ep_pending_add, ep,
+                                            req, flags);
+        }
+
+        m_self->m_pending_req = req;
+        return UCS_OK;
+    }
+
+    static void
+    pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb, void *arg)
+    {
+        uct_pending_req_t *req = m_self->m_pending_req;
+
+        if ((ep == m_self->m_pending_uct_ep) && (req != NULL)) {
+            m_self->m_pending_req = NULL;
+            cb(req, arg);
+        }
+
+        m_self->m_orig_purge(ep, cb, arg);
+    }
+
+    static test_ucp_ft_tf_hold     *m_self;
+    ucs::mock                      m_mock;
+    ucp_operation_id_t             m_op_id          = UCP_OP_ID_PUT;
+    ucp_ep_h                       m_ep             = NULL;
+    ucp_lane_index_t               m_lane           = UCP_NULL_LANE;
+    uct_ep_h                       m_uct_ep         = NULL;
+    std::unique_ptr<mapped_buffer> m_lbuf, m_rbuf;
+    ucs::handle<ucp_rkey_h>        m_rkey;
+    /* The failed lane, if only the test holds its pending queue */
+    uct_ep_h                       m_pending_uct_ep = NULL;
+    uct_pending_req_t              *m_pending_req   = NULL;
+    uct_ep_pending_purge_func_t    m_orig_purge     = NULL;
+    int                            m_rma_posts      = 0;
+    /* The other lane of a request of two lanes */
+    uct_ep_h                       m_live_uct_ep    = NULL;
+    uct_completion_t               *m_live_comp     = NULL;
+    unsigned                       m_live_count     = 0;
+    /* The completions of the request of test_parked_rma() */
+    unsigned                       m_completions    = 0;
+    ucs_status_t                   m_status         = UCS_INPROGRESS;
+    bool                           m_arrived        = false;
+};
+
+test_ucp_ft_tf_hold *test_ucp_ft_tf_hold::m_self = NULL;
+
+/* A put waits in the pending queue of a lane which fails and does not recover.
+ * Once the peer returns the token of the lane, the put must be sent on the live
+ * lanes. */
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_put_lane_down)
+{
+    ucs::mock probe_mock;
+
+    init_rma(rma_msg_size());
+    /* The probes of the rebuilt lane fail, so it does not recover */
+    mock_recovery_probe(sender().worker(), probe_mock, recovery_probe_fail);
+    EXPECT_UCS_OK(request_wait(post_parked(0, m_req_empty_param)));
+    EXPECT_TRUE(is_delivered()) << "put data was not delivered";
+    EXPECT_TRUE(ucp_ep_get_failed_lanes(m_ep) & UCS_BIT(m_lane))
+            << "lane " << unsigned(m_lane) << " recovered";
+    EXPECT_EQ(0, total_err_count());
+}
+
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_get_bcopy, "ZCOPY_THRESH=inf")
+{
+    test_parked_rma(UCP_OP_ID_GET, "get/bcopy");
+}
+
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_get_zcopy, "ZCOPY_THRESH=0",
+           "RMA_ZCOPY_MAX_SEG_SIZE=8k")
+{
+    test_parked_rma(UCP_OP_ID_GET, "get/zcopy");
+}
+
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_put_zcopy, "RMA_ZCOPY_MAX_SEG_SIZE=8k")
+{
+    test_parked_rma(UCP_OP_ID_PUT, "put/offload/zcopy");
+}
+
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_get_zcopy_2_rails, "ZCOPY_THRESH=0",
+           "RMA_ZCOPY_MAX_SEG_SIZE=8k", "MAX_RMA_RAILS=2")
+{
+    test_parked_rma(UCP_OP_ID_GET, "get/zcopy", 2);
+}
+
+UCS_TEST_P(test_ucp_ft_tf_hold, parked_put_zcopy_2_rails,
+           "RMA_ZCOPY_MAX_SEG_SIZE=8k", "MAX_RMA_RAILS=2")
+{
+    test_parked_rma(UCP_OP_ID_PUT, "put/offload/zcopy", 2);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ft_tf_hold, rcx, "rc_x")
