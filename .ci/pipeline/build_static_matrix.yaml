@@ -26,7 +26,7 @@ runs_on_dockers:
       arch: x86_64,
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
       limits: "{memory: 8Gi, cpu: 6000m, nvidia.com/sriov_cx7_p2: 1}",
-      requests: "{memory: 8Gi, cpu: 2000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 4Gi, cpu: 2000m, nvidia.com/sriov_cx7_p2: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW, SYS_PTRACE ]",
       EXTRA_MODULES: "ucx-ib ucx-cma ucx-rdmacm ucx-ib-mlx5",
       EXTRA_TLS: "dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma",
