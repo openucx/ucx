@@ -5091,6 +5091,51 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_bw_large_frag, mm_cma,
                               "posix,cma")
 
 
+class test_ucp_proto_mock_rcx_create_failure : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_create_failure()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    void init() override
+    {
+        add_mock_iface("mock_0:1");
+        add_mock_iface("mock_1:1");
+        ucp_test::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_create_failure, no_aux_transport)
+{
+    ucp_ep_params_t params = get_ep_params();
+    ucp_worker_h worker    = sender().worker();
+    ucp_address_t *address;
+    size_t address_length;
+    ucp_ep_h ep;
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(ucp_worker_get_address(receiver().worker(), &address,
+                                         &address_length));
+    params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(worker, &params, &ep);
+    }
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_EQ(UCS_ERR_UNREACHABLE, status);
+
+    wait_for_value(&worker->flush_ops_count, 0u);
+    EXPECT_EQ(0u, worker->flush_ops_count);
+    EXPECT_EQ(0u, worker->num_all_eps);
+}
+
+/* Omit UD to fail connection establishment after allocating the lanes. */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_create_failure, rc_mlx5,
+                              "rc_mlx5")
+
+
 #if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
 
 class test_ucp_proto_mock_rcx_speed_change : public test_ucp_proto_mock {

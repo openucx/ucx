@@ -930,6 +930,9 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     return UCS_OK;
 
 err_delete:
+    if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_cleanup_lanes(ep);
+    }
     ucp_ep_delete(ep);
 err:
     return status;
