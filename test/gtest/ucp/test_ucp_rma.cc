@@ -1432,14 +1432,10 @@ public:
         add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
-    static void get_op_variants(std::vector<ucp_test_variant>& variants,
-                                uint64_t op_mask) {
-        static const char *op_names[] = {"put", "get"};
-        add_variant_values(variants, get_memtype_variants, op_mask, op_names);
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        get_op_variants(variants, UCS_MASK(2));
+        static const char *op_names[] = {"put", "get"};
+        add_variant_values(variants, get_memtype_variants, UCS_MASK(2),
+                           op_names);
     }
 
     virtual void init() override {
@@ -2236,10 +2232,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
 
 class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        get_op_variants(variants, UCS_MASK(2));
-    }
-
     test_ucp_rma_sgl_contig() {
         const bool host = UCP_MEM_IS_HOST(src_mem_type());
 
