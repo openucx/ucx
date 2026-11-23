@@ -987,6 +987,34 @@ public:
     }
 
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+
+    void force_close_simultaneous_connect(bool close_winner)
+    {
+        if (get_variant_value() & NO_EP_MATCH) {
+            UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
+        }
+
+        /* The connection request of the worker with the lower UUID is
+         * accepted by the peer and the other request is ignored. Either way
+         * the receiving EP is bound to the requesting EP, so force close the
+         * requesting EP before its request is handled */
+        bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
+        entity &winner   = sender_wins ? sender() : receiver();
+        entity &peer     = sender_wins ? receiver() : sender();
+        entity &closer   = close_winner ? winner : peer;
+        entity &other    = close_winner ? peer : winner;
+
+        winner.connect(&peer, get_ep_params());
+        peer.connect(&winner, get_ep_params());
+        disconnect(closer, true);
+
+        closer.connect(&other, get_ep_params());
+        if (get_variant_value() & TEST_TAG) {
+            send_recv(closer.ep(), other.worker(), NULL, 1, 1);
+        }
+        flush_worker(closer);
+        disconnect(other, true);
+    }
 };
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
@@ -1032,6 +1060,14 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
             disconnect(receiver(), true);
         }
     }
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_winner) {
+    force_close_simultaneous_connect(true);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_peer) {
+    force_close_simultaneous_connect(false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
@@ -1888,6 +1924,47 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
 
     ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
     EXPECT_NE(UCP_NULL_LANE, ep_config->key.keepalive_lane);
+}
+
+/* The lanes of a configuration stay unset after a failed wireup, until the
+ * scheduled endpoint failure runs */
+UCS_TEST_P(test_ucp_wireup_keepalive, lane_without_uct_ep,
+           "KEEPALIVE_INTERVAL=0.1s")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep         = sender().ep();
+    ucp_lane_index_t lane;
+    size_t round_count;
+    uct_ep_h uct_ep;
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+
+    lane = ucp_ep_config(ep)->key.keepalive_lane;
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no keepalive lane");
+    }
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ucp_ep_set_lane(ep, lane, NULL);
+    }
+
+    /* The round in progress may have already passed the endpoint */
+    round_count = worker->keepalive.round_count + 2;
+    wait_for_cond(
+            [&]() { return worker->keepalive.round_count >= round_count; },
+            [&]() { progress(); });
+    EXPECT_GE(worker->keepalive.round_count, round_count);
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_ep_set_lane(ep, lane, uct_ep);
+    }
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)

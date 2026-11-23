@@ -50,6 +50,11 @@ static const char *gpu_nic_assignment_group_by[] = {
 /* Helpers for tests that move GPU memory with a gpu-nic assignment */
 class gpu_nic_assignment_checks {
 protected:
+    static std::string no_assignable_devices_error()
+    {
+        return "no assignable network devices";
+    }
+
     gpu_nic_assignment_checks() :
         m_proto_used(false), m_has_unassigned_bw_lane(false)
     {

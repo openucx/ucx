@@ -271,8 +271,15 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                          req->send.state.dt_iter.offset;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+    ucp_proto_multi_lane_priv_t adjusted;
     uct_iov_t iov;
     ucs_status_t status;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
@@ -410,6 +417,14 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                     ucp_datatype_iter_t *next_iter,
                                     ucp_lane_index_t *lane_shift)
 {
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
+
     return ucp_proto_rma_sgl_offload_send_func(
             req, lpriv, 0, next_iter, ucp_proto_put_sgl_offload_post, NULL);
 }
@@ -489,6 +504,14 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_datatype_iter_t *next_iter,
                                        ucp_lane_index_t *lane_shift)
 {
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
+
     return ucp_proto_rma_sgl_offload_send_frags(
             req, lpriv, 1, 0, next_iter, ucp_proto_put_sgl_offload_sw_post,
             NULL);

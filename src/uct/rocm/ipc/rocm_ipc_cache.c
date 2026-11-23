@@ -346,7 +346,7 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
 
     /* A pinned mapping is detached by the last unpin. */
     mapped_addr = NULL;
-    if (region->pin_count == 0) {
+    if (ucs_atomic_cswap32(&region->pin_count, 0, 0) == 0) {
         mapped_addr         = region->mapped_addr;
         region->mapped_addr = NULL;
     }
@@ -541,6 +541,24 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
             if ((region->signal.handle == 0) ||
                 (hsa_signal_load_scacquire(region->signal) > 0)) {
+                /* The last unpin detaches the import so the owner can free
+                 * the buffer and export another one. Reattach on the next use. */
+                if (region->mapped_addr == NULL) {
+                    hsa_status = hsa_amd_ipc_memory_attach(&key->ipc,
+                                                           key->length, 0, NULL,
+                                                           &mapped_addr);
+                    if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
+                        ucs_error("%s: failed to reattach ipc mem handle. "
+                                  "addr:%p len:%lu hsa_status:%d",
+                                  cache->name, (void*)key->address, key->length,
+                                  hsa_status);
+                        uct_rocm_ipc_cache_region_stale_drop_locked(region,
+                                                                    deferred);
+                        return UCS_ERR_INVALID_ADDR;
+                    }
+                    region->mapped_addr = mapped_addr;
+                }
+
                 ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
                           UCS_PGT_REGION_FMT,
                           cache->name, (void*)key->address, key->length,
@@ -828,6 +846,8 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
     ucs_status_t status;
     void *mapped;
 
+    ucs_assert(region_p != NULL);
+
     ucs_list_head_init(&deferred);
     ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
     status = uct_rocm_ipc_remote_cache_get(hash_key, &cache);
@@ -841,11 +861,9 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
             /* Keep the region alive until its IPC signal is armed. */
             ucs_atomic_add32(&watch_region->refcount, 1);
         }
-        if (region_p != NULL) {
-            ++region->pin_count;
-            ucs_atomic_add32(&region->refcount, 1);
-            pinned = region;
-        }
+        ucs_atomic_add32(&region->pin_count, 1);
+        ucs_atomic_add32(&region->refcount, 1);
+        pinned = region;
     }
     ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
@@ -855,31 +873,42 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
     }
     if (status != UCS_OK) {
         if (pinned != NULL) {
-            uct_rocm_ipc_cache_unpin(pinned);
+            uct_rocm_ipc_cache_unpin(pinned, 1);
         }
         return status;
     }
 
     *mapped_addr = mapped;
-    if (region_p != NULL) {
-        *region_p = pinned;
-    }
+    *region_p    = pinned;
     return UCS_OK;
 }
 
-void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region)
+void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region,
+                              int free_unused_mapping)
 {
-    ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
-    ucs_assert(region->pin_count > 0);
-    if ((--region->pin_count == 0) &&
-        (ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0)) {
-        if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
-            HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+    uint32_t pin_count;
+
+    pin_count = ucs_atomic_fsub32(&region->pin_count, 1);
+    ucs_assert(pin_count > 0);
+
+    /* Detach only when the caller is releasing an unused mapping, or the
+     * owner already freed the buffer. A cached import with no pins stays
+     * mapped so the next lookup does not call hsa_amd_ipc_memory_attach.
+     * A drop that already detached, or a pin that arrived after this unpin,
+     * leaves mapped_addr alone. */
+    if (pin_count == 1) {
+        ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
+        if ((ucs_atomic_cswap32(&region->pin_count, 0, 0) == 0) &&
+            (region->mapped_addr != NULL) &&
+            (free_unused_mapping || (region->deactivate != 0))) {
+            if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
+                HSA_STATUS_SUCCESS) {
+                ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+            }
+            region->mapped_addr = NULL;
         }
-        region->mapped_addr = NULL;
+        ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
     }
-    ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
     uct_rocm_ipc_cache_region_unref(region);
 }
