@@ -843,6 +843,23 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     key.family   = sa_remote->sa_family;
 
     pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+    now  = ucs_get_time();
+    iter = kh_get(ucs_netlink_route_cache, &ucs_netlink_route_cache, key);
+    if (iter != kh_end(&ucs_netlink_route_cache)) {
+        result = &kh_val(&ucs_netlink_route_cache, iter);
+        if (ucs_time_to_sec(now - result->lookup_time) <
+            ucs_global_opts.netlink_route_cache_ttl) {
+            goto out_result;
+        }
+    }
+
+    /* The lock is not held while waiting for the kernel, so that lookups of
+     * other threads are not delayed. Threads which miss the same destination
+     * at the same time each look it up. */
+    pthread_mutex_unlock(&ucs_netlink_route_cache_lock);
+    status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index, &route);
+    pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+
     iter = kh_put(ucs_netlink_route_cache, &ucs_netlink_route_cache, key,
                   &khret);
     if (khret == UCS_KH_PUT_FAILED) {
@@ -852,31 +869,30 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     }
 
     result = &kh_val(&ucs_netlink_route_cache, iter);
-    now    = ucs_get_time();
-    if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
-        (ucs_time_to_sec(now - result->lookup_time) >=
-         ucs_global_opts.netlink_route_cache_ttl)) {
-        status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
-                                          &route);
+    if ((khret == UCS_KH_PUT_KEY_PRESENT) && (result->lookup_time > now)) {
+        /* Another thread stored the result of a later lookup meanwhile */
+        goto out_result;
+    }
+
+    if ((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE)) {
         if (status == UCS_OK) {
             result->route = route;
         }
 
-        if ((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE)) {
-            result->status      = status;
-            result->lookup_time = now;
-        } else if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
-                   ((status != UCS_ERR_NO_RESOURCE) &&
-                    (status != UCS_ERR_NO_MEMORY))) {
-            kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
-            goto out_unlock;
-        }
-
-        /* A lookup which failed to get an answer from the kernel, e.g. for lack
-         * of file descriptors or memory, keeps the previous result, and is
-         * done again at the next call */
+        result->status      = status;
+        result->lookup_time = now;
+    } else if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
+               ((status != UCS_ERR_NO_RESOURCE) &&
+                (status != UCS_ERR_NO_MEMORY))) {
+        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
+        goto out_unlock;
     }
 
+    /* A lookup which failed to get an answer from the kernel, e.g. for lack of
+     * file descriptors or memory, keeps the previous result, and is done again
+     * at the next call */
+
+out_result:
     status = result->status;
     if (status == UCS_OK) {
         *route_p = result->route;

@@ -22,6 +22,8 @@ extern "C" {
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <atomic>
+#include <thread>
 #include <vector>
 
 
@@ -560,6 +562,65 @@ protected:
 
         return 0;
     }
+
+    static int lookup_local_addrs(unsigned lo_index, int num_lookups)
+    {
+        struct sockaddr_in sin = {};
+        int num_failures       = 0;
+        ucs_netlink_route_t route;
+        ucs_status_t status;
+
+        sin.sin_family = AF_INET;
+        for (int i = 0; i < num_lookups; ++i) {
+            /* 127.1.0.0/26, on the local route of the loopback */
+            sin.sin_addr.s_addr = htonl(0x7f010000 + (i % 64));
+            status = ucs_netlink_route_get((struct sockaddr*)&sin, NULL,
+                                           lo_index, &route);
+            if ((status != UCS_OK) || (route.type != RTN_LOCAL)) {
+                ++num_failures;
+            }
+        }
+
+        return num_failures;
+    }
+
+    /* Cached results expire at once, so threads look up the same destinations
+     * in the kernel at the same time, and add them to the cache */
+    static int concurrent_lookups_child()
+    {
+        const int num_threads = 8;
+        const int num_lookups = 200;
+        unsigned lo_index     = if_nametoindex("lo");
+        std::atomic<int> num_failures(0);
+        std::vector<std::thread> threads;
+        ucs_netlink_route_t route;
+        ucs_status_t status;
+
+        status = route_get("1us", "127.1.0.0", lo_index, &route);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            return CHILD_SKIP;
+        } else if (status != UCS_OK) {
+            return child_error("lookup of a local address: " +
+                               status_str(status));
+        }
+
+        for (int i = 0; i < num_threads; ++i) {
+            threads.emplace_back([&]() {
+                num_failures += lookup_local_addrs(lo_index, num_lookups);
+            });
+        }
+
+        for (std::thread &thread : threads) {
+            thread.join();
+        }
+
+        if (num_failures != 0) {
+            return child_error(std::to_string(num_failures.load()) +
+                               " failed lookups");
+        }
+
+        return 0;
+    }
 };
 
 UCS_TEST_F(test_netlink_route_cache, route_change) {
@@ -569,6 +630,11 @@ UCS_TEST_F(test_netlink_route_cache, route_change) {
 
 UCS_TEST_F(test_netlink_route_cache, failed_lookup) {
     run_in_child(failed_lookup_child,
+                 "kernel does not support route lookup by fib match");
+}
+
+UCS_TEST_F(test_netlink_route_cache, concurrent_lookups) {
+    run_in_child(concurrent_lookups_child,
                  "kernel does not support route lookup by fib match");
 }
 
