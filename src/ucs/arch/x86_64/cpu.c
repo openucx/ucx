@@ -410,8 +410,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
     if (family == 0xf) {
         family += version.ext_family;
     }
-    if ((family == 0x6) || (family == 0x7) || (family == 0xf) ||
-        (family == 0x17) || (family == 0x19)) {
+    if (family >= 0x6) {
         model = (version.ext_model << 4) | model;
     }
 
@@ -677,9 +676,9 @@ void ucs_cpu_init()
 
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
-    ucs_x86_cpu_registers reg = {}; /* Silence static checker */
-    ucs_x86_cache_line_reg_info_t cache_info;
-    ucs_x86_cache_line_reg_info_t line_info;
+    ucs_x86_cpu_registers reg                = {}; /* Silence static checker */
+    ucs_x86_cache_line_reg_info_t cache_info = {};
+    ucs_x86_cache_line_reg_info_t line_info  = {};
     uint32_t sets;
     uint32_t i, t, r, l4;
     uint32_t max_iter;

@@ -10,6 +10,7 @@
 #include "fake.h"
 
 #include <sys/uio.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -340,7 +341,7 @@ static int dev_rx_cb(struct iovec *iov, int count)
     }
 
     if (fqp == NULL) {
-        return 1;
+        return -ENOENT;
     }
 
     if (hdr->opcode == IBV_WR_SEND) {
@@ -359,7 +360,10 @@ static void dev_send_comp(void *arg, int ret)
 {
     struct fake_cqe *fcqe = arg;
 
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+        /* Same status as EFA reports for a bad destination QP number */
+        fcqe->wc.status = IBV_WC_REM_INV_RD_REQ_ERR;
+    } else if (ret < 0) {
         fcqe->wc.status = IBV_WC_GENERAL_ERR;
     }
 
@@ -449,6 +453,11 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
     if (ret == 0) {
         free(fcqe);
         return -1;
+    }
+
+    /* UD silently drops datagrams sent to a missing QP */
+    if ((ret == -ENOENT) && (qp->qp_type == IBV_QPT_UD)) {
+        ret = 1;
     }
 
     dev_send_comp(fcqe, ret);

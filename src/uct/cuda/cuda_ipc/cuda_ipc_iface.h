@@ -12,11 +12,29 @@
 #include <cuda.h>
 
 #include "cuda_ipc_md.h"
-#include "cuda_ipc_ep.h"
 #include "cuda_ipc_cache.h"
 
 
 #define UCT_CUDA_IPC_MAX_PEERS 128
+
+
+typedef enum {
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC = UCS_BIT(1)
+} uct_cuda_ipc_device_addr_flags_t;
+
+
+typedef struct {
+    uint64_t system_uuid;
+    uint8_t  flags; /* uct_cuda_ipc_device_addr_flags_t */
+} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
+
+
+/* Device address extended with the NVLink domain, sent if FLAG_MNNVL is set */
+typedef struct {
+    uct_cuda_ipc_device_addr_t super;
+    uint64_t                   nvlink_domain;
+} UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
 
 
 typedef struct {
@@ -44,16 +62,8 @@ typedef struct {
 
 
 typedef struct {
-    pid_t        pid;
-    ucs_sys_ns_t pid_ns;
-    uintptr_t    d_bptr;
-    const void   *mapped_addr;
-} uct_cuda_ipc_sgl_entry_t;
-
-
-typedef struct {
-    size_t                   count;
-    uct_cuda_ipc_sgl_entry_t *entries;
+    size_t                 count;
+    uct_cuda_ipc_mapping_t *entries;
 } uct_cuda_ipc_sgl_mapping_t;
 
 
@@ -64,11 +74,8 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
     size_t i;
 
     for (i = 0; i < mapping->count; i++) {
-        uct_cuda_ipc_unmap_memhandle(mapping->entries[i].pid,
-                                     mapping->entries[i].pid_ns,
-                                     mapping->entries[i].d_bptr,
-                                     mapping->entries[i].mapped_addr,
-                                     cuda_device, enable_cache);
+        uct_cuda_ipc_unmap_memhandle(&mapping->entries[i], cuda_device,
+                                     enable_cache);
     }
 
     ucs_free(mapping);
@@ -76,13 +83,9 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 
 
 typedef struct {
-    uct_cuda_event_desc_t super;
-    const void            *mapped_addr;
-    uct_cuda_ipc_ep_t     *ep;
-    uintptr_t             d_bptr;
-    pid_t                 pid;
-    ucs_sys_ns_t          pid_ns;
-    CUdevice              cuda_device;
+    uct_cuda_event_desc_t      super;
+    uct_cuda_ipc_mapping_t     mapping;
+    CUdevice                   cuda_device;
     uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
 } uct_cuda_ipc_event_desc_t;
 

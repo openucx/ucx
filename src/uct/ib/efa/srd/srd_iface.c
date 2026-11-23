@@ -146,8 +146,9 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
         return UCS_ERR_NO_MEMORY;
     }
 
-    send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
-    send_op->ep      = NULL;
+    send_op->comp_cb     = (uct_srd_send_op_comp_t)ucs_empty_function;
+    send_op->ep          = NULL;
+    send_op->ctl_ep_uuid = (hdr->id == UCT_SRD_CTL_ID_REQ) ? hdr->ep_uuid : 0;
     /* Take over the control operation's AH reference, so that the AH outlives
      * the WQE posted below */
     send_op->ah_entry = ctl_op->ah_entry;
@@ -207,6 +208,12 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_srd_ep_t *ep           = send_op->ep;
     ucs_log_level_t log_lvl    = UCS_LOG_LEVEL_FATAL;
     ucs_status_t status;
+
+    /* A failed AH request means the peer is unreachable, and the requesting
+     * EP would wait for the AH response forever before sending RMA */
+    if ((ep == NULL) && (send_op->ctl_ep_uuid != 0)) {
+        ep = uct_srd_iface_get_ep(iface, send_op->ctl_ep_uuid);
+    }
 
     if (ep == NULL) {
         ucs_debug("iface=%p wc=%p wr_id=%p failure in tx cqe without ep",
@@ -465,6 +472,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     uct_ib_iface_init_attr_t init_attr = {0};
     ucs_mpool_params_t mp_params;
     struct efadv_device_attr efa_attr;
+    size_t ctl_req_size;
     ucs_status_t status;
     int mtu, ret;
 
@@ -515,6 +523,17 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {
         goto err_cleanup_stats_node;
+    }
+
+    /* Connection requests carry the device address and are sent inline */
+    ctl_req_size = sizeof(uct_srd_ctl_hdr_t) + self->super.addr_size;
+    if (ctl_req_size > self->config.max_inline) {
+        ucs_error(UCT_IB_IFACE_FMT
+                  ": connection request size %zu exceeds max inline size %u",
+                  UCT_IB_IFACE_ARG(&self->super), ctl_req_size,
+                  self->config.max_inline);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_cleanup_qp;
     }
 
     ucs_mpool_params_reset(&mp_params);
@@ -804,9 +823,11 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
 
     ucs_assertv(ctl->id == UCT_SRD_CTL_ID_REQ, "iface=%p got %s (id=%u)", iface,
                 uct_srd_ctl_id_to_string(ctl->id), ctl->id);
-    ucs_assertv((sizeof(*ctl) + iface->super.addr_size) == length,
+    /* The remote address layout may differ from the local one, so its size is
+       derived from the address itself rather than from iface->addr_size */
+    ucs_assertv((sizeof(*ctl) + uct_ib_address_packed_size(ib_addr)) == length,
                 "req size mismatch expected=%zu received=%u",
-                sizeof(*ctl) + iface->super.addr_size, length);
+                sizeof(*ctl) + uct_ib_address_packed_size(ib_addr), length);
 
     /* TODO do we need an actual non-zero path index ? */
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, 0,

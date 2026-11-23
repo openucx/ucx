@@ -82,6 +82,7 @@ void __ucs_wtimer_add(ucs_twheel_t *t, ucs_wtimer_t *timer, ucs_time_t delta)
 
 void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
 {
+    UCS_LIST_HEAD(expired);
     ucs_wtimer_t *timer;
     uint64_t slot;
 
@@ -94,12 +95,18 @@ void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
 
     slot = (t->current + slot) % t->num_slots;
 
+    /* Advance the cursor before invoking callbacks, so timers added by a
+     * callback cannot expire again in the same sweep. Keep expired timers
+     * active until dispatch so callbacks can still cancel them. */
     for (; t->current != slot; t->current = (t->current+1) % t->num_slots) {
-        while (!ucs_list_is_empty(&t->wheel[t->current])) {
-            timer = ucs_list_extract_head(&t->wheel[t->current], ucs_wtimer_t, list);
-            timer->is_active = 0;
-            timer->cb(timer);
-            t->count--;
-        }
+        ucs_list_splice_tail(&expired, &t->wheel[t->current]);
+        ucs_list_head_init(&t->wheel[t->current]);
+    }
+
+    while (!ucs_list_is_empty(&expired)) {
+        timer = ucs_list_extract_head(&expired, ucs_wtimer_t, list);
+        timer->is_active = 0;
+        timer->cb(timer);
+        t->count--;
     }
 }

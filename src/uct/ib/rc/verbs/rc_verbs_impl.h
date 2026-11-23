@@ -22,28 +22,56 @@ uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
 }
 
 ucs_status_t
-uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
+uct_rc_verbs_iface_prepost_recvs_srq(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max);
+void uct_rc_verbs_iface_repost_empty_qps_no_srq(uct_rc_verbs_iface_t *iface);
 
-static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
-                                                           int fill)
+void uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(uct_rc_verbs_iface_t *iface,
+                                               uint32_t qp_num);
+
+unsigned uct_rc_verbs_post_recv_always(uct_rc_verbs_iface_t *iface,
+                                       uct_rc_verbs_ep_t *ep, unsigned max);
+
+static inline unsigned
+uct_rc_verbs_post_recv_common(uct_rc_verbs_iface_t *iface,
+                              uct_rc_verbs_ep_t *ep)
 {
-    unsigned batch = iface->super.super.config.rx_max_batch;
+    unsigned available = (ep == NULL) ? iface->super.rx.srq.available :
+                                        ep->rx_available;
+    unsigned batch     = iface->super.super.config.rx_max_batch;
+    unsigned posted;
+
+    if (available < batch) {
+        return 0;
+    }
+
+    posted = uct_rc_verbs_post_recv_always(iface, ep, batch);
+
+    /* An empty QP cannot generate a completion to retry receive posting. */
+    if ((ep != NULL) && (ep->rx_available == iface->config.rx_max_wr)) {
+        iface->rx_repost_needed = 1;
+    }
+
+    return posted;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_verbs_ep_post_recv_batches_no_srq(uct_rc_verbs_iface_t *iface,
+                                         uct_rc_verbs_ep_t *ep, unsigned max)
+{
+    unsigned posted = 0;
     unsigned count;
 
-    if (iface->super.rx.srq.available < batch) {
-        if (ucs_likely(fill == 0)) {
-            return 0;
-        } else {
-            count = iface->super.rx.srq.available;
-        }
-    } else {
-        count = batch;
-    }
-    return uct_rc_verbs_iface_post_recv_always(iface, count);
+    ucs_assert(iface->srq == NULL);
+
+    do {
+        count   = uct_rc_verbs_post_recv_common(iface, ep);
+        posted += count;
+    } while ((count > 0) && (posted < max));
+
+    return posted;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -74,15 +102,47 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     }
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
+/* An endpoint which was cancelled or failed must not receive any more */
+static UCS_F_ALWAYS_INLINE int
+uct_rc_verbs_ep_can_post_recv(const uct_rc_verbs_ep_t *ep)
 {
+    return !(ep->super.flags & (UCT_RC_EP_FLAG_FLUSH_CANCEL |
+                                UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED));
+}
+
+/* Account for a receive completion of a QP without an SRQ. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_rx_complete_no_srq(uct_rc_verbs_iface_t *iface,
+                                      uint32_t qp_num, int repost)
+{
+    uct_rc_ep_t *rc_ep    = uct_rc_iface_lookup_ep(&iface->super, qp_num);
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+
+    ucs_assert(iface->srq == NULL);
+
+    if (ucs_unlikely(ep == NULL)) {
+        uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(iface, qp_num);
+        return;
+    }
+
+    ep->rx_available++;
+    /* The receive queue is per QP, so it is much smaller than an SRQ. Refill
+     * it completely, not just one batch, to allow a bigger FC window (see
+     * fc_max_wnd_size) without hitting RNR. */
+    if (repost && uct_rc_verbs_ep_can_post_recv(ep)) {
+        uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep,
+                                                 iface->config.rx_max_wr);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
+{
+    unsigned i, num_wcs = iface->super.super.config.rx_max_poll;
     uct_ib_iface_recv_desc_t *desc;
-    uct_rc_hdr_t *hdr;
-    unsigned i;
-    ucs_status_t status;
-    unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
+    ucs_status_t status;
+    uct_rc_hdr_t *hdr;
 
     status = uct_ib_poll_cq(iface->super.super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
     if (status != UCS_OK) {
@@ -92,30 +152,49 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
 
     for (i = 0; i < num_wcs; i++) {
         desc = (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id;
-        hdr  = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            if (wc[i].status == IBV_WC_REM_ABORT_ERR) {
-                continue;
+            if ((wc[i].status != IBV_WC_REM_ABORT_ERR) &&
+                (wc[i].status != IBV_WC_WR_FLUSH_ERR)) {
+                UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive",
+                                                    &iface->super.super, i, wc);
             }
-            /* we can get flushed messages during ep destroy */
-            if (wc[i].status == IBV_WC_WR_FLUSH_ERR) {
-                continue;
-            }
-            UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", &iface->super.super, i, wc);
+
+            /* A failed receive never delivers an active message. */
+            ucs_mpool_put_inline(desc);
+            continue;
         }
+
+        hdr = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super,
+                                                        desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
 
-        uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr, wc[i].byte_len,
-                                   uct_rc_ep_packet_dump);
-        uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id, wc[i].qp_num,
-                                     wc[i].byte_len, wc[i].imm_data, wc[i].slid);
+        uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr,
+                                   wc[i].byte_len, uct_rc_ep_packet_dump);
+        uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id,
+                                     wc[i].qp_num, wc[i].byte_len,
+                                     wc[i].imm_data, wc[i].slid);
     }
-    iface->super.rx.srq.available += num_wcs;
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                              UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
-    uct_rc_verbs_iface_post_recv_common(iface, 0);
+    if (iface->srq != NULL) {
+        iface->super.rx.srq.available += num_wcs;
+        uct_rc_verbs_post_recv_common(iface, NULL);
+    } else {
+        /* Give empty QPs returned buffers before refilling active QPs. */
+        if (ucs_unlikely(iface->rx_repost_needed)) {
+            uct_rc_verbs_iface_repost_empty_qps_no_srq(iface);
+        }
+
+        for (i = 0; i < num_wcs; i++) {
+            /* Do not repost flushed WRs */
+            uct_rc_verbs_iface_rx_complete_no_srq(iface, wc[i].qp_num,
+                                                  wc[i].status !=
+                                                  IBV_WC_WR_FLUSH_ERR);
+        }
+    }
+
     return num_wcs;
 }
 

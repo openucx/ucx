@@ -20,6 +20,7 @@
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include <nvml.h>
 
@@ -375,6 +376,64 @@ bool mem_buffer::cuda_gpu_has_c2c(unsigned gpu_index)
     (void)gpu_index;
     return false;
 #endif
+}
+
+bool mem_buffer::cuda_mem_is_gdr_capable()
+{
+#if HAVE_CUDA
+#if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
+    /* Cache the device property, but only once it was probed successfully, so
+     * that a transient allocation failure does not skip every guarded test */
+    static int cached_capable = -1;
+    int is_gdr_capable        = 0;
+    void *ptr;
+
+    if (cached_capable != -1) {
+        return cached_capable == 1;
+    }
+
+    if (cudaMalloc(&ptr, 4096) != cudaSuccess) {
+        (void)cudaGetLastError(); /* do not leak the error to other tests */
+        return false;
+    }
+
+    if (cuPointerGetAttribute(&is_gdr_capable,
+                              CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE,
+                              (CUdeviceptr)ptr) != CUDA_SUCCESS) {
+        cudaFree(ptr);
+        return false;
+    }
+
+    cudaFree(ptr);
+    cached_capable = !!is_gdr_capable;
+    return cached_capable == 1;
+#else
+    /* Without the attribute the memory domain assumes capability as well */
+    return true;
+#endif
+#else
+    return false;
+#endif
+}
+
+ucs_status_t mem_buffer::query_dmabuf_export(uct_md_h md,
+                                             ucs_memory_type_t mem_type,
+                                             bool *exported_p)
+{
+    uct_md_mem_attr_t mem_attr = {};
+    mem_buffer buffer(ucs_get_page_size(), mem_type);
+    ucs_status_t status;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
+    status = uct_md_mem_query(md, buffer.ptr(), buffer.size(), &mem_attr);
+    if (status == UCS_OK) {
+        *exported_p = (mem_attr.dmabuf_fd != UCT_DMABUF_FD_INVALID);
+        if (*exported_p) {
+            close(mem_attr.dmabuf_fd);
+        }
+    }
+
+    return status;
 }
 
 #if HAVE_ZE

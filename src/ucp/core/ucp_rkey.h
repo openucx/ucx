@@ -231,11 +231,15 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer);
 
 
-ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
-                                         size_t length,
-                                         ucp_md_map_t unpack_md_map,
-                                         ucp_md_map_t skip_md_map,
-                                         ucs_sys_device_t sys_device,
+ucs_status_t
+ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
+                            ucp_md_map_t unpack_md_map,
+                            ucp_md_map_t skip_md_map,
+                            ucs_sys_device_t sys_device, uint64_t uct_flags,
+                            ucp_rkey_h *rkey_p);
+
+/* Unpack a remote key passing zero flags to uct_rkey_unpack */
+ucs_status_t ucp_ep_rkey_unpack_wo_flags(ucp_ep_h ep, const void *rkey_buffer,
                                          ucp_rkey_h *rkey_p);
 
 

@@ -20,7 +20,7 @@ typedef enum uct_srd_ep_flag {
 } uct_srd_ep_flag_t;
 
 
-typedef struct uct_srd_ep {
+struct uct_srd_ep {
     uct_base_ep_t       super;
     unsigned            flags;            /* Endpoint state tracking */
     uint64_t            ep_uuid;          /* Random EP identifier */
@@ -31,7 +31,7 @@ typedef struct uct_srd_ep {
     uint8_t             path_index;
     ucs_arbiter_group_t pending_group;    /* Queue of pending requests */
     ucs_list_link_t     outstanding_list; /* Ordered outstanding list */
-} uct_srd_ep_t;
+};
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t*);

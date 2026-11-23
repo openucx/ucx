@@ -1,13 +1,18 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
+#include <common/memtype_map_guard.h>
 
 extern "C" {
+#include <ucm/event/event.h>
+#include <ucs/config/global_opts.h>
+#include <ucs/memory/memtype_cache.h>
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
@@ -100,6 +105,391 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
+
+/* Memory type cache without UCM events: only ranges mapped by ucp_mem_map() are
+ * cached, and they are removed by ucp_mem_unmap() */
+class test_ucp_memtype_map : public test_ucp_mem_type {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_test_variants_base,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED));
+    }
+
+    virtual void init() {
+        modify_config("MEMTYPE_CACHE", "y");
+        m_guard.enable();
+        ucp_test::init();
+    }
+
+protected:
+    ucs_status_t lookup(const void *address, size_t size,
+                        ucs_memory_info_t *info) const {
+        return ucs_memtype_lookup(address, size, info);
+    }
+
+    ucs_status_t map(void *address, size_t size, ucp_mem_h *memh_p,
+                     const ucs_memory_type_t *hint = NULL) {
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = address;
+        params.length     = size;
+        if (hint != NULL) {
+            params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+            params.memory_type = *hint;
+        }
+
+        return ucp_mem_map(sender().ucph(), &params, memh_p);
+    }
+
+    void unmap(ucp_mem_h memh) {
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    }
+
+private:
+    memtype_map_guard m_guard;
+};
+
+UCS_TEST_P(test_ucp_memtype_map, map_unmap) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    mem_buffer b(size, mem_type());
+
+    /* Memory which was not mapped is not known to the cache */
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh));
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
+/* The registration is removed even if the option is changed after the mapping */
+UCS_TEST_P(test_ucp_memtype_map, unmap_after_config_change) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    mem_buffer b(size, mem_type());
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh));
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+
+    ucs_global_opts.enable_memtype_cache = UCS_NO;
+    unmap(memh);
+    ucs_global_opts.enable_memtype_cache = UCS_YES;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
+UCS_TEST_P(test_ucp_memtype_map, repeated_map) {
+    const size_t size = 4096;
+    ucs_memory_info_t info;
+    ucp_mem_h memh1, memh2;
+
+    mem_buffer b(size, mem_type());
+
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh1));
+    ASSERT_UCS_OK(map(b.ptr(), size, &memh2));
+
+    /* The range stays cached until the last mapping is released */
+    unmap(memh1);
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh2);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(b.ptr(), size, &info));
+}
+
+UCS_TEST_P(test_ucp_memtype_map, map_with_hint) {
+    const size_t size                  = 4096;
+    const ucs_memory_type_t wrong_hint = UCS_MEMORY_TYPE_HOST;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+    ucs_status_t status;
+
+    mem_buffer b(size, mem_type());
+
+    status = map(b.ptr(), size, &memh, &wrong_hint);
+    if (status != UCS_OK) {
+        UCS_TEST_SKIP_R("mapping with a different memory type hint failed");
+    }
+
+    /* The cache holds the detected type, not the user-provided hint */
+    ASSERT_UCS_OK(lookup(b.ptr(), size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+}
+
+UCS_TEST_P(test_ucp_memtype_map, map_allocate) {
+    const size_t size = 4096;
+    ucp_mem_map_params_t params;
+    ucp_mem_attr_t attr;
+    ucs_memory_info_t info;
+    ucp_mem_h memh;
+
+    params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS     |
+                         UCP_MEM_MAP_PARAM_FIELD_LENGTH      |
+                         UCP_MEM_MAP_PARAM_FIELD_FLAGS       |
+                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    params.address     = NULL;
+    params.length      = size;
+    params.flags       = UCP_MEM_MAP_ALLOCATE;
+    params.memory_type = mem_type();
+    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    ASSERT_UCS_OK(ucp_mem_query(memh, &attr));
+
+    ASSERT_UCS_OK(lookup(attr.address, size, &info));
+    EXPECT_EQ(mem_type(), info.type);
+
+    unmap(memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(attr.address, size, &info));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_map, self_cuda,
+                              "self,cuda_copy")
+
+/* Transfers from and to memory which is cached by ucp_mem_map(), where the
+ * operations get no memory handle, so the protocols look the memory up */
+class test_ucp_memtype_map_xfer : public test_ucp_memtype_map {
+public:
+    virtual void init() {
+        test_ucp_memtype_map::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+protected:
+    static const uint64_t SEED = 0x2222222222222222lu;
+
+    void send_recv(void *send_ptr, void *recv_ptr, size_t length) {
+        ucp_request_param_t param;
+
+        param.op_attr_mask = 0;
+        mem_buffer::pattern_fill(send_ptr, length, SEED, mem_type());
+        mem_buffer::pattern_fill(recv_ptr, length, 0, mem_type());
+
+        void *rreq = ucp_tag_recv_nbx(receiver().worker(), recv_ptr, length, 1,
+                                      1, &param);
+        void *sreq = ucp_tag_send_nbx(sender().ep(), send_ptr, length, 1,
+                                      &param);
+        EXPECT_UCS_OK(request_wait(sreq));
+        EXPECT_UCS_OK(request_wait(rreq));
+
+        mem_buffer::pattern_check(recv_ptr, length, SEED, mem_type());
+    }
+};
+
+/* Send a rendezvous size message from an offset inside a mapped buffer, without
+ * passing the memory handle, and then send again after the buffers are
+ * unmapped, which falls back to the memory type detection */
+UCS_TEST_P(test_ucp_memtype_map_xfer, tag_send_from_mapped_buffer,
+           "RNDV_THRESH=0")
+{
+    static const size_t size   = 256 * UCS_KBYTE;
+    static const size_t offset = 4 * UCS_KBYTE;
+    const size_t length        = size - (2 * offset);
+    ucs_memory_info_t info;
+    ucp_mem_h send_memh, recv_memh;
+
+    mem_buffer send_buf(size, mem_type());
+    mem_buffer recv_buf(size, mem_type());
+    void *send_ptr = UCS_PTR_BYTE_OFFSET(send_buf.ptr(), offset);
+    void *recv_ptr = UCS_PTR_BYTE_OFFSET(recv_buf.ptr(), offset);
+
+    ASSERT_UCS_OK(map(send_buf.ptr(), size, &send_memh));
+    ASSERT_UCS_OK(map(recv_buf.ptr(), size, &recv_memh));
+
+    /* The lookup of a range inside the buffer reports the mapped range */
+    ASSERT_UCS_OK(lookup(send_ptr, length, &info));
+    EXPECT_EQ(mem_type(), info.type);
+    EXPECT_EQ(send_buf.ptr(), info.base_address);
+    EXPECT_EQ(size, info.alloc_length);
+
+    send_recv(send_ptr, recv_ptr, length);
+
+    unmap(send_memh);
+    unmap(recv_memh);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(send_ptr, length, &info));
+
+    send_recv(send_ptr, recv_ptr, length);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_memtype_map_xfer, all, "all")
+
+/*
+ * The CUDA_COPY_DMABUF, ROCM_COPY_DMABUF and ZE_COPY_DMABUF settings decide
+ * whether the GPU memory domains provide a DMA-BUF that the network memory
+ * domains register. uct_p2p_rma_test_dmabuf checks that the network reads the
+ * memory correctly through it.
+ */
+class test_ucp_mem_type_dmabuf : public test_ucp_mem_type {
+public:
+    static constexpr uint64_t SEED = 0x1234567890abcdeflu;
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_memtypes(variants, get_test_variants_base,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                             UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+                             UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE));
+    }
+
+protected:
+    void init() override
+    {
+        test_ucp_mem_type::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+    /*
+     * Send memory of the tested type to a host buffer over a rendezvous
+     * protocol. 'app_owned' allocates the source without UCP and sends it
+     * without a memory handle, like an application would.
+     */
+    void test_xfer(bool app_owned, bool exp_dmabuf);
+};
+
+void test_ucp_mem_type_dmabuf::test_xfer(bool app_owned, bool exp_dmabuf)
+{
+    static constexpr size_t length = 4 * UCS_MBYTE;
+    ucp_context_h context          = sender().ucph();
+    const char *mem_type_name      = ucs_memory_type_names[mem_type()];
+    /* The network memory domains register Level Zero memory only through a
+     * DMA-BUF, and CUDA or ROCm memory also through peer memory */
+    bool dmabuf_only               = (mem_type() == UCS_MEMORY_TYPE_ZE_HOST) ||
+                                     (mem_type() == UCS_MEMORY_TYPE_ZE_DEVICE);
+    mem_buffer recv_buf(length, UCS_MEMORY_TYPE_HOST);
+    ucs::handle<ucp_mem_h, ucp_context_h> memh_handle;
+    ucs::auto_ptr<mem_buffer> app_buf;
+    ucp_request_param_t param, recv_param;
+    ucp_mem_map_params_t params;
+    void *send_buf, *sreq, *rreq;
+    ucp_mem_h memh;
+
+    EXPECT_EQ(exp_dmabuf, context->dmabuf_mds[mem_type()] != UCP_NULL_RESOURCE)
+            << mem_type_name << " memory DMA-BUF provider";
+    if (dmabuf_only) {
+        EXPECT_EQ(exp_dmabuf, (context->reg_md_map[mem_type()] &
+                               context->dmabuf_reg_md_map) != 0)
+                << mem_type_name << " memory registration through a DMA-BUF";
+    }
+
+    if (app_owned) {
+        app_buf.reset(new mem_buffer(length, mem_type()));
+        send_buf           = app_buf->ptr();
+        param.op_attr_mask = 0;
+    } else {
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.length      = length;
+        params.flags       = UCP_MEM_MAP_ALLOCATE;
+        params.memory_type = mem_type();
+        ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh));
+        memh_handle.reset(memh, [](ucp_mem_h handle, ucp_context_h ctx) {
+            EXPECT_UCS_OK(ucp_mem_unmap(ctx, handle));
+        }, context);
+
+        if (exp_dmabuf || dmabuf_only) {
+            EXPECT_EQ(exp_dmabuf,
+                      (memh->md_map & context->dmabuf_reg_md_map) != 0)
+                    << mem_type_name << " memory handle registration on a "
+                    << "DMA-BUF capable memory domain";
+        }
+
+        send_buf           = ucp_memh_address(memh);
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+        param.memh         = memh;
+    }
+
+    mem_buffer::pattern_fill(send_buf, length, SEED, mem_type());
+    mem_buffer::pattern_fill(recv_buf.ptr(), length, 0, UCS_MEMORY_TYPE_HOST);
+
+    recv_param.op_attr_mask = 0;
+
+    rreq = ucp_tag_recv_nbx(receiver().worker(), recv_buf.ptr(), length, 1, 1,
+                            &recv_param);
+    sreq = ucp_tag_send_nbx(sender().ep(), send_buf, length, 1, &param);
+    EXPECT_UCS_OK(request_wait(sreq));
+    EXPECT_UCS_OK(request_wait(rreq));
+
+    mem_buffer::pattern_check(recv_buf.ptr(), length, SEED,
+                              UCS_MEMORY_TYPE_HOST);
+}
+
+UCS_TEST_P(test_ucp_mem_type_dmabuf, alloc, "RNDV_THRESH=0")
+{
+    ucp_context_h context   = sender().ucph();
+    ucp_md_index_t md_index = context->dmabuf_mds[mem_type()];
+    bool exported;
+
+    if ((md_index == UCP_NULL_RESOURCE) || (context->dmabuf_reg_md_map == 0)) {
+        UCS_TEST_SKIP_R("DMA-BUF registration is not supported");
+    }
+
+    /* Only an MPS MLOPart device may refuse an export the memory domain
+     * advertises, and the network cannot register the memory then */
+    if ((mem_type() == UCS_MEMORY_TYPE_CUDA) &&
+        !mem_buffer::cuda_mem_is_gdr_capable()) {
+        ASSERT_UCS_OK(mem_buffer::query_dmabuf_export(
+                context->tl_mds[md_index].md, mem_type(), &exported));
+        if (!exported) {
+            UCS_TEST_SKIP_R("the device refuses DMA-BUF export");
+        }
+    }
+
+    test_xfer(false, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_dmabuf, rcx,
+                                        "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_dmabuf, rcv,
+                                        "rc_v,ze_copy")
+
+
+/*
+ * With DMA-BUF export disabled, the network memory domains cannot register
+ * Level Zero memory: device memory is staged through host memory, and
+ * CPU-accessible memory is copied. CUDA and ROCm memory may still be
+ * registered through peer memory.
+ */
+class test_ucp_mem_type_dmabuf_off : public test_ucp_mem_type_dmabuf {
+protected:
+    void init() override
+    {
+        modify_config("CUDA_COPY_DMABUF", "n", SETENV_IF_NOT_EXIST);
+        modify_config("ROCM_COPY_DMABUF", "n", SETENV_IF_NOT_EXIST);
+        modify_config("ZE_COPY_DMABUF", "n", SETENV_IF_NOT_EXIST);
+        test_ucp_mem_type_dmabuf::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_mem_type_dmabuf_off, alloc, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer(false, false);
+}
+
+UCS_TEST_P(test_ucp_mem_type_dmabuf_off, app_mem, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer(true, false);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_dmabuf_off, rcx,
+                                        "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_dmabuf_off, rcv,
+                                        "rc_v,ze_copy")
 
 class test_ucp_cuda : public ucp_test {
 public:

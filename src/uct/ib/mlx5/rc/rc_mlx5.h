@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -61,6 +62,7 @@ typedef struct uct_rc_mlx5_base_ep {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
     uint8_t                  err_handler_inprogress;
+    void                    *ext_ctx;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;
@@ -224,8 +226,6 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params);
-
-void uct_rc_mlx5_ep_save_ft_ci(uct_rc_mlx5_base_ep_t *ep);
 
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);

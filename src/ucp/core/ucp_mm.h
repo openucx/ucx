@@ -50,7 +50,13 @@ enum {
      * and cached.
      */
     UCP_MEMH_FLAG_SEND_FLUSH_CHECKED = UCS_BIT(4),
-    UCP_MEMH_FLAG_SEND_FLUSH_NEEDED  = UCS_BIT(5)
+    UCP_MEMH_FLAG_SEND_FLUSH_NEEDED  = UCS_BIT(5),
+
+    /**
+     * The memory was added to the memtype map, and must be removed from it.
+     * Recorded at registration, since the global options may change later.
+     */
+    UCP_MEMH_FLAG_MEMTYPE_MAP        = UCS_BIT(6)
 };
 
 
@@ -117,6 +123,7 @@ typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
     ucs_sys_device_t    sys_dev;
+    uint8_t             pool;       /* UCP_WORKER_RNDV_FRAG_POOL_* */
 } ucp_rndv_mpool_priv_t;
 
 

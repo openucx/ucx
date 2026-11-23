@@ -17,6 +17,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 }
 
+#include <algorithm>
 #include <queue>
 
 namespace ucp {
@@ -475,7 +476,7 @@ void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
                                  int value, const std::string& name)
 {
     ucp_test_variant_value entry = {value, name};
-    values.push_back(entry);
+    values.push_back(std::move(entry));
 }
 
 void ucp_test::add_variant_with_value(std::vector<ucp_test_variant>& variants,
@@ -549,7 +550,7 @@ ucp_test::enum_test_params(const std::vector<ucp_test_variant>& variants,
         while (ss.good()) {
             std::string tl_name;
             std::getline(ss, tl_name, ',');
-            result.back().transports.push_back(tl_name);
+            result.back().transports.push_back(std::move(tl_name));
         }
     }
 
@@ -684,12 +685,27 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     ss << test_param.transports;
     ucp_test::set_tls(ucp_config, ss.str());
 
+    ucp_context_h ucph;
+    ucs_status_t status;
+    size_t num_errors_before = m_errors.size();
     {
         scoped_log_handler slh(hide_errors_logger);
-        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
-                                            ucp_init, &local_ctx_params,
-                                            ucp_config);
+        status = ucp_init(&local_ctx_params, ucp_config, &ucph);
     }
+
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("Unsupported operation: ucp_init");
+    }
+
+    if (status != UCS_OK) {
+        auto it = find_filtered_init_error(num_errors_before);
+        if (it != m_errors.end()) {
+            UCS_TEST_SKIP_R(*it);
+        }
+    }
+
+    ASSERT_UCS_OK(status);
+    m_ucph.reset(ucph, ucp_cleanup);
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
@@ -822,6 +838,20 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
         m_workers[worker_index].second.push_back(
                         ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
     }
+}
+
+std::vector<std::string>::iterator
+ucp_test_base::entity::find_filtered_init_error(size_t first_error) const
+{
+    const std::string filter = m_test->init_skip_filter();
+    if (filter.empty()) {
+        return m_errors.end();
+    }
+
+    return std::find_if(m_errors.begin() + first_error, m_errors.end(),
+                        [&filter](const std::string &error) {
+                            return error.find(filter) != std::string::npos;
+                        });
 }
 
 ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(
@@ -1220,13 +1250,10 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps,
     return false;
 }
 
-bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
+bool ucp_test_base::entity::is_rndv_zcopy_supported(
+        uint64_t iface_cap, ucs_memory_type_t mem_type) const
 {
     const auto config = ucp_ep_config(ep());
-    ucs_memory_type_t mem_type;
-
-    mem_type = (ucs_memory_type_t)ucs_ffs64(
-                                        ucph()->config.ext.rndv_frag_mem_types);
 
     for (auto i = 0; i < config->key.num_lanes; ++i) {
         const auto lane = config->key.rma_bw_lanes[i];
@@ -1237,13 +1264,21 @@ bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
             const auto iface_attr =
                 ucp_worker_iface_get_attr(worker(), ucp_ep_get_rsc_index(ep(),
                                           lane));
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+            if (iface_attr->cap.flags & iface_cap) {
                 return true;
             }
         }
     }
 
     return false;
+}
+
+bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
+{
+    const auto mem_type = (ucs_memory_type_t)ucs_ffs64(
+                                        ucph()->config.ext.rndv_frag_mem_types);
+
+    return is_rndv_zcopy_supported(UCT_IFACE_FLAG_PUT_ZCOPY, mem_type);
 }
 
 bool ucp_test_base::entity::is_rndv_supported() const

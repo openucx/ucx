@@ -185,7 +185,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_context_config_t, select_distance_md), UCS_CONFIG_TYPE_STRING},
 
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda,rocm",
    "Memory types which have whole allocations registered.\n"
    "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
@@ -417,6 +417,28 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Allow using error handling protocol in the rendezvous pipeline protocol\n"
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_FRAG_WORKER_MAX_MEM", "auto",
+   "Maximum amount of memory a worker may use for rendezvous staging\n"
+   "fragments. Both \"auto\" and \"inf\" mean no limit. This setting has no\n"
+   "effect when PROTO_ENABLE=n. The same limit is applied independently to\n"
+   "each fragment memory type, and per device when available. It is\n"
+   "converted to a fragment count using RNDV_FRAG_SIZE. When the limit is\n"
+   "reached, further fragment requests are queued until fragments are\n"
+   "released. The limit is at least two fragments. See also\n"
+   "RNDV_FRAG_RTR_RATIO",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_FRAG_RTR_RATIO", "0.8",
+   "Fraction of RNDV_FRAG_WORKER_MAX_MEM which fragments posted to receive\n"
+   "data (RTR) may use at once, in the range (0, 1). The rest is kept for\n"
+   "the put/get operations which move the data, so that they can always\n"
+   "make progress: an RTR fragment is released only when the peer's data\n"
+   "arrives, and the peer needs a fragment of its own to send it, so\n"
+   "without a reserve both peers could wait for each other forever",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_rtr_ratio),
+   UCS_CONFIG_TYPE_POS_DOUBLE},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -673,6 +695,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " - shared      : assign all NICs of a group to every GPU of that group.",
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
+
+  {"GPU_NIC_ASSIGNMENT_GROUP_BY", "auto",
+   "Topology grouping criterion used by UCX_GPU_NIC_ASSIGNMENT_MODE.\n"
+   " - auto       : use 'pci_switch' on x86_64, otherwise 'numa'.\n"
+   " - numa       : one group per NUMA node.\n"
+   " - pci_switch : every GPU uses the deepest PCIe switch it shares with\n"
+   "                a NIC, and GPUs using the same PCIe switch share a group.\n"
+   "                A NIC joins the group of the deepest such PCIe switch\n"
+   "                above it. GPUs sharing no PCIe switch with a NIC, GPUs\n"
+   "                whose group got no NIC, and NICs below none of these\n"
+   "                PCIe switches, are grouped by NUMA node.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_group_by),
+   UCS_CONFIG_TYPE_ENUM(ucs_topo_group_by_names)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
@@ -2785,6 +2820,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
+    if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.rndv_frag_rtr_ratio) ||
+        !(context->config.ext.rndv_frag_rtr_ratio < 1.0)) {
+        ucs_error("UCX_RNDV_FRAG_RTR_RATIO value %g is not in the range "
+                  "(0, 1)", context->config.ext.rndv_frag_rtr_ratio);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
     if (!ucp_dynamic_tl_switch_config_valid(&context->config.ext)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
@@ -3009,11 +3052,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_status_t status;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-            ucs_debug("gpu-nic assignment is not supported on %s "
-                      "architecture, skipping",
-                      ucs_cpu_model_name());
+        if (!ucp_gpu_nic_assignment_is_vera_rubin()) {
+            ucs_debug("gpu-nic assignment is supported only on vera rubin, "
+                      "skipping");
             return UCS_OK;
         }
 
@@ -3039,7 +3080,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
                 context, mode, "no assignable network devices");
     }
 
-    status = ucs_topo_build_groups(&net_device_filter, &groups);
+    status = ucs_topo_build_groups(
+            &net_device_filter, context->config.ext.gpu_nic_assignment_group_by,
+            &groups);
     if (status != UCS_OK) {
         return status;
     }

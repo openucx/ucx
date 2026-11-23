@@ -19,6 +19,10 @@
 const char *uct_cuda_cu_get_error_string(CUresult result);
 
 
+/** Query the CUDA driver API version, for example 13050 for CUDA 13.5. */
+ucs_status_t uct_cuda_driver_get_version(int *version_p);
+
+
 #define UCT_CUDADRV_LOG(_func, _log_level, _result) \
     ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
             uct_cuda_cu_get_error_string(_result))
@@ -103,8 +107,9 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
  * Initialize CUDA devices in the system topology.
  *
  * Register and name all CUDA-visible devices, then use NVML to register
- * physical GPUs hidden by CUDA_VISIBLE_DEVICES. Initialization is performed
- * once and its result is cached.
+ * physical GPUs hidden by CUDA_VISIBLE_DEVICES, and set the topology flags
+ * of all of them (e.g. UCS_TOPO_DEVICE_FLAG_RUBIN). Initialization is
+ * performed once and its result is cached.
  *
  * @return Number of CUDA-visible devices.
  */

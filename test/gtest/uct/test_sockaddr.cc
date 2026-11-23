@@ -14,6 +14,7 @@ extern "C" {
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 #include <ucs/arch/atomic.h>
+#include <uct/tcp/tcp_sockcm_ep.h>
 }
 
 #include <queue>
@@ -866,22 +867,25 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
 {
     m_entities.clear();
 
-    /* Set the values for max send/recv socket buffers (for tcp_sockcm) to
-     * small enough values to have the send/recv of a large data buffer in
-     * batches, and not all data at once.
-     * Set the value of the transport's private data length to a large enough
-     * value to be able to send/recv the batches.
-     * A transport for which these values are not configurable, like rdmacm,
-     * these operations will fail and have no effect. */
-    if (m_cm_config) {
-        /* coverity[check_return] */
-        uct_config_modify(m_cm_config, "PRIV_DATA_LEN", "900KB");
-        uct_config_modify(m_cm_config, "SNDBUF", "100KB");
-        uct_config_modify(m_cm_config, "RCVBUF", "100KB");
+    /* Set the max send/recv socket buffers of tcp_sockcm small enough to
+     * send/recv a large private data in batches rather than all at once, and
+     * its private data length large enough to hold that data.
+     * Other CMs, like rdmacm, have no such settings and cannot send the large
+     * private data, so the test is skipped for them. */
+    if (GetParam()->component_name == "tcp") {
+        modify_config("TCP_CM_PRIV_DATA_LEN", "900KB");
+        modify_config("TCP_CM_SNDBUF", "100KB");
+        modify_config("TCP_CM_RCVBUF", "100KB");
     }
 
     /* recreate m_server and m_client with the above env parameters changed */
     init();
+
+    if ((m_client->max_conn_priv < m_long_priv_data_len) ||
+        (m_server->max_conn_priv < m_long_priv_data_len)) {
+        UCS_TEST_SKIP_R("CM does not support large private data");
+    }
+
     basic_listen_connect_disconnect();
 }
 
@@ -1133,6 +1137,44 @@ UCS_TEST_P(test_uct_sockaddr, concurrent_handle_conn_req_and_close_listener)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)
+
+
+class test_uct_sockaddr_tcp_maxseg : public test_uct_sockaddr {
+public:
+    void init() {
+        modify_config("TCP_CM_MAXSEG", ucs::to_string(MAXSEG));
+        test_uct_sockaddr::init();
+    }
+
+protected:
+    static constexpr int MAXSEG = 1000;
+};
+
+constexpr int test_uct_sockaddr_tcp_maxseg::MAXSEG;
+
+UCS_TEST_P(test_uct_sockaddr_tcp_maxseg, set_sockopt)
+{
+    listen_and_connect();
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    ASSERT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                             TEST_STATE_CLIENT_CONNECTED)));
+
+    /* Both the connecting and the accepted socket limit the segment size */
+    for (entity *e : {m_client, m_server}) {
+        uct_tcp_sockcm_ep_t *ep = ucs_derived_of(e->ep(0), uct_tcp_sockcm_ep_t);
+        int maxseg              = 0;
+        socklen_t len           = sizeof(maxseg);
+
+        EXPECT_EQ(0, getsockopt(ep->fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg,
+                                &len)) << strerror(errno);
+        EXPECT_LE(maxseg, MAXSEG);
+    }
+
+    cm_disconnect(m_client);
+}
+
+_UCT_INSTANTIATE_CM_TEST_CASE(test_uct_sockaddr_tcp_maxseg, tcp)
 
 
 class test_uct_sockaddr_err_handle_non_exist_ip : public test_uct_sockaddr {

@@ -217,8 +217,9 @@ void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
              * still consume the posted WQE, so keep the AH alive until the
              * send completion is polled */
             uct_ib_iface_ah_hold(&iface->super, ep->ah_entry);
-            send_op->ah_entry = ep->ah_entry;
-            send_op->ep       = NULL;
+            send_op->ah_entry    = ep->ah_entry;
+            send_op->ep          = NULL;
+            send_op->ctl_ep_uuid = 0;
         }
 
         iface->tx.outstanding--;
