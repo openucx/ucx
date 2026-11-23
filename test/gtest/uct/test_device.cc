@@ -274,9 +274,7 @@ UCS_TEST_P(test_device, reconnect_multi_channel, "RC_GDA_NUM_CHANNELS?=4")
 }
 
 UCS_TEST_P(test_device, put_named_qp, "RC_GDA_EP_ALLOC_MODE?=auto",
-           "RC_GDA_QPN_RANGE?=1-8", "RC_GDA_NAMED_QP_RETRY_COUNT?=8",
-           "RC_GDA_NUM_PRE_ALLOC_EPS?=1")
-{
+           "RC_GDA_QPN_RANGE?=1-8", "RC_GDA_NUM_PRE_ALLOC_EPS?=1") {
     skip_if_no_cuda();
     skip_if_not_rc_gda();
     skip_if_no_named_qp();

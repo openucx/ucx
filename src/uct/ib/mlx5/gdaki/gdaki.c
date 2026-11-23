@@ -76,7 +76,6 @@ typedef struct {
     unsigned                          num_channels;
     unsigned                          num_eps;
     char                              *qpn_range;
-    unsigned                          named_qp_retry_count;
 } uct_rc_gdaki_iface_config_t;
 
 ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
@@ -109,18 +108,12 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps), UCS_CONFIG_TYPE_UINT},
 
     {"QPN_RANGE", "auto",
-     "QPN range used for on-demand named QP allocation. The inclusive range\n"
-     "is divided between channels. Auto selects the range from 1 to\n"
+     "QPN range used for on-demand named QP allocation. All channels share\n"
+     "the inclusive range. Auto selects the range from 1 to\n"
      "min(32 * num_channels, 8192).\n"
      "An explicit range can be set for debugging.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, qpn_range),
      UCS_CONFIG_TYPE_STRING},
-
-    {"NAMED_QP_RETRY_COUNT", "16",
-     "Maximum number of CREATE_QP retries after a named QP creation failure.\n"
-     "Retries use subsequent QPNs in the same channel range.",
-     ucs_offsetof(uct_rc_gdaki_iface_config_t, named_qp_retry_count),
-     UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -578,9 +571,8 @@ uct_rc_gdaki_create_channel_qp(uct_rc_gdaki_iface_t *iface,
                                unsigned channel_index,
                                uct_rc_gdaki_channel_t *channel)
 {
-    ucs_status_t status = UCS_OK;
-    uint32_t segment_base, segment_size;
-    uint32_t qpn_offset, max_qpn_offset, first_qpn;
+    uint32_t start_qpn;
+    ucs_status_t status;
 
     if (iface->ep_alloc_mode != UCT_RC_GDAKI_EP_ALLOC_MODE_NAMED) {
         return uct_ib_mlx5_devx_create_qp_common(&iface->super.super.super,
@@ -589,28 +581,24 @@ uct_rc_gdaki_create_channel_qp(uct_rc_gdaki_iface_t *iface,
                                                  &channel->qp, qp_attr);
     }
 
-    segment_size   = iface->qpn_segment_size;
-    segment_base   = iface->qpn_base + segment_size * channel_index;
-    qpn_offset     = iface->named_qp_offsets[channel_index];
-    first_qpn      = segment_base + qpn_offset % segment_size;
-    max_qpn_offset = qpn_offset +
-                     ucs_min(iface->named_qp_retry_count, segment_size - 1) + 1;
+    start_qpn = iface->next_qpn;
 
-    for (; qpn_offset != max_qpn_offset; ++qpn_offset) {
-        qp_attr->input_qpn = segment_base + qpn_offset % segment_size;
+    do {
+        qp_attr->input_qpn = iface->next_qpn;
         status = uct_ib_mlx5_devx_create_qp_common(&iface->super.super.super,
                                                    &channel->cq, &channel->cq,
                                                    &channel->qp.super,
                                                    &channel->qp, qp_attr);
-        iface->named_qp_offsets[channel_index] = (qpn_offset + 1) %
-                                                 segment_size;
+        if (++iface->next_qpn > iface->qpn_range.last) {
+            iface->next_qpn = iface->qpn_range.first;
+        }
         if (status == UCS_OK) {
             return UCS_OK;
         }
-    }
+    } while (iface->next_qpn != start_qpn);
 
     ucs_error("failed to create named qp for channel %u qpn 0x%x..0x%x: %s",
-              channel_index, first_qpn, qp_attr->input_qpn,
+              channel_index, start_qpn, qp_attr->input_qpn,
               ucs_status_string(status));
     return status;
 }
@@ -1307,7 +1295,6 @@ uct_rc_gdaki_iface_init_ep_alloc_mode(uct_rc_gdaki_iface_t *iface,
                                       const uct_ib_mlx5_md_t *md)
 {
     ucs_range_spec_t qpn_range;
-    uint32_t qpn_range_size;
 
     iface->ep_alloc_mode = config->ep_alloc_mode;
     if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_AUTO) {
@@ -1344,49 +1331,16 @@ uct_rc_gdaki_iface_init_ep_alloc_mode(uct_rc_gdaki_iface_t *iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    qpn_range_size = qpn_range.last - qpn_range.first + 1;
-    if ((qpn_range_size % iface->num_channels) != 0) {
-        ucs_error("rc_gda qpn range size %u is not divisible by %u channels",
-                  qpn_range_size, iface->num_channels);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     if (config->num_eps != 1) {
         ucs_diag("rc_gda endpoint allocation mode named ignores "
                  "num_pre_alloc_eps %u and uses 1",
                  config->num_eps);
     }
 
-    iface->qpn_base             = qpn_range.first;
-    iface->qpn_segment_size     = qpn_range_size / iface->num_channels;
-    iface->named_qp_retry_count = config->named_qp_retry_count;
-
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_rc_gdaki_iface_init_named_qp_offsets(uct_rc_gdaki_iface_t *iface)
-{
-    uint32_t initial_offset;
-    unsigned i;
-
-    iface->named_qp_offsets = NULL;
-    if (iface->ep_alloc_mode != UCT_RC_GDAKI_EP_ALLOC_MODE_NAMED) {
-        return UCS_OK;
-    }
-
-    iface->named_qp_offsets =
-            ucs_malloc(iface->num_channels * sizeof(*iface->named_qp_offsets),
-                       "gdaki named qp offsets");
-    if (iface->named_qp_offsets == NULL) {
-        ucs_error("failed to allocate named qp offsets");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    initial_offset = (uint32_t)getpid();
-    for (i = 0; i < iface->num_channels; ++i) {
-        iface->named_qp_offsets[i] = initial_offset;
-    }
+    iface->qpn_range = qpn_range;
+    iface->next_qpn  = qpn_range.first +
+                       ((uint32_t)getpid() %
+                        (qpn_range.last - qpn_range.first + 1));
 
     return UCS_OK;
 }
@@ -1481,15 +1435,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_lock;
     }
 
-    status = uct_rc_gdaki_iface_init_named_qp_offsets(self);
-    if (status != UCS_OK) {
-        goto err_mutex;
-    }
-
     if (self->ep_alloc_mode != UCT_RC_GDAKI_EP_ALLOC_MODE_DIRECT) {
         status = uct_rc_gdaki_iface_init_channel_pool(self, config);
         if (status != UCS_OK) {
-            goto err_named_qp_offsets;
+            goto err_mutex;
         }
     }
 
@@ -1500,8 +1449,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
 
     return UCS_OK;
 
-err_named_qp_offsets:
-    ucs_free(self->named_qp_offsets);
 err_mutex:
     pthread_mutex_destroy(&self->ep_init_lock);
 err_lock:
@@ -1519,7 +1466,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     if (self->ep_alloc_mode != UCT_RC_GDAKI_EP_ALLOC_MODE_DIRECT) {
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
-    ucs_free(self->named_qp_offsets);
 
     if (self->uar_wrap != NULL) {
         uct_worker_tl_data_put(self->uar_wrap, uct_rc_gdaki_devx_uar_cleanup);

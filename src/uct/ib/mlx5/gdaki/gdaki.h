@@ -9,6 +9,7 @@
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_mem.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
 
 #include <cuda.h>
@@ -48,10 +49,8 @@ typedef struct uct_rc_gdaki_iface {
     uint64_t                   *atomic_buff;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
-    uint32_t                   qpn_base;
-    uint32_t                   qpn_segment_size;
-    unsigned                   named_qp_retry_count;
-    uint32_t                   *named_qp_offsets;
+    ucs_range_spec_t           qpn_range;
+    uint32_t                   next_qpn;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
     uct_rc_gdaki_devx_uar_t    *uar_wrap;
