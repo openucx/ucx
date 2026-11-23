@@ -1373,6 +1373,8 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     ucp_context_h context            = worker->context;
     const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
     uct_md_mkey_pack_params_t params = { .field_mask = 0 };
+    void *reg_address                = remote_addr;
+    size_t reg_length                = length;
     uct_md_mem_reg_params_t reg_params;
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
@@ -1396,8 +1398,9 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
             reg_params.mem_type    = mem_type;
         }
 
-        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, remote_addr,
-                                   length, &reg_params,
+        ucs_align_ptr_range(&reg_address, &reg_length, md_attr->reg_alignment);
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
+                                   reg_length, &reg_params,
                                    &pack_context->uct_memh);
         if (status != UCS_OK) {
             return status;

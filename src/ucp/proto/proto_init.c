@@ -454,14 +454,14 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
                                ucp_md_map_t reg_md_map, ucp_proto_perf_t *perf)
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
-    ucp_memory_info_t buffer_mem_info;
-    ucp_memory_info_t select_mem_info;
-    ucp_memory_info_t recv_mem_info;
-    ucp_memory_info_t host_mem_info = {
+    ucp_memory_info_t host_mem_info              = {
         .type    = UCS_MEMORY_TYPE_HOST,
         .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
         .flags   = 0
     };
+    ucp_memory_info_t buffer_mem_info;
+    ucp_memory_info_t select_mem_info;
+    ucp_memory_info_t recv_mem_info;
     uint32_t op_attr_mask;
     ucs_status_t status;
 

@@ -155,8 +155,6 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
                             ucp_mtype_pack_context_t *pack_context)
 {
     const ucp_memory_info_t *mem_info = *mem_info_p;
-    void *reg_address                 = address;
-    size_t reg_length                 = length;
     ucp_ep_h ep                       = NULL;
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
@@ -174,6 +172,9 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
         }
 
         /* Discover origin only when a qualified async route is available. */
+        /* Coverity wrongly resolves the memory domain deregister function
+         * pointer to 'uct_cuda_ipc_mem_dereg' and considers 'address' as
+         * freed */
         /* coverity[pass_freed_arg] */
         ucp_memory_detect(worker->context, address, length, detected);
         detected->type = mem_type;
@@ -197,8 +198,6 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
     }
 
     md_index = ucp_ep_md_index(ep, lane);
-    ucs_align_ptr_range(&reg_address, &reg_length,
-                        ucp_ep_md_attr(ep, lane)->reg_alignment);
     /*
      * GDRCopy registers CUDA memory even when the buffer is classified as
      * CUDA_MANAGED. Its cache_mem_types == 0 keeps this local type override out
@@ -207,7 +206,7 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
     ucs_assertv(!(worker->context->cache_md_map[UCS_MEMORY_TYPE_CUDA] &
                   UCS_BIT(md_index)),
                 "async MD %d uses shared registration cache", md_index);
-    status = ucp_mem_type_reg_buffers(worker, reg_address, reg_length,
+    status = ucp_mem_type_reg_buffers(worker, address, length,
                                       UCS_MEMORY_TYPE_CUDA, md_index,
                                       UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                       pack_context);

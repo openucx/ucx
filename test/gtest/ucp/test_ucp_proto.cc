@@ -1166,6 +1166,41 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route) {
     EXPECT_EQ(nullptr, select(worker(), nullptr, UCT_EP_OP_GET_ZCOPY, &lane));
 }
 
+UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_short_unaligned_registration,
+           "GDR_COPY_RCACHE?=no") {
+    ucp_ep_h cuda_ep, managed_ep;
+    ucp_lane_index_t cuda_lane, managed_lane;
+    get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+    if (!mem_buffer::cuda_mem_is_gdr_capable()) {
+        UCS_TEST_SKIP_R("CUDA allocation does not support GDR pinning");
+    }
+
+    size_t length    = 1024;
+    size_t alignment = ucp_ep_md_attr(cuda_ep, cuda_lane)->reg_alignment;
+    ASSERT_GT(alignment, 1u);
+    mem_buffer allocation(2 * alignment, UCS_MEMORY_TYPE_CUDA);
+    void *address = UCS_PTR_BYTE_OFFSET(ucs_align_up_pow2_ptr(allocation.ptr(),
+                                                              alignment),
+                                        1);
+    std::vector<char> source(length), result(length);
+    mem_buffer::pattern_fill(source.data(), length, 0x12345);
+    mem_buffer::copy_to(address, source.data(), length, UCS_MEMORY_TYPE_CUDA);
+
+    scoped_short_copy_counter counter(
+            ucp_ep_get_lane(cuda_ep, cuda_lane)->iface);
+    ucp_mem_type_pack(worker(), result.data(), address, length,
+                      UCS_MEMORY_TYPE_CUDA, nullptr);
+    EXPECT_EQ(1u, counter.count());
+    EXPECT_EQ(0, std::memcmp(source.data(), result.data(), length));
+
+    mem_buffer::memset(address, length, 0, UCS_MEMORY_TYPE_CUDA);
+    ucp_mem_type_unpack(worker(), address, source.data(), length,
+                        UCS_MEMORY_TYPE_CUDA, nullptr);
+    EXPECT_EQ(2u, counter.count());
+    EXPECT_TRUE(mem_buffer::compare(source.data(), address, length,
+                                    UCS_MEMORY_TYPE_CUDA));
+}
+
 UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_required_flags,
            "MEMTYPE_CACHE=y") {
     ucp_ep_h cuda_ep, managed_ep;
