@@ -632,6 +632,8 @@ run_ucx_perftest() {
 			"$ucx_perftest" -t tag_lat -m host:0 -l
 		expect_failure "device API is not supported for host" \
 			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+		expect_failure "option requires an argument" \
+			"$ucx_perftest" -t tag_lat -l -e
 	fi
 
 	# IP ifaces

@@ -16,9 +16,10 @@
  * @brief Descriptor of one chunk in a multi-chunk VMM region
  */
 typedef struct uct_cuda_ipc_vmm_chunk_desc {
-    CUmemFabricHandle fabric_handle;
-    CUdeviceptr       d_bptr;
-    size_t            b_len;
+    CUmemFabricHandle  fabric_handle;
+    CUdeviceptr        d_bptr;
+    size_t             b_len;
+    unsigned long long buffer_id;
 } uct_cuda_ipc_vmm_chunk_desc_t;
 
 
