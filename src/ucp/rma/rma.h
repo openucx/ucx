@@ -94,4 +94,6 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
 
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq);
+
 #endif
