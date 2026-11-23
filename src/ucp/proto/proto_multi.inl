@@ -417,14 +417,32 @@ ucp_proto_rma_sgl_max_payload(const ucp_request_t *req,
                                         lpriv->max_frag);
 }
 
+/* Read min_frag bytes of the element instead of a shorter fragment. This reads
+ * some data twice, which is fine for GET. */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rma_sgl_grow_frag(const ucp_datatype_iter_t *dt_iter,
+                            size_t elem_index, size_t min_frag, void **buffer_p,
+                            size_t *length_p, uint64_t *remote_addr_p)
+{
+    size_t elem_length = dt_iter->type.sgl.lengths[elem_index];
+    void *elem_buffer  = dt_iter->type.sgl.buffers[elem_index];
+    size_t frag_offset = UCS_PTR_BYTE_DIFF(elem_buffer, *buffer_p);
+    size_t new_offset  = ucs_min(frag_offset, elem_length - min_frag);
+
+    ucs_assert(elem_length >= min_frag);
+
+    *buffer_p       = UCS_PTR_BYTE_OFFSET(elem_buffer, new_offset);
+    *remote_addr_p -= frag_offset - new_offset;
+    *length_p       = min_frag;
+}
+
 /* Copy up to max_frag_count fragments (splitting elements if needed) to local
- * arrays, and post them */
+ * arrays, and post them. A fragment shorter than min_frag is grown. */
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rma_sgl_offload_send_frags(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         size_t max_frag_count, size_t min_frag, ucp_datatype_iter_t *next_iter,
-        ucp_proto_rma_sgl_post_func_t post_func,
-        ucp_proto_rma_sgl_adjust_func_t adjust_func)
+        ucp_proto_rma_sgl_post_func_t post_func)
 {
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_rsc_index_t md_index     = lpriv->super.md_index;
@@ -437,14 +455,12 @@ ucp_proto_rma_sgl_offload_send_frags(
     uct_mem_h uct_memhs[UCP_MAX_IOV];
     uct_rkey_t uct_rkeys[UCP_MAX_IOV];
     size_t frag_count, frag_index, elem_index;
-    ucs_status_t status;
 
     ucs_assert(max_frag_count <= UCP_MAX_IOV);
-    ucs_assert((adjust_func == NULL) || (max_frag_count == 1));
 
     if (max_frag_count == 1) {
-        /* Silence compiler warning, a single fragment is read by the adjust
-         * and post functions */
+        /* Silence compiler warning, a single fragment is read by the post
+         * function */
         buffers[0]      = NULL;
         lengths[0]      = 0;
         remote_addrs[0] = 0;
@@ -459,16 +475,15 @@ ucp_proto_rma_sgl_offload_send_frags(
         return UCS_OK;
     }
 
-    if (adjust_func != NULL) {
-        status = adjust_func(req, lpriv, min_frag, elem_indices[0],
-                             &buffers[0], &lengths[0], &remote_addrs[0]);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return (status == UCS_INPROGRESS) ? UCS_OK : status;
-        }
-    }
-
     for (frag_index = 0; frag_index < frag_count; frag_index++) {
-        elem_index            = elem_indices[frag_index];
+        elem_index = elem_indices[frag_index];
+        if (ucs_unlikely(lengths[frag_index] < min_frag)) {
+            ucp_proto_rma_sgl_grow_frag(dt_iter, elem_index, min_frag,
+                                        &buffers[frag_index],
+                                        &lengths[frag_index],
+                                        &remote_addrs[frag_index]);
+        }
+
         uct_memhs[frag_index] = (sgl_memhs != NULL) ?
                                 ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
                                                            md_index) :
@@ -486,8 +501,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rma_sgl_offload_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         size_t min_frag, ucp_datatype_iter_t *next_iter,
-        ucp_proto_rma_sgl_post_func_t post_func,
-        ucp_proto_rma_sgl_adjust_func_t adjust_func)
+        ucp_proto_rma_sgl_post_func_t post_func)
 {
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_rsc_index_t md_index     = lpriv->super.md_index;
@@ -496,7 +510,6 @@ ucp_proto_rma_sgl_offload_send_func(
     size_t min_length            = ucs_max(min_frag, 1);
     size_t max_frag_count        = ucs_min(lpriv->max_sgl_zcopy_count,
                                            UCP_MAX_IOV);
-    size_t frags_count           = (adjust_func == NULL) ? max_frag_count : 1;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
     void *const *buffers         = dt_iter->type.sgl.buffers;
@@ -523,9 +536,9 @@ ucp_proto_rma_sgl_offload_send_func(
     if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
                      (lengths[start_index] < min_length) ||
                      (lengths[start_index] > max_payload))) {
-        return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, frags_count,
+        return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, max_frag_count,
                                                     min_frag, next_iter,
-                                                    post_func, adjust_func);
+                                                    post_func);
     }
 
     /* Stop at the lane payload, so that each lane sends its share of the
@@ -542,12 +555,12 @@ ucp_proto_rma_sgl_offload_send_func(
 
     /* A long batch is not redirected, to keep posting the user arrays without
      * copying them */
-    if (ucs_unlikely((adjust_func == NULL) && (total_length < max_payload) &&
+    if (ucs_unlikely((total_length < max_payload) &&
                      (elem_count < max_frag_count) &&
                      ((start_index + elem_count) < dt_iter->length))) {
-        return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, frags_count,
+        return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, max_frag_count,
                                                     min_frag, next_iter,
-                                                    post_func, adjust_func);
+                                                    post_func);
     }
 
     uct_rkeys_size = elem_count * sizeof(uct_rkey_t);

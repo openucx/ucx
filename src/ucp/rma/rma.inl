@@ -186,45 +186,4 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     return status;
 }
 
-static inline void
-ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
-                                        void *user_data)
-{
-    ucp_request_t *req = user_data;
-
-    ucs_assert(req != NULL);
-    ucp_request_free(request);
-    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
-                             void *buffer, size_t length,
-                             uint64_t remote_addr)
-{
-    ucp_request_param_t param = {
-        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                        UCP_OP_ATTR_FIELD_USER_DATA |
-                        UCP_OP_ATTR_FIELD_MEMORY_TYPE,
-        .cb.send      = ucp_proto_get_sgl_short_elem_completion,
-        .user_data    = req,
-        .memory_type  = req->send.state.dt_iter.mem_info.type
-    };
-    ucs_status_ptr_t status_ptr;
-    ucs_status_t status;
-
-    ++req->send.state.uct_comp.count;
-    status_ptr = ucp_get_nbx(req->send.ep, buffer, length, remote_addr,
-                             req->send.rma.sgl.rkeys[elem_index], &param);
-    if (UCS_PTR_IS_PTR(status_ptr)) {
-        return UCS_INPROGRESS;
-    }
-
-    /* Completed immediately, so there is no callback. The count can't drop to
-       0, since the parent holds the initial reference until all are posted */
-    --req->send.state.uct_comp.count;
-    status = UCS_PTR_STATUS(status_ptr);
-    return (status == UCS_OK) ? UCS_INPROGRESS : status;
-}
-
 #endif

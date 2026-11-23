@@ -106,6 +106,8 @@ typedef struct {
 typedef struct {
     ucp_md_map_t                reg_md_map;   /* Memory domains to register on */
     size_t                      min_frag;     /* Largest minimal fragment size */
+    size_t                      sgl_min_frag; /* Largest 'min_zcopy' of GET
+                                                 lanes, used by SGL protocols */
     size_t                      max_frag_sum; /* 'max_frag' sum of all lanes */
     ucp_lane_map_t              lane_map;     /* Map of used lanes */
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
@@ -201,25 +203,6 @@ typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
         const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
-
-/**
- * Adjust callback for a single SGL fragment, called before it is posted
- *
- * @param [in]     req          Request to post.
- * @param [in]     lpriv        Lane to post on.
- * @param [in]     min_frag     Minimal length of a fragment on this lane.
- * @param [in]     elem_index   Index of the SGL element of the fragment.
- * @param [in,out] buffer_p     Local buffer of the fragment.
- * @param [in,out] length_p     Length of the fragment.
- * @param [in,out] remote_addr_p Remote address of the fragment.
- *
- * @return UCS_OK to post the fragment, UCS_INPROGRESS if the fragment was
- *         already submitted, or an error status.
- */
-typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        size_t min_frag, size_t elem_index, void **buffer_p, size_t *length_p,
-        uint64_t *remote_addr_p);
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,

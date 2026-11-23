@@ -17,21 +17,29 @@
 
 
 /**
- * Get the total length of all SGL elements
+ * Get the total length of all SGL elements, and the length of the shortest
+ * non-empty element
  *
  * @param [in]     lengths        Array of element lengths
  * @param [in]     count          Number of entries in the @a lengths array
+ * @param [out]    min_length_p   Length of the shortest non-empty element, or 0
+ *                                if all the elements are empty
  *
  * @return Total length of all the SGL elements
  */
-static inline size_t ucp_dt_sgl_length(const size_t *lengths, size_t count)
+static inline size_t
+ucp_dt_sgl_length(const size_t *lengths, size_t count, size_t *min_length_p)
 {
-    size_t elem_it, total_length = 0;
+    size_t elem_it, total_length = 0, min_length = SIZE_MAX;
 
     for (elem_it = 0; elem_it < count; ++elem_it) {
         total_length += lengths[elem_it];
+        if ((lengths[elem_it] != 0) && (lengths[elem_it] < min_length)) {
+            min_length = lengths[elem_it];
+        }
     }
 
+    *min_length_p = (min_length == SIZE_MAX) ? 0 : min_length;
     return total_length;
 }
 

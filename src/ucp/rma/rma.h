@@ -88,7 +88,6 @@ extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
 
 extern ucp_proto_t ucp_put_am_bcopy_proto;
-extern ucp_proto_t ucp_get_am_bcopy_proto;
 
 
 /**
@@ -96,6 +95,14 @@ extern ucp_proto_t ucp_get_am_bcopy_proto;
  * contiguous operation of the same type
  */
 ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self);
+
+/**
+ * Send the SGL elements as internal requests. A run of elements which are at
+ * least @a min_batch_length long is sent as one SGL request, any other element
+ * as a contiguous request. If @a min_batch_length is 0, there is no batching.
+ */
+ucs_status_t
+ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length);
 
 void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
                                     ucp_operation_id_t op_id,

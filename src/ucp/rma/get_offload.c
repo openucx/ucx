@@ -292,41 +292,17 @@ ucp_proto_get_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
                                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY, 1);
 }
 
-/* Minimal length of a single SGL element fragment that can be read on a lane */
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_get_sgl_min_frag(const ucp_request_t *req,
-                           const ucp_proto_multi_lane_priv_t *lpriv)
+/* Check whether an element is too short to be read by a lane of the protocol.
+ * If so, return the minimal element length which can be read by all lanes. */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_get_sgl_has_short_elem(const ucp_request_t *req,
+                                 size_t *min_length_p)
 {
-    return ucp_ep_get_iface_attr(req->send.ep, lpriv->super.lane)
-            ->cap.get.min_zcopy;
-}
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_get_sgl_adjust_min_frag(ucp_request_t *req,
-                                  const ucp_proto_multi_lane_priv_t *lpriv,
-                                  size_t min_frag, size_t elem_index,
-                                  void **buffer_p, size_t *length_p,
-                                  uint64_t *remote_addr_p)
-{
-    size_t frag_offset = req->send.state.dt_iter.type.sgl.frag_offset;
-    size_t diff;
-
-    if (*length_p >= min_frag) {
-        return UCS_OK;
-    }
-
-    if (frag_offset == 0) {
-        return ucp_proto_get_sgl_short_elem(req, elem_index, *buffer_p,
-                                            *length_p, *remote_addr_p);
-    }
-
-    diff = min_frag - *length_p;
-    ucs_assertv(diff <= frag_offset, "diff=%zu frag_offset=%zu", diff,
-                frag_offset);
-    *buffer_p       = UCS_PTR_BYTE_OFFSET(*buffer_p, -diff);
-    *remote_addr_p -= diff;
-    *length_p      += diff;
-    return UCS_OK;
+    *min_length_p = mpriv->sgl_min_frag;
+    return (req->send.rma.sgl.min_elem_length != 0) &&
+           (req->send.rma.sgl.min_elem_length < mpriv->sgl_min_frag);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -350,15 +326,23 @@ ucp_proto_get_sgl_offload_send_func(ucp_request_t *req,
                                     ucp_datatype_iter_t *next_iter,
                                     ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_rma_sgl_offload_send_func(
-            req, lpriv, ucp_proto_get_sgl_min_frag(req, lpriv), next_iter,
-            ucp_proto_get_sgl_offload_post, ucp_proto_get_sgl_adjust_min_frag);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
+    return ucp_proto_rma_sgl_offload_send_func(req, lpriv, mpriv->sgl_min_frag,
+                                               next_iter,
+                                               ucp_proto_get_sgl_offload_post);
 }
 
 static ucs_status_t
 ucp_proto_get_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    size_t min_length;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        ucp_proto_get_sgl_has_short_elem(req, &min_length)) {
+        return ucp_proto_rma_sgl_split_progress(req, min_length);
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
@@ -417,16 +401,23 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_datatype_iter_t *next_iter,
                                        ucp_lane_index_t *lane_shift)
 {
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
     return ucp_proto_rma_sgl_offload_send_frags(
-            req, lpriv, 1, ucp_proto_get_sgl_min_frag(req, lpriv), next_iter,
-            ucp_proto_get_sgl_offload_sw_post,
-            ucp_proto_get_sgl_adjust_min_frag);
+            req, lpriv, 1, mpriv->sgl_min_frag, next_iter,
+            ucp_proto_get_sgl_offload_sw_post);
 }
 
 static ucs_status_t
 ucp_proto_get_sgl_offload_sw_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    size_t min_length;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        ucp_proto_get_sgl_has_short_elem(req, &min_length)) {
+        return ucp_proto_rma_sgl_split_progress(req, min_length);
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
@@ -453,8 +444,7 @@ ucp_proto_t ucp_get_sgl_offload_sw_proto = {
 static void
 ucp_proto_get_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_rma_sgl_contig_probe(init_params, UCP_OP_ID_GET,
-                                   &ucp_get_am_bcopy_proto);
+    ucp_proto_rma_sgl_contig_probe(init_params, UCP_OP_ID_GET, NULL);
 }
 
 ucp_proto_t ucp_get_sgl_contig_proto = {

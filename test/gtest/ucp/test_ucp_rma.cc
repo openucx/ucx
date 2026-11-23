@@ -1416,7 +1416,7 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
 #define UCP_SGL_EMULATION_PROTOS \
-    "PROTOS=put/sgl/am/*,get/sgl/am/*,get/am/*,reconfig"
+    "PROTOS=put/sgl/am/*,get/sgl/contig,get/am/*,reconfig"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
@@ -1981,6 +1981,27 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, fragmented_elements,
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
     test_ucp_rma::init();
     test_sgl({255, 256, 257, 1024, 64});
+}
+
+/* Elements which are shorter than the minimal fragment of a lane */
+UCS_TEST_P(test_ucp_rma_sgl_data, short_elements) {
+    test_sgl({1, 2, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 3, 8 * UCS_KBYTE, 100, 7,
+              4 * UCS_KBYTE, 4 * UCS_KBYTE, 1});
+    test_sgl({1, 2, 3, 4});
+    test_sgl({4 * UCS_KBYTE, 5, 4 * UCS_KBYTE});
+    test_sgl({4 * UCS_KBYTE, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 9});
+}
+
+/* Fragments of long elements which are shorter than the minimal fragment of a
+   lane */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, short_fragments,
+                     RUNNING_ON_VALGRIND) {
+    cleanup();
+    modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
+    test_ucp_rma::init();
+    test_sgl({1, 300, 4096, 64, 700, 2, 257, 66, 513, 4096});
+    test_sgl({300, 300, 300, 300});
+    test_sgl({65, 66, 67, 68, 69, 70});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {

@@ -426,7 +426,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_func(
-            req, lpriv, 0, next_iter, ucp_proto_put_sgl_offload_post, NULL);
+            req, lpriv, 0, next_iter, ucp_proto_put_sgl_offload_post);
 }
 
 static ucs_status_t
@@ -513,8 +513,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_frags(
-            req, lpriv, 1, 0, next_iter, ucp_proto_put_sgl_offload_sw_post,
-            NULL);
+            req, lpriv, 1, 0, next_iter, ucp_proto_put_sgl_offload_sw_post);
 }
 
 static ucs_status_t
@@ -566,16 +565,12 @@ static void ucp_proto_rma_sgl_contig_elem_complete(void *request,
 }
 
 static ucs_status_t
-ucp_proto_rma_sgl_contig_send_elem(ucp_request_t *req, size_t index,
-                                   size_t elem_offset, uint32_t fence_flag)
+ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
+                              size_t elem_offset, size_t length,
+                              size_t min_length, uint32_t fence_flag)
 {
     ucp_ep_h ep                  = req->send.ep;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    void *buffer                 = UCS_PTR_BYTE_OFFSET(
-                                           dt_iter->type.sgl.buffers[index],
-                                           elem_offset);
-    size_t length                = dt_iter->type.sgl.lengths[index] -
-                                   elem_offset;
     ucp_rkey_h rkey              = req->send.rma.sgl.rkeys[index];
     ucp_request_param_t param    = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
@@ -586,8 +581,13 @@ ucp_proto_rma_sgl_contig_send_elem(ucp_request_t *req, size_t index,
         .cb.send      = ucp_proto_rma_sgl_contig_elem_complete,
         .user_data    = req
     };
+    ucp_dt_local_sgl_t local;
+    ucp_dt_remote_sgl_t remote;
     ucp_request_t *elem_req;
     ucs_status_ptr_t sptr;
+    const void *buffer;
+    ucp_datatype_t datatype;
+    size_t contig_length;
 
     elem_req = ucp_request_get(ep->worker);
     if (ucs_unlikely(elem_req == NULL)) {
@@ -595,19 +595,61 @@ ucp_proto_rma_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     }
 
     elem_req->send.rma.rkey             = rkey;
-    elem_req->send.rma.remote_addr      = req->send.rma.sgl.remote_addrs[index] +
-                                          elem_offset;
     elem_req->send.state.completed_size = 0;
 
-    if (dt_iter->type.sgl.memhs != NULL) {
-        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-        param.memh          = dt_iter->type.sgl.memhs[index];
+    if (count == 1) {
+        buffer        = UCS_PTR_BYTE_OFFSET(dt_iter->type.sgl.buffers[index],
+                                            elem_offset);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = length;
+        elem_req->send.rma.remote_addr =
+                req->send.rma.sgl.remote_addrs[index] + elem_offset;
+
+        if (dt_iter->type.sgl.memhs != NULL) {
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            param.memh          = dt_iter->type.sgl.memhs[index];
+        }
+    } else {
+        ucs_assert(elem_offset == 0);
+
+        local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                           UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        local.buffers    = dt_iter->type.sgl.buffers + index;
+        local.lengths    = dt_iter->type.sgl.lengths + index;
+        if (dt_iter->type.sgl.memhs != NULL) {
+            local.field_mask |= UCP_DT_LOCAL_SGL_FIELD_MEMHS;
+            local.memhs       = dt_iter->type.sgl.memhs + index;
+        }
+
+        remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                              UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                              UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        remote.remote_addrs = req->send.rma.sgl.remote_addrs + index;
+        remote.lengths      = dt_iter->type.sgl.lengths + index;
+        remote.rkeys        = req->send.rma.sgl.rkeys + index;
+
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_DATATYPE |
+                              UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                              UCP_OP_ATTR_FIELD_REMOTE;
+        param.datatype        = ucp_dt_make_sgl();
+        param.remote_datatype = ucp_dt_make_sgl();
+        param.remote          = &remote;
+
+        buffer        = &local;
+        datatype      = ucp_dt_make_sgl();
+        contig_length = 0;
+        elem_req->send.rma.remote_addr         = UCP_REMOTE_ADDR_INVALID;
+        elem_req->send.rma.sgl.remote_addrs    = remote.remote_addrs;
+        elem_req->send.rma.sgl.rkeys           = remote.rkeys;
+        elem_req->send.rma.sgl.length          = length;
+        elem_req->send.rma.sgl.min_elem_length = min_length;
     }
 
     sptr = ucp_proto_request_send_op_rma(
             ep, rkey, elem_req, fence_flag,
             ucp_proto_select_op_id(&req->send.proto_config->select_param),
-            buffer, length, ucp_dt_make_contig(1), length, &param, 0, 0);
+            buffer, (count == 1) ? contig_length : count, datatype,
+            contig_length, &param, 0, 0);
     if (UCS_PTR_IS_PTR(sptr)) {
         ++req->send.state.uct_comp.count;
         return UCS_OK;
@@ -616,28 +658,42 @@ ucp_proto_rma_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     return UCS_PTR_STATUS(sptr);
 }
 
-ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self)
+ucs_status_t
+ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length)
 {
-    ucp_request_t *req    = ucs_container_of(self, ucp_request_t,
-                                             send.uct);
     const size_t *lengths = req->send.state.dt_iter.type.sgl.lengths;
     size_t count          = req->send.state.dt_iter.length;
     uint32_t fence_flag   = req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED;
     size_t elem_offset    = req->send.state.dt_iter.type.sgl.frag_offset;
     ucs_status_t status   = UCS_OK;
-    size_t index;
+    size_t index, run_count, run_length, run_min_length;
 
     ucp_proto_completion_init(&req->send.state.uct_comp,
                               ucp_proto_rma_sgl_contig_completion);
 
     for (index = req->send.state.dt_iter.offset; index < count;
-         ++index, elem_offset = 0) {
+         index += run_count, elem_offset = 0) {
+        run_count = 1;
         if (lengths[index] == 0) {
             continue;
         }
 
-        status = ucp_proto_rma_sgl_contig_send_elem(req, index, elem_offset,
-                                                    fence_flag);
+        run_length     = lengths[index] - elem_offset;
+        run_min_length = run_length;
+        if ((min_batch_length != 0) && (elem_offset == 0) &&
+            (lengths[index] >= min_batch_length)) {
+            while (((index + run_count) < count) &&
+                   (lengths[index + run_count] >= min_batch_length)) {
+                run_length    += lengths[index + run_count];
+                run_min_length = ucs_min(run_min_length,
+                                         lengths[index + run_count]);
+                ++run_count;
+            }
+        }
+
+        status = ucp_proto_rma_sgl_contig_send(req, index, run_count,
+                                               elem_offset, run_length,
+                                               run_min_length, fence_flag);
         if (status != UCS_OK) {
             break;
         }
@@ -651,6 +707,13 @@ ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self)
 
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
     return UCS_OK;
+}
+
+ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_rma_sgl_split_progress(req, 0);
 }
 
 static void
@@ -695,9 +758,9 @@ static int ucp_proto_rma_sgl_contig_has_native(
 }
 
 /* Fallback for memory without a direct SGL path: send each element as a
- * contiguous operation, which can use any contig protocol (e.g. rndv). The
- * software emulation of the contig operation is not used, since the SGL
- * operation has its own emulation. */
+ * contiguous operation, which can use any contig protocol (e.g. rndv). If
+ * emulation_proto is not NULL, it is not used, since the SGL operation has its
+ * own emulation. */
 void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
                                     ucp_operation_id_t op_id,
                                     const ucp_proto_t *emulation_proto)
