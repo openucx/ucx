@@ -123,3 +123,7 @@ bindings/go/go.sum
 
 # Allow Gitlab CI config file (otherwise matched by build-* ignore above)
 !.ci/pipeline/*_matrix.yaml
+
+# bindings/ucxx carries its own .gitignore; the rules above must not hide its
+# sources (config.h, docs Makefiles)
+!/bindings/ucxx/**

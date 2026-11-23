@@ -30,13 +30,14 @@ typedef struct {
     uint32_t                deactivate;   /**< 1 after unmap is claimed */
     uint32_t                handler_done; /**< Async handler entered once */
     int                     handler_armed; /**< Async handler owns signal */
-    unsigned                pin_count;    /**< Consumers holding mapped_addr */
+    uint32_t                pin_count;    /**< Consumers holding mapped_addr,
+                                               incremented under the lock */
     int                     in_pgtable;   /**< Region is linked in @a cache */
 } uct_rocm_ipc_cache_region_t;
 
 typedef struct {
     uct_rocm_ipc_key_t          super;
-    uct_rocm_ipc_cache_region_t *region;      /**< Pinned by rkey_ptr */
+    uct_rocm_ipc_cache_region_t *region;      /**< Pinned until rkey release */
     void                        *mapped_addr; /**< Mapping of @a region */
 } uct_rocm_ipc_unpacked_rkey_t;
 
@@ -46,15 +47,21 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
 void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
 /**
- * Map @a key. A non-NULL @a region_p pins the mapping until
- * @ref uct_rocm_ipc_cache_unpin, even if the cache invalidates the region.
- * Known limitation: a pin does not keep the owner allocation alive remotely.
+ * Map @a key and pin it until @ref uct_rocm_ipc_cache_unpin. The pin keeps
+ * the returned address valid even if the cache invalidates the region. A pin
+ * does not keep the owner allocation alive.
  */
 ucs_status_t
 uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
                                  uct_rocm_ipc_cache_region_t **region_p);
 
-void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region);
+/**
+ * Drop one pin. Detach the import when this is the last pin and
+ * @a free_unused_mapping is set. A deactivated region is detached on the last
+ * unpin either way.
+ */
+void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region,
+                              int free_unused_mapping);
 
 void uct_rocm_ipc_export_init(void);
 

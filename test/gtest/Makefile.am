@@ -367,6 +367,7 @@ endif
 
 noinst_HEADERS = \
 	common/mem_buffer.h \
+	common/memtype_map_guard.h \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \

@@ -3114,6 +3114,66 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 #ifdef HAVE_MLX5_DV
 
+class test_rc_mlx5 : public test_rc {
+};
+
+UCS_TEST_P(test_rc_mlx5, bandwidth_fallback)
+{
+    auto *iface = ucs_derived_of(m_e1->iface(),
+                                 uct_rc_mlx5_iface_common_t);
+    uct_perf_attr_t perf_attr = {};
+    uct_ep_attr_t attr        = {};
+    ucs::handle<uct_rc_mlx5_iface_common_t*, const uct_rc_mlx5_ext_ops_t*>
+            restore(iface, [](uct_rc_mlx5_iface_common_t *iface,
+                              const uct_rc_mlx5_ext_ops_t *ops) {
+                iface->ext_ops = ops;
+            }, iface->ext_ops);
+
+    iface->ext_ops       = NULL;
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    attr.field_mask      = UCT_EP_ATTR_FIELD_BANDWIDTH;
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+    ASSERT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
+    EXPECT_DOUBLE_EQ(perf_attr.path_bandwidth.dedicated,
+                     attr.bandwidth.dedicated);
+    EXPECT_DOUBLE_EQ(perf_attr.path_bandwidth.shared, attr.bandwidth.shared);
+}
+
+UCS_TEST_P(test_rc_mlx5, ep_event_handler)
+{
+    auto *iface = ucs_derived_of(m_e1->iface(), uct_base_iface_t);
+    uct_iface_set_ep_event_params_t params = {};
+    uct_ep_h notified_ep                   = NULL;
+    ucs::handle<uct_iface_h> handler(m_e1->iface(), [](uct_iface_h iface) {
+        uct_iface_set_ep_event_params_t params = {};
+
+        params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+        EXPECT_UCS_OK(uct_iface_set_ep_event_handler(iface, &params));
+    });
+
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB |
+                        UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG;
+    params.cb = [](void *arg, uct_ep_h ep, unsigned events) {
+        EXPECT_EQ(UCT_EP_EVENT_PATH_SPEED_CHANGE, events);
+        *static_cast<uct_ep_h*>(arg) = ep;
+    };
+    params.arg = &notified_ep;
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(m_e1->iface(), &params));
+    ASSERT_EQ(params.cb, iface->ep_event_cb);
+    iface->ep_event_cb(iface->ep_event_arg, m_e1->ep(0),
+                       UCT_EP_EVENT_PATH_SPEED_CHANGE);
+    EXPECT_EQ(m_e1->ep(0), notified_ep);
+
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+    params.cb         = NULL;
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(m_e1->iface(), &params));
+    EXPECT_EQ(nullptr, iface->ep_event_cb);
+    EXPECT_EQ(nullptr, iface->ep_event_arg);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5, rc_mlx5)
+
+
 class test_rc_mlx5_token_query : public test_rc {
 protected:
     static constexpr uint32_t NUM_MESSAGES      = 10;

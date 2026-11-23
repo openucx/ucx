@@ -401,9 +401,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     tl_perf->recv_overhead      = perf_attr.recv_overhead + params->overhead;
     tl_perf->bandwidth          = ucp_proto_common_iface_bandwidth(
                                       context, &perf_attr.bandwidth);
-    tl_perf->path_ratio         = ucp_proto_common_iface_bandwidth(
-                                      context, &perf_attr.path_bandwidth) /
-                                  tl_perf->bandwidth;
+    tl_perf->path_bandwidth     = ucp_proto_common_iface_bandwidth(
+                                      context, &perf_attr.path_bandwidth);
+    tl_perf->path_ratio         = tl_perf->path_bandwidth / tl_perf->bandwidth;
     tl_perf->latency            = ucp_tl_iface_latency(context,
                                                        &perf_attr.latency) +
                                   params->latency;
