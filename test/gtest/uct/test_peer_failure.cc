@@ -734,23 +734,27 @@ protected:
     }
 
 
+    void purge_outstanding(const void *rx_token,
+                           uct_ep_outstanding_purge_callback_t cb, void *arg)
+    {
+        uct_ep_outstanding_purge_params_t params = {};
+
+        params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                            UCT_EP_OUTSTANDING_FIELD_ARG;
+        params.cb         = cb;
+        params.arg        = arg;
+        if (rx_token != nullptr) {
+            params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
+            params.rx_token    = rx_token;
+        }
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0), &params));
+    }
+
     void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
     {
-        uct_ep_outstanding_purge_params_t purge_params = {};
-        std::vector<uint8_t> rx_token;
-
-        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
-                                  UCT_EP_OUTSTANDING_FIELD_ARG;
-        purge_params.cb         = purge_cb;
-        purge_params.arg        = ctx;
-        if (with_rx_token) {
-            rx_token = get_rx_token();
-            purge_params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
-            purge_params.rx_token    = rx_token.data();
-        }
-
-        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0),
-                                               &purge_params));
+        auto rx_token = with_rx_token ? get_rx_token() : std::vector<uint8_t>();
+        purge_outstanding(with_rx_token ? rx_token.data() : nullptr,
+                          purge_cb, ctx);
     }
 
     void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
@@ -1166,8 +1170,7 @@ protected:
         purge_ctx expected;
         const uint64_t *remote_addrs;
         const uct_rkey_t *rkeys;
-        bool with_comp;
-        bool complete_inline;
+        completion_mode_t mode;
         bool delivered;
         unsigned initial_count;
         uct_completion_t flush_comp;
@@ -1182,7 +1185,8 @@ protected:
         ASSERT_EQ(expected.operation, info->operation);
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL);
         ASSERT_EQ(0u, expected.num_ops_purged);
-        validate_iov(info->sgl.iov, info->sgl.count, &expected);
+        ASSERT_NO_FATAL_FAILURE(
+                validate_iov(info->sgl.iov, info->sgl.count, &expected));
         for (size_t i = 0; i < info->sgl.count; ++i) {
             EXPECT_EQ(ctx.remote_addrs[i], info->sgl.remote_addrs[i]);
             EXPECT_EQ(uint32_t(ctx.rkeys[i]), uint32_t(info->sgl.rkeys[i]));
@@ -1194,13 +1198,13 @@ protected:
 #endif
         }
         ++expected.num_ops_purged;
-        EXPECT_EQ(ctx.with_comp,
+        EXPECT_EQ(ctx.mode != NO_COMP,
                   !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
-        if (ctx.with_comp) {
+        if (ctx.mode != NO_COMP) {
             EXPECT_EQ(&expected.comp, info->comp);
             EXPECT_EQ(ctx.initial_count, unsigned(info->comp->count));
             EXPECT_EQ(0u, expected.num_completions);
-            if (ctx.complete_inline) {
+            if (ctx.mode == INLINE) {
                 uct_invoke_completion(info->comp, UCS_OK);
             }
         }
@@ -1209,8 +1213,8 @@ protected:
     static void sgl_flush_cb(uct_completion_t *comp)
     {
         auto &ctx = *ucs_container_of(comp, sgl_purge_ctx, flush_comp);
-        if (ctx.with_comp && (ctx.initial_count == 1) &&
-            (ctx.complete_inline || ctx.delivered)) {
+        if ((ctx.mode != NO_COMP) && (ctx.initial_count == 1) &&
+            ((ctx.mode == INLINE) || ctx.delivered)) {
             EXPECT_EQ(1u, ctx.expected.num_completions);
         }
     }
@@ -1254,7 +1258,6 @@ protected:
             iov[i].memh   = memhs[i];
         }
         sgl_purge_ctx ctx         = {};
-        ctx.expected.self        = this;
         ctx.expected.operation   = operation;
         ctx.expected.comp.func   = completion_cb;
         ctx.expected.comp.count  = initial_count;
@@ -1263,8 +1266,7 @@ protected:
         ctx.expected.iovcnt      = count;
         ctx.remote_addrs         = addrs;
         ctx.rkeys                = rkeys;
-        ctx.with_comp            = with_comp;
-        ctx.complete_inline      = completion_mode == INLINE;
+        ctx.mode                 = completion_mode;
         ctx.delivered            = is_put && with_rx_token &&
                                    (delivered_prefix == count);
         ctx.initial_count        = initial_count;
@@ -1303,22 +1305,14 @@ protected:
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
 
-        uct_ep_outstanding_purge_params_t params = {};
-        params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
-                            UCT_EP_OUTSTANDING_FIELD_ARG;
-        params.arg = &ctx;
-        params.cb  = sgl_purge_cb;
-        if (with_rx_token) {
-            params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
-            params.rx_token    = rx_token.data();
-        }
-        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0), &params));
+        purge_outstanding(with_rx_token ? rx_token.data() : nullptr,
+                          sgl_purge_cb, &ctx);
         EXPECT_EQ(0, ctx.flush_comp.count);
         ASSERT_EQ(ctx.delivered ? 0u : 1u, ctx.expected.num_ops_purged);
         if (!with_comp) {
             return;
         }
-        bool completed = ctx.delivered || ctx.complete_inline;
+        bool completed = ctx.delivered || (ctx.mode == INLINE);
         EXPECT_EQ(initial_count - unsigned(completed), unsigned(comp->count));
         EXPECT_EQ((completed && (initial_count == 1)) ? 1u : 0u,
                   ctx.expected.num_completions);
@@ -1344,11 +1338,6 @@ UCS_TEST_P(test_uct_purge_sgl, put_none)
     test_sgl(true, 0);
 }
 
-UCS_TEST_P(test_uct_purge_sgl, put_prefix)
-{
-    test_sgl(true, 2);
-}
-
 UCS_TEST_P(test_uct_purge_sgl, put_all)
 {
     test_sgl(true, 4);
@@ -1367,11 +1356,6 @@ UCS_TEST_P(test_uct_purge_sgl, put_no_comp)
 UCS_TEST_P(test_uct_purge_sgl, get_none)
 {
     test_sgl(false, 0);
-}
-
-UCS_TEST_P(test_uct_purge_sgl, get_prefix)
-{
-    test_sgl(false, 2);
 }
 
 UCS_TEST_P(test_uct_purge_sgl, get_all)

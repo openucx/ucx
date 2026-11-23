@@ -35,8 +35,8 @@ typedef struct {
     /* Reconstructed IOV of zcopy operations */
     uct_iov_t    iov[UCT_RC_MLX5_OP_CALLBACK_MAX_IOV];
     uct_ib_mem_t memh[UCT_RC_MLX5_OP_CALLBACK_MAX_IOV];
-    /* Copied payload of short dm operations */
-    uint8_t      *dm_data;
+    /* Shared scratch for DM payloads and reconstructed SGL arrays. */
+    uint8_t      *scratch;
 } uct_rc_mlx5_op_callback_data_t;
 
 static ucs_status_t
@@ -1194,10 +1194,10 @@ uct_rc_mlx5_get_short_dm_buffer(uct_rc_mlx5_iface_common_t *iface,
 
     ucs_assert(desc->super.buffer == UCS_PTR_BYTE_OFFSET(iface->dm.dm->start_va,
                                                          (uintptr_t)*buffer_p));
-    UCS_WORD_COPY(uint32_t, callback_data->dm_data, volatile uint32_t,
+    UCS_WORD_COPY(uint32_t, callback_data->scratch, volatile uint32_t,
                   desc->super.buffer,
                   ucs_align_up(*length_p, sizeof(uint32_t)));
-    *buffer_p = callback_data->dm_data;
+    *buffer_p = callback_data->scratch;
 }
 #endif
 
@@ -1901,8 +1901,8 @@ static void uct_rc_mlx5_op_info_fill_sgl(
 {
     uct_iov_t *iov        = buffer;
     uct_ib_mem_t *memh    = (void*)(iov + max_count);
-    uint64_t *addrs      = (void*)(memh + max_count);
-    uct_rkey_t *rkeys    = (void*)(addrs + max_count);
+    uint64_t *addrs       = (void*)(memh + max_count);
+    uct_rkey_t *rkeys     = (void*)(addrs + max_count);
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_ep_op_info_t element;
     ucs_status_t status;
@@ -1917,12 +1917,13 @@ static void uct_rc_mlx5_op_info_fill_sgl(
                                               callback_data, &element);
         ucs_assert_always(status == UCS_OK);
         ucs_assert_always(element.rma.payload.zcopy.iovcnt <= 1);
-        memset(&iov[i], 0, sizeof(iov[i]));
-        iov[i].count = 1;
         if (element.rma.payload.zcopy.iovcnt != 0) {
             iov[i]      = element.rma.payload.zcopy.iov[0];
             memh[i]     = *(uct_ib_mem_t*)iov[i].memh;
             iov[i].memh = &memh[i];
+        } else {
+            memset(&iov[i], 0, sizeof(iov[i]));
+            iov[i].count = 1;
         }
         addrs[i] = element.rma.remote_addr;
         rkeys[i] = element.rma.rkey;
@@ -1951,6 +1952,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
+    size_t max_sgl_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
+    size_t scratch_size = max_sgl_count *
+                          (sizeof(uct_iov_t) + sizeof(uct_ib_mem_t) +
+                           sizeof(uint64_t) + sizeof(uct_rkey_t));
     uct_rc_iface_send_op_t *op;
     uct_completion_t *comp;
     const uct_rc_mlx5_rx_token_t *rx_token;
@@ -1961,10 +1966,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
-    size_t max_sgl_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
-    size_t sgl_size = max_sgl_count * (sizeof(uct_iov_t) + sizeof(uct_ib_mem_t) +
-                                       sizeof(uint64_t) + sizeof(uct_rkey_t));
-    void *sgl_buffer;
     void *callback_arg;
     int delivered, is_sgl;
     ucs_status_t status;
@@ -2021,26 +2022,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         delivered         = 0;
     }
 
-    sgl_buffer = ucs_alloc_on_stack(sgl_size, "rc_purge_sgl");
-    if (sgl_buffer == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
 #if HAVE_IBV_DM
     if (iface->dm.dm != NULL) {
-        callback_data.dm_data = ucs_malloc(ucs_align_up(iface->dm.seg_len,
-                                                        sizeof(uint64_t)),
-                                           "rc_purge_dm");
-        if (callback_data.dm_data == NULL) {
-            ucs_free_on_stack(sgl_buffer, sgl_size);
-            ucs_error("rc mlx5: ep %p qp 0x%x failed to allocate dm data", ep,
-                      txwq->super.qp_num);
-            return UCS_ERR_NO_MEMORY;
-        }
-    } else
+        scratch_size = ucs_max(scratch_size,
+                              ucs_align_up(iface->dm.seg_len, sizeof(uint64_t)));
+    }
 #endif
-    {
-        callback_data.dm_data = NULL;
+    callback_data.scratch = ucs_alloc_on_stack(scratch_size, "rc_purge");
+    if (callback_data.scratch == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
 
     wqe_first_psn = first_failed_psn;
@@ -2055,7 +2045,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         is_sgl = (op != NULL) && uct_rc_mlx5_send_op_is_sgl_zcopy(op);
         if (is_sgl) {
             uct_rc_mlx5_op_info_fill_sgl(iface, txwq, op, &pi, end_pi, &wqe_size,
-                                          &num_packets, sgl_buffer,
+                                          &num_packets, callback_data.scratch,
                                           max_sgl_count, &callback_data, &info);
             delivered = (rx_token != NULL) &&
                         (info.operation == UCT_EP_OP_PUT_SGL_ZCOPY) &&
@@ -2110,8 +2100,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
-    ucs_free_on_stack(sgl_buffer, sgl_size);
-    ucs_free(callback_data.dm_data);
+    ucs_free_on_stack(callback_data.scratch, scratch_size);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
