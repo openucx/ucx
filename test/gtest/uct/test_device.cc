@@ -13,8 +13,10 @@
 #include "uct_test.h"
 
 extern "C" {
+#if HAVE_MLX5_DV
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
+#endif
 #include <uct/cuda/base/cuda_util.h>
 }
 
@@ -114,11 +116,15 @@ protected:
 
     void skip_if_no_named_qp() const
     {
+#if HAVE_MLX5_DV
         auto *md = ucs_derived_of(m_sender->md(), uct_ib_mlx5_md_t);
 
         if (!(md->flags & UCT_IB_MLX5_MD_FLAG_QP_BY_NAME)) {
             UCS_TEST_SKIP_R("named QP is not supported");
         }
+#else
+        UCS_TEST_SKIP_R("mlx5 DV is not supported");
+#endif
     }
 
     void
