@@ -9,9 +9,6 @@
 
 ## Current
 ### Features:
-#### UCT
- * Outstanding purge can now be called before the endpoint error handler is invoked
- * Added flush operation to the device API
 ### Bugfixes:
 
 ## 1.23.0 (November 19, 2026)
