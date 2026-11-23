@@ -11,6 +11,9 @@
 ARG BASE_IMAGE=rapidsai/ci-conda:26.12-latest
 FROM ${BASE_IMAGE}
 
+# The base's multi-line description label breaks enroot on Slurm; set a one-line one.
+LABEL org.opencontainers.image.description="UCX CI wrapper of a RAPIDS CI image"
+
 RUN chmod -R o+rwX /opt/conda \
  && apt-get update \
  && apt-get install -y --no-install-recommends gdb \

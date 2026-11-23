@@ -176,3 +176,11 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-ucxx-gpu
+    jjb_proj: "ucx-test-ucxx-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_ucxx_gpu_matrix.yaml"
+    jjb_description: "UCXX wheel and GPU tests against UCX on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
