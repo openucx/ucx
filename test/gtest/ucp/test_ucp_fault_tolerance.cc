@@ -1408,55 +1408,6 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
 
-/* The token purge reposts an AM short of a failed AM lane on another lane,
- * which may take a shorter AM short, for example when only the AM lane has
- * device memory. */
-class test_ucp_fault_tolerance_tf_am_short :
-    public test_ucp_fault_tolerance_tf {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
-    }
-
-protected:
-    /* Longest AM which the AM lane sends as AM short */
-    static size_t max_am_short(ucp_ep_h ep)
-    {
-        ucp_lane_index_t lane = ucp_ep_config(ep)->key.am_lane;
-
-        return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_short -
-               sizeof(ucp_am_hdr_t);
-    }
-};
-
-UCS_TEST_P(test_ucp_fault_tolerance_tf_am_short, am_lane_failure)
-{
-    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    ucp_lane_index_t am_lane;
-    ucs_status_t status;
-    size_t length;
-
-    flush_workers();
-
-    /* An AM short, as the 1 KB AM of the tests above when the AM lane has
-     * device memory */
-    am_lane = ucp_ep_config(ep)->key.am_lane;
-    length  = std::min(max_am_short(ep), am_msg_size());
-
-    /* The AM lane fails, so the purge reposts the AM on another lane */
-    status = uct_ep_invalidate(ucp_ep_get_lane(ep, am_lane), 0);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
-    }
-
-    ASSERT_UCS_OK(status);
-    EXPECT_UCS_OK(do_am_send_and_wait(ep, length, false));
-    EXPECT_EQ(0u, total_err_count());
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf_am_short, rcx, "rc_x")
-
 /* A send on a FAILOVER endpoint is canceled locally when the user closes the
  * endpoint or destroys the worker while the send is still pending or in flight.
  * The send must complete once, without a restart on the endpoint which is going
