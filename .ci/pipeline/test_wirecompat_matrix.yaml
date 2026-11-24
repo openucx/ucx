@@ -10,6 +10,8 @@ timeout_minutes: 180
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 12600
   # RoCE (CX7) VF.
   annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }]
   # Without a hugepages request legacy UCX gets SIGBUS opening shm (mm) ifaces.
