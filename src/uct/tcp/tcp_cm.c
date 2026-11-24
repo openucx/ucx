@@ -676,6 +676,9 @@ static void uct_tcp_cm_handle_conn_fin(uct_tcp_ep_t **ep_p)
     uct_tcp_ep_t *ep = *ep_p;
 
     if ((ep->flags & UCT_TCP_EP_CTX_CAPS) == UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
+        /* Do not destroy the endpoint here: the same event batch may still run
+         * the TX progress for it, which would be a use-after-free. The endpoint
+         * has no TX, so the failure destroys it from the progress. */
         uct_tcp_ep_set_failed(ep, UCS_ERR_CONNECTION_RESET);
         *ep_p = NULL;
     } else {
