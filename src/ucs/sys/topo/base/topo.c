@@ -660,7 +660,7 @@ static ucs_status_t
 ucs_topo_sys_dev_get_sysfs_path_nolock(ucs_sys_device_t sys_dev,
                                        const char **path_p)
 {
-    ucs_topo_sys_device_info_t *device;
+    ucs_topo_sys_device_info_t *device = NULL; /* Suppress compiler warning */
     ucs_status_t status;
 
     status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
@@ -736,11 +736,10 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
  *
  * @return UCS_OK on success, or error status on failure
  */
-static ucs_status_t ucs_topo_get_common_path_nolock(ucs_sys_device_t sys_dev1,
-                                                    ucs_sys_device_t sys_dev2,
-                                                    const char **path1,
-                                                    const char **path2,
-                                                    char **common_path)
+static ucs_status_t
+ucs_topo_get_common_path_nolock(ucs_sys_device_t sys_dev1,
+                                ucs_sys_device_t sys_dev2, const char **path1,
+                                const char **path2, char **common_path)
 {
     ucs_status_t status;
 

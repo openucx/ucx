@@ -30,8 +30,8 @@ static std::string get_sysfs_device_path(const std::string &bdf)
 }
 
 // Find two PCI devices under different PCI root complexes
-static bool find_pci_devices_on_different_roots(std::string &bdf1,
-                                                std::string &bdf2)
+static bool
+find_pci_devices_on_different_roots(std::string &bdf1, std::string &bdf2)
 {
     static const std::string root_prefix = "/sys/devices/pci";
     std::string root1;
