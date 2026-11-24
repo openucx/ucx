@@ -162,8 +162,8 @@ UCS_TEST_F(rocm_hooks, test_hipMem_vmm_map_unmap) {
     ASSERT_EQ(hipMemCreate(&handle, granularity, &prop, 0), hipSuccess);
     ASSERT_EQ(hipMemAddressReserve(&ptr, granularity, 0, 0, 0), hipSuccess);
 
-    /* hipMemMap drives hsa_amd_vmem_map, which fires the alloc hook. VMM is
-     * reported as ROCM (the map hook dispatches UNKNOWN, resolved later). */
+    /* hipMemMap drives hsa_amd_vmem_map, which fires the alloc hook. The hook
+     * dispatches UNKNOWN, which check_mem_alloc_events() also accepts. */
     ASSERT_EQ(hipMemMap(ptr, granularity, 0, handle, 0), hipSuccess);
     access.location = prop.location;
     access.flags    = hipMemAccessFlagsProtReadWrite;

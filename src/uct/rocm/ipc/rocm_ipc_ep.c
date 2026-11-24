@@ -57,7 +57,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
-    void *remote_base_addr, *remote_copy_addr;
+    void *remote_base_addr, *remote_copy_addr, *detach_addr;
     void *dst_addr, *src_addr;
     uct_rocm_base_signal_desc_t *rocm_ipc_signal;
     void *tmp_base_ptr;
@@ -92,6 +92,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                       ret);
             return ret;
         }
+        /* The cache owns the mapping; do not detach it on completion. */
+        detach_addr = NULL;
     } else {
         status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
                                            &remote_base_addr);
@@ -100,6 +102,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                       (void*)key->address, key->length);
             return UCS_ERR_INVALID_ADDR;
         }
+        /* Attached directly; detach it when the copy completes. */
+        detach_addr = remote_base_addr;
     }
 
     remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
@@ -173,12 +177,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_IO_ERROR;
     }
 
-    rocm_ipc_signal->comp = comp;
-    if (iface->config.enable_ipc_handle_cache || key->is_vmm) {
-        rocm_ipc_signal->mapped_addr = NULL;
-    } else {
-        rocm_ipc_signal->mapped_addr = remote_base_addr;
-    }
+    rocm_ipc_signal->comp        = comp;
+    rocm_ipc_signal->mapped_addr = detach_addr;
     ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->queue);
 
     ucs_trace("rocm async copy issued :%p remote:%p, local:%p  len:%ld",

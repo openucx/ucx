@@ -324,6 +324,44 @@ uct_rocm_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
 }
 
 #ifdef HAVE_ROCM_VMM_TYPE
+#if HAVE_DECL_SYS_PIDFD_GETFD
+/* Duplicate the sender's dmabuf fd into this process via pidfd_open/
+ * pidfd_getfd. Returns a local fd on success, or -1 if the peer is in a
+ * different pid namespace or the syscalls fail. */
+static int uct_rocm_ipc_dup_peer_fd(const uct_rocm_ipc_key_t *key)
+{
+    int pidfd, local_fd;
+
+    /* key->pid is meaningful only in the sender's PID namespace; a peer in a
+     * different namespace would resolve to an unrelated local process. */
+    if (key->pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
+        ucs_debug("cannot import vmm fd: sender pid %d is in a different pid "
+                  "namespace (remote=%u local=%u)", key->pid, key->pid_ns,
+                  ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
+        return -1;
+    }
+
+    pidfd    = syscall(SYS_pidfd_open, key->pid, 0);
+    local_fd = (pidfd >= 0) ?
+               syscall(SYS_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
+    if (local_fd < 0) {
+        /* Log before close(pidfd) so errno still reflects the failed dup. */
+        ucs_debug("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
+                  key->pid, key->vmm.fd);
+    }
+    if (pidfd >= 0) {
+        close(pidfd);
+    }
+    return local_fd;
+}
+#else
+static int uct_rocm_ipc_dup_peer_fd(const uct_rocm_ipc_key_t *key)
+{
+    ucs_debug("cannot import vmm dmabuf fd: SYS_pidfd_getfd is not available");
+    return -1;
+}
+#endif
+
 /* Import a cross-process VMM handle into the local address space.
  * Duplicates the sender's dmabuf fd via pidfd_open/pidfd_getfd, then
  * imports the handle, reserves a VA range, maps it, and grants RW access
@@ -332,38 +370,13 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
 {
     hsa_amd_vmem_alloc_handle_t vmem_handle;
     hsa_status_t status;
-    void *va     = NULL;
-    int local_fd = -1;
-#if HAVE_DECL_SYS_PIDFD_GETFD
-    int pidfd;
-    int saved_errno;
+    void *va = NULL;
+    int local_fd;
 
-    /* key->pid is meaningful only in the sender's PID namespace; a peer in a
-     * different namespace would resolve to an unrelated local process. */
-    if (key->pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
-        ucs_debug("cannot import vmm fd: sender pid %d is in a different pid "
-                  "namespace (remote=%u local=%u)", key->pid, key->pid_ns,
-                  ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
-        return NULL;
-    }
-
-    pidfd    = syscall(SYS_pidfd_open, key->pid, 0);
-    local_fd = (pidfd >= 0) ?
-               syscall(SYS_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
-    saved_errno = errno; /* capture before close(pidfd) clobbers errno */
-    if (pidfd >= 0) {
-        close(pidfd);
-    }
+    local_fd = uct_rocm_ipc_dup_peer_fd(key);
     if (local_fd < 0) {
-        errno = saved_errno;
-        ucs_debug("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
-                  key->pid, key->vmm.fd);
         return NULL;
     }
-#else
-    ucs_debug("cannot import vmm dmabuf fd: SYS_pidfd_getfd is not available");
-    return NULL;
-#endif
 
     status = hsa_amd_vmem_import_shareable_handle(local_fd, &vmem_handle);
     close(local_fd);
