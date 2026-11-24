@@ -10,8 +10,6 @@ parameters:
   docs_slices: []
 
 stages:
-  # UCXX results are informational: every job is continueOnError, so failures
-  # surface as warnings and never block the UCX PR.
   - stage: UCXX_build
     dependsOn: ${{ parameters.dependsOn }}
     variables:
@@ -23,7 +21,6 @@ stages:
     jobs:
       - ${{ each slice in parameters.conda_cpp_slices }}:
         - job: ucxx_conda_cpp_build_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
@@ -51,7 +48,6 @@ stages:
 
       - ${{ each slice in parameters.conda_python_slices }}:
         - job: ucxx_conda_python_build_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
@@ -90,7 +86,6 @@ stages:
 
       - ${{ each slice in parameters.wheel_libucxx_slices }}:
         - job: ucxx_wheel_libucxx_build_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
@@ -118,7 +113,6 @@ stages:
 
       - ${{ each slice in parameters.wheel_ucxx_slices }}:
         - job: ucxx_wheel_ucxx_build_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
@@ -158,7 +152,6 @@ stages:
 
       - ${{ each slice in parameters.docs_slices }}:
         - job: ucxx_docs_build_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
@@ -206,7 +199,6 @@ stages:
 
       - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
         - job: ucxx_wheel_tests_ucxx_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
