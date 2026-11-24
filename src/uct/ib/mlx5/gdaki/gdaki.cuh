@@ -204,8 +204,8 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_nop(
         uct_rc_gdaki_dev_ep_t *ep, void *wqe_ptr, uint16_t wqe_idx,
         unsigned ctrl_flags, unsigned cid)
 {
-    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
-    struct doca_gpunetio_ib_mlx5_wqe_ctrl_seg cseg;
+    const uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    doca_gpunetio_ib_mlx5_wqe_ctrl_seg cseg;
 
     cseg.opmod_idx_opcode = doca_gpu_dev_verbs_bswap32(
             ((uint32_t)wqe_idx << DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT) |
@@ -213,7 +213,9 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_nop(
     cseg.qpn_ds   = doca_gpu_dev_verbs_bswap32((qp->sq_num << 8) | 1);
     cseg.fm_ce_se = ctrl_flags;
 
-    doca_gpu_dev_verbs_store_wqe_seg((uint64_t*)wqe_ptr, (uint64_t*)&cseg);
+    doca_gpu_dev_verbs_store_wqe_seg(
+            static_cast<uint64_t*>(wqe_ptr),
+            reinterpret_cast<uint64_t*>(&cseg));
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
@@ -420,8 +422,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
         } while (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE);
 
         uct_rc_mlx5_gda_wqe_prepare_nop(
-                ep, uct_rc_mlx5_gda_get_wqe_ptr(ep, cid, (uint16_t)wqe_base),
-                (uint16_t)wqe_base,
+                ep,
+                uct_rc_mlx5_gda_get_wqe_ptr(
+                        ep, cid, static_cast<uint16_t>(wqe_base)),
+                static_cast<uint16_t>(wqe_base),
                 DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE |
                         DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_FENCE,
                 cid);
