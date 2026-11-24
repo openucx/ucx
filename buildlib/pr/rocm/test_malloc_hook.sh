@@ -66,21 +66,14 @@ test_malloc_hook() {
 	test_malloc_hook_mode 'none' 'rocm_hooks_disabled.*'
 }
 
-# Exercise rocm_copy/rocm_ipc VMM paths via VMM-backed ROCM allocations.
-# Only supported on ROCm >= 7.1; skips cleanly otherwise.
+# Exercise rocm_copy/rocm_ipc VMM paths. The VMM-backed test variants run as
+# part of the ROCm gtest and skip cleanly when ROCm VMM is not supported.
 test_rocm_vmm_gtest() {
-	if ! grep -q "define HAVE_ROCM_VMM_TYPE 1" config.h 2>/dev/null; then
-		echo "==== Skipping ROCm VMM gtest (ROCm < 7.1) ===="
-		return
-	fi
-
-	echo "==== Running ROCm gtest with VMM-backed allocations ===="
-	export GTEST_ROCM_VMM=1
+	echo "==== Running ROCm gtest (includes VMM-backed variants) ===="
 	if ! ./test/gtest/gtest --gtest_filter="*rocm*"; then
-		azure_log_error "rocm VMM gtest failed"
+		azure_log_error "rocm gtest failed"
 		exit 1
 	fi
-	unset GTEST_ROCM_VMM
 }
 
 prepare

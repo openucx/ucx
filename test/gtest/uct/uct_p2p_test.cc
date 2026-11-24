@@ -21,6 +21,9 @@ std::string uct_p2p_test::p2p_resource::name() const {
     if (loopback) {
         ss << "/loopback";
     }
+    if (vmm) {
+        ss << "/vmm";
+    }
     return ss.str();
 }
 
@@ -32,14 +35,25 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
         std::vector<const resource*> r = uct_test::enum_resources("");
         for (std::vector<const resource*>::iterator iter = r.begin(); iter != r.end(); ++iter) {
             p2p_resource res(**iter);
+            /* Add a VMM-backed variant for ROCm transports. */
+            bool rocm = res.tl_name.compare(0, 5, "rocm_") == 0;
 
             if (UCT_DEVICE_TYPE_SELF != res.dev_type) {
                 res.loopback = false;
                 all_resources.push_back(res);
+                if (rocm) {
+                    res.vmm = true;
+                    all_resources.push_back(res);
+                    res.vmm = false;
+                }
             }
 
             res.loopback = true;
             all_resources.push_back(res);
+            if (rocm) {
+                res.vmm = true;
+                all_resources.push_back(res);
+            }
         }
     }
 
@@ -66,8 +80,13 @@ void uct_p2p_test::init() {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
 
+    if (r->vmm && !mem_buffer::is_rocm_vmm_supported()) {
+        UCS_TEST_SKIP_R("ROCm VMM is not supported");
+    }
+
     /* Create 2 connected endpoints */
     entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
+    e1->vmm_alloc = r->vmm;
     m_entities.push_back(e1);
 
     check_skip_test();
@@ -76,6 +95,7 @@ void uct_p2p_test::init() {
         e1->connect(0, *e1, 0);
     } else {
         entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
+        e2->vmm_alloc = r->vmm;
         m_entities.push_back(e2);
 
         e1->connect(0, *e2, 0);

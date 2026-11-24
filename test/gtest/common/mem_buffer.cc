@@ -94,25 +94,6 @@ mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
 #include <map>
 #include <mutex>
 
-/* Opt-in: when GTEST_ROCM_VMM is set to a non-zero value, back ROCM allocations
- * with the HIP VMM API (hipMem*) so the existing ROCM transfer tests exercise
- * VMM memory. GTEST_ROCM_VMM=0 (or unset) keeps the default pool allocator. */
-static bool mem_buffer_rocm_use_vmm()
-{
-    const char *env           = getenv("GTEST_ROCM_VMM");
-    const bool requested      = (env != NULL) && (atoi(env) != 0);
-    static const bool use_vmm = requested &&
-                                mem_buffer::is_rocm_vmm_supported();
-
-    /* Fail rather than silently fall back to hipMalloc, so a VMM job cannot
-     * pass with zero VMM coverage. */
-    if (requested && !use_vmm) {
-        UCS_TEST_ABORT("GTEST_ROCM_VMM is set but ROCm VMM is not supported");
-    }
-
-    return use_vmm;
-}
-
 /* release() only receives the VA, so track the handle + mapped size per VA. */
 struct mem_buffer_rocm_vmm_alloc {
     hipMemGenericAllocationHandle_t handle;
@@ -176,10 +157,26 @@ static bool mem_buffer_rocm_vmm_free_mem(void *ptr)
     ROCM_CALL(hipMemRelease(alloc.handle));
     return true;
 }
+
+/* Whether ptr (possibly an interior address) falls inside a VMM allocation. */
+static bool mem_buffer_rocm_is_vmm_mem(void *ptr)
+{
+    std::lock_guard<std::mutex> lock(mem_buffer_rocm_vmm_lock);
+
+    /* Candidate range is the one just before the first base VA past ptr. */
+    auto it = mem_buffer_rocm_vmm_allocs.upper_bound(ptr);
+    if (it == mem_buffer_rocm_vmm_allocs.begin()) {
+        return false;
+    }
+
+    --it;
+    uintptr_t base = reinterpret_cast<uintptr_t>(it->first);
+    return reinterpret_cast<uintptr_t>(ptr) < (base + it->second.size);
+}
 #else
-static bool mem_buffer_rocm_use_vmm()             { return false; }
 static void *mem_buffer_rocm_vmm_alloc_mem(size_t) { return NULL; }
 static bool mem_buffer_rocm_vmm_free_mem(void*)    { return false; }
+static bool mem_buffer_rocm_is_vmm_mem(void*)      { return false; }
 #endif
 
 #endif
@@ -664,7 +661,8 @@ void mem_buffer_ze_memset(void *dst, int value, size_t length)
 } // namespace
 #endif
 
-void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
+void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type,
+                           alloc_mode mode)
 {
     void *ptr;
 
@@ -682,7 +680,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        if (async) {
+        if (mode == alloc_mode::ASYNC) {
 #if CUDART_VERSION >= 11020
             CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
             cudaStreamSynchronize(0);
@@ -696,7 +694,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        if (async) {
+        if (mode == alloc_mode::ASYNC) {
 #if CUDART_VERSION >= 13000
             cudaMemPool_t pool;
 
@@ -716,7 +714,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
-        if (mem_buffer_rocm_use_vmm()) {
+        if (mode == alloc_mode::VMM) {
             return mem_buffer_rocm_vmm_alloc_mem(size);
         }
         ROCM_CALL(hipMalloc(&ptr, size));
@@ -949,7 +947,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
         /* VMM-backed ROCM is device-only; the CPU memset fast path would fault. */
-        if ((length <= 8) && !mem_buffer_rocm_use_vmm()) {
+        if ((length <= 8) && !mem_buffer_rocm_is_vmm_mem(buffer)) {
             ::memset(buffer, c, length);
         } else {
             ROCM_CALL(hipMemset(buffer, c, length));
@@ -1127,7 +1125,7 @@ mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type,
                        alloc_mode mode) :
     m_mem_type(mem_type),
-    m_ptr(allocate(size, mem_type, mode == alloc_mode::ASYNC)), m_size(size),
+    m_ptr(allocate(size, mem_type, mode)), m_size(size),
     m_async(mode == alloc_mode::ASYNC) {
 }
 

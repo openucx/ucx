@@ -29,9 +29,17 @@ public:
 
     static bool is_mem_type_supported(ucs_memory_type_t mem_type);
 
+    /* Allocation mode. */
+    enum class alloc_mode {
+        DEFAULT, /* Default synchronous allocation (cudaMalloc/hipMalloc/host) */
+        ASYNC,   /* Asynchronous CUDA allocation mode */
+        VMM      /* ROCm VMM (hipMem*) allocation mode */
+    };
+
     /* allocate buffer of a given memory type */
     static void *
-    allocate(size_t size, ucs_memory_type_t mem_type, bool async = false);
+    allocate(size_t size, ucs_memory_type_t mem_type,
+             alloc_mode mode = alloc_mode::DEFAULT);
     /* release buffer of a given memory type */
     static void
     release(void *ptr, ucs_memory_type_t mem_type, bool async = false);
@@ -140,12 +148,6 @@ public:
      */
     static bool is_async_supported(ucs_memory_type_t mem_type);
 
-    /* Allocation mode. */
-    enum class alloc_mode {
-        DEFAULT, /* Default allocation mode, using cudaMalloc */
-        ASYNC    /* Asynchronous CUDA allocation mode */
-    };
-
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, alloc_mode mode);
@@ -209,7 +211,8 @@ private:
 class scoped_async_cuda_buffer {
 public:
     explicit scoped_async_cuda_buffer(size_t size) :
-        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA, true))
+        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA,
+                                   mem_buffer::alloc_mode::ASYNC))
     {
     }
 

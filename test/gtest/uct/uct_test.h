@@ -225,6 +225,10 @@ protected:
 
         size_t                   max_conn_priv;
 
+        /* Allocate ROCm device buffers via the VMM API (set by the p2p vmm
+         * resource variant). */
+        bool                     vmm_alloc = false;
+
     private:
         class async_wrapper {
         public:

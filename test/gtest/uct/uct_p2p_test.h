@@ -41,11 +41,13 @@ protected:
     struct p2p_resource : public resource {
         virtual std::string name() const;
         bool loopback;
+        bool vmm;
 
         p2p_resource(const resource& res) :
                      resource(res.component, res.component_name, res.md_name,
                               res.local_cpus, res.tl_name, res.dev_name,
-                              res.dev_type, res.sys_device), loopback(false) {
+                              res.dev_type, res.sys_device), loopback(false),
+                     vmm(false) {
         }
     };
 

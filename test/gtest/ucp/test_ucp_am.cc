@@ -563,7 +563,9 @@ protected:
                            uint32_t op_attr_mask = 0)
     {
         auto sbuf = mem_buffer::allocate(size, tx_memtype(),
-                                         tx_memtype_async());
+                                         tx_memtype_async() ?
+                                                 mem_buffer::alloc_mode::ASYNC :
+                                                 mem_buffer::alloc_mode::DEFAULT);
         mem_buffer::pattern_fill(sbuf, size, SEED, tx_memtype());
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
@@ -632,7 +634,9 @@ protected:
         ucs_status_t status;
 
         m_rx_buf = mem_buffer::allocate(length, rx_memtype(),
-                                        rx_memtype_async());
+                                        rx_memtype_async() ?
+                                                mem_buffer::alloc_mode::ASYNC :
+                                                mem_buffer::alloc_mode::DEFAULT);
         mem_buffer::pattern_fill(m_rx_buf, length, 0ul, rx_memtype());
 
         m_rx_dt_desc.make(m_rx_dt, m_rx_buf, length);

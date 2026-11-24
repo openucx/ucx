@@ -893,6 +893,51 @@ UCS_TEST_P(test_ucp_rma_rndv_cuda_async, get_nonblocking)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_rndv_cuda_async, ib, "ib")
 
 
+class test_ucp_rma_rndv_rocm_vmm : public test_ucp_rma_rndv {
+public:
+    void init() override
+    {
+        if (!mem_buffer::is_rocm_vmm_supported()) {
+            UCS_TEST_SKIP_R("ROCm VMM is not supported");
+        }
+        test_ucp_rma_rndv::init();
+    }
+
+protected:
+    mem_buffer *create_mem_buffer(size_t size,
+                                  ucs_memory_type_t mem_type) override
+    {
+        const mem_buffer::alloc_mode mode =
+                (mem_type == UCS_MEMORY_TYPE_ROCM) ?
+                        mem_buffer::alloc_mode::VMM :
+                        mem_buffer::alloc_mode::DEFAULT;
+        return new mem_buffer(size, mem_type, mode);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_rocm_vmm, put_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_rocm_vmm, put_nonblocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_rocm_vmm, get_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_rocm_vmm, get_nonblocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_rndv_rocm_vmm, ib, "ib")
+
+
 class test_ucp_proto_emulation_enable : public test_ucp_rma {
 public:
     static constexpr size_t SMALL_SIZE = 8;
