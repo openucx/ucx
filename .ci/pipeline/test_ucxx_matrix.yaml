@@ -17,6 +17,8 @@ registry_path: /ucx/ci
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 23400
   limits: "{memory: 16Gi, cpu: 8000m}"
   # The CPU request is below the limit so that two PR runs fit the namespace quota
   requests: "{memory: 16Gi, cpu: 2000m}"
