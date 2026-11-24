@@ -1120,7 +1120,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route) {
     ucp_lane_index_t cuda_lane, managed_lane, lane;
     ucp_memory_info_t info = {UCS_MEMORY_TYPE_CUDA_MANAGED,
                               UCS_SYS_DEVICE_ID_UNKNOWN,
-                              UCS_MEM_FLAG_CUDA_ASYNC};
+                              UCS_MEM_FLAG_STREAM_ORDERED};
     get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
     auto *attr = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
     scoped_md_flags flags(attr,
@@ -1144,7 +1144,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route) {
     EXPECT_EQ(cuda_ep, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
     info.flags = 0;
     EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
-    info.flags = UCS_MEM_FLAG_CUDA_ASYNC;
+    info.flags = UCS_MEM_FLAG_STREAM_ORDERED;
     info.type  = UCS_MEMORY_TYPE_HOST;
     EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
     info.type = UCS_MEMORY_TYPE_CUDA;
@@ -1212,7 +1212,8 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_required_flags,
     flags.set_required_flags(UCS_MEM_FLAG_GDR_CAPABLE |
                              UCS_MEM_FLAG_REGISTRABLE);
     test_unknown_short_copy(cuda_ep, cuda_lane,
-                            UCS_MEM_FLAG_CUDA_ASYNC | UCS_MEM_FLAG_REGISTRABLE);
+                            UCS_MEM_FLAG_STREAM_ORDERED |
+                                    UCS_MEM_FLAG_REGISTRABLE);
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_reselect,
@@ -1251,7 +1252,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_probe_reselect,
             },
             &orig_lanes);
     std::swap(key->rma_lanes[0], key->rma_lanes[i]);
-    test_unknown_short_copy(cuda_ep, cuda_lane, UCS_MEM_FLAG_CUDA_ASYNC);
+    test_unknown_short_copy(cuda_ep, cuda_lane, UCS_MEM_FLAG_STREAM_ORDERED);
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_perf) {
@@ -1266,7 +1267,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_perf) {
     // Retain the baseline first-lane estimate, even without GDR_CAPABLE.
     test_short_copy_perf(info, 1, 0);
     info.type  = UCS_MEMORY_TYPE_CUDA_MANAGED;
-    info.flags = UCS_MEM_FLAG_CUDA_ASYNC;
+    info.flags = UCS_MEM_FLAG_STREAM_ORDERED;
     test_short_copy_perf(info, 0, 1);
     attr->flags |= UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY;
     test_short_copy_perf(info, 1, 0);

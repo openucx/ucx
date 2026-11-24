@@ -64,13 +64,13 @@ typedef enum ucs_mem_flags {
     UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1),
 
     /**
-     * CUDA device memory allocated as GPUDirect RDMA (GDR) capable, so its
-     * pages can be pinned for peer access.
+     * Memory allocated as GPUDirect RDMA (GDR) capable, so its pages can be
+     * pinned for peer access.
      */
     UCS_MEM_FLAG_GDR_CAPABLE             = UCS_BIT(2),
 
-    /** Memory originates from a CUDA stream-ordered allocation. */
-    UCS_MEM_FLAG_CUDA_ASYNC              = UCS_BIT(3)
+    /** Memory originates from a stream-ordered allocation. */
+    UCS_MEM_FLAG_STREAM_ORDERED          = UCS_BIT(3)
 } ucs_mem_flags_t;
 
 

@@ -182,7 +182,7 @@ ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
         *mem_info_p    = mem_info;
     }
 
-    if (!(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC)) {
+    if (!(mem_info->flags & UCS_MEM_FLAG_STREAM_ORDERED)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

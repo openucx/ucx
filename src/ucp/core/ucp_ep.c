@@ -839,7 +839,7 @@ ucp_ep_h ucp_worker_cuda_async_ep_for_short(ucp_worker_h worker,
     }
 
     if ((mem_info != NULL) &&
-        (!(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ||
+        (!(mem_info->flags & UCS_MEM_FLAG_STREAM_ORDERED) ||
          ((mem_info->type != UCS_MEMORY_TYPE_CUDA) &&
           (mem_info->type != UCS_MEMORY_TYPE_CUDA_MANAGED)))) {
         return NULL;
