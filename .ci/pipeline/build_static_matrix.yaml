@@ -13,6 +13,8 @@ kubernetes:
   limits: "{memory: 8Gi, cpu: 6000m}"
   # Requests follow the measured use; the limits allow bursts
   requests: "{memory: 4Gi, cpu: 4000m}"
+  jnlp_requests: "{memory: 512Mi, cpu: 100m}"
+  jnlp_limits: "{memory: 1Gi}"
 
 volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}

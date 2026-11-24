@@ -13,6 +13,8 @@ kubernetes:
   limits: "{memory: 8Gi, cpu: 4000m}"
   # The CPU request follows the measured use; memory peaks close to its limit
   requests: "{memory: 8Gi, cpu: 3000m}"
+  jnlp_requests: "{memory: 512Mi, cpu: 100m}"
+  jnlp_limits: "{memory: 1Gi}"
 
 runs_on_dockers:
   - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
