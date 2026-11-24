@@ -90,6 +90,8 @@ steps:
         )
         # Not "|| ..." on the subshell: that would disable its set -e.
         [ $? -eq 0 ] || failed="${failed} ${ucx_tag}"
+        # A failed test leaves its server on the ports of the next version.
+        pkill -9 -f "${WORKSPACE}/ucx_${ucx_tag}/examples/"
       done
       if [ -n "${failed}" ]
       then
