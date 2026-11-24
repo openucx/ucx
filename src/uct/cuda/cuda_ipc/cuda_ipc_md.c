@@ -437,6 +437,10 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
     uct_cuda_ipc_extended_rkey_t *ext_rkey;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    const uct_cuda_ipc_vmm_multi_meta_t *meta;
+    uct_cuda_ipc_vmm_multi_range_t range;
+#endif
 
     ucs_list_for_each(key, &memh->list, link) {
         if (((uintptr_t)address >= key->d_bptr) &&
@@ -451,15 +455,37 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
     }
 
 found:
-    ucs_assertv(((uintptr_t)address + length) <= (key->d_bptr + key->b_len),
-                "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
-                (uintptr_t)address + length, key->d_bptr, key->d_bptr +
-                key->b_len);
-
     packed->pid    = memh->pid;
     packed->ph     = key->ph;
     packed->d_bptr = key->d_bptr;
     packed->b_len  = key->b_len;
+
+#if HAVE_CUDA_FABRIC
+    if ((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) &&
+        (((uintptr_t)address + length) > (key->d_bptr + key->b_len))) {
+        status = uct_cuda_ipc_mkey_pack_vmm_multi_chunk(memh, address, length,
+                                                        &meta, &range);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        packed->ph.handle_type          =
+                UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI;
+        packed->ph.handle.fabric_handle = meta->fabric_handle;
+        memset(&packed->ph.ptr, 0, sizeof(packed->ph.ptr));
+        packed->ph.vmm_multi            = range.info;
+        packed->ph.pool                 = NULL;
+        packed->ph.buffer_id            = meta->buffer_id;
+        packed->d_bptr                  = range.d_bptr;
+        packed->b_len                   = range.b_len;
+    }
+#endif
+
+    ucs_assertv(((uintptr_t)address + length) <=
+                        (packed->d_bptr + packed->b_len),
+                "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
+                (uintptr_t)address + length, packed->d_bptr,
+                packed->d_bptr + packed->b_len);
 
     if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
         ext_rkey         = (uct_cuda_ipc_extended_rkey_t*)packed;
@@ -660,6 +686,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
     flags   = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0);
+
+#if HAVE_CUDA_FABRIC
+    if ((packed->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) &&
+        !uct_cuda_ipc_vmm_multi_is_supported(&packed->ph.vmm_multi)) {
+        ucs_debug("unsupported multi-chunk VMM key: version %u handle type %u",
+                  packed->ph.vmm_multi.version,
+                  packed->ph.vmm_multi.handle_type);
+        return UCS_ERR_UNREACHABLE;
+    }
+#endif
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
