@@ -147,6 +147,7 @@ err:
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
 {
     ucs_async_context_t *async = self->super.cm->iface.worker->async;
+    uct_tcp_sockcm_ep_t *ep, *tmp;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(async);
@@ -158,6 +159,18 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
     }
 
     ucs_close_fd(&self->listen_fd);
+
+    /* Close the endpoints accepted by this listener whose connection request
+     * was not passed to the user yet, since they would invoke the listener's
+     * callback once the client's data arrives */
+    ucs_list_for_each_safe(ep, tmp, &self->sockcm->ep_list, list) {
+        if (ep->listener == self) {
+            ucs_debug("listener %p: closing server ep %p fd %d with a pending "
+                      "connection request",
+                      self, ep, ep->fd);
+            uct_tcp_sockcm_close_ep(ep);
+        }
+    }
 
     UCS_ASYNC_UNBLOCK(async);
 }
