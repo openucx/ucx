@@ -41,6 +41,7 @@
 #include <ifaddrs.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+#include <pthread_np.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #endif
@@ -786,6 +787,7 @@ ssize_t ucs_get_huge_page_size()
     return huge_page_size;
 }
 
+#ifdef SHM_HUGETLB
 static ssize_t ucs_get_huge_pages_count()
 {
     static ssize_t huge_page_count = -1;
@@ -799,6 +801,7 @@ static ssize_t ucs_get_huge_pages_count()
 
     return huge_page_count;
 }
+#endif /* SHM_HUGETLB */
 
 size_t ucs_get_phys_mem_size()
 {
@@ -849,15 +852,7 @@ size_t ucs_get_shmmax()
     return size;
 }
 
-#if defined(__FreeBSD__)
-static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
-                                               const struct shminfo *ipc_info,
-                                               char *buf, size_t max)
-{
-    (void)alloc_size; (void)ipc_info; (void)buf; (void)max;
-    return;
-}
-#else
+#if defined(__linux__)
 static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
                                                const struct shminfo *ipc_info,
                                                char *buf, size_t max)
@@ -940,6 +935,7 @@ static int ucs_sys_get_mlock_cap()
 #endif
 }
 
+#if defined(__linux__)
 static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
 {
     if (!ucs_sys_get_mlock_cap()) {
@@ -949,26 +945,23 @@ static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
                  "SHM_HUGETLB");
     }
 }
+#endif
 
 #if defined(__FreeBSD__)
-static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
-                                         const char *alloc_name, int sys_errno,
-                                         char *buf, size_t max)
-{
-    snprintf(buf, max,
-             "shmget(size=%zu flags=0x%x) for %s failed: %s, please check shared "
-             "memory limits by 'sysctl kern.ipc' / 'sysctl hw.pagesize' / 'ipcs -a'",
-             alloc_size, flags, alloc_name, strerror(sys_errno));
-    return;
-}
+#define UCS_SYSV_SHM_LIMITS_HINT "'sysctl kern.ipc' / 'ipcs -a'"
 #else
+#define UCS_SYSV_SHM_LIMITS_HINT "'ipcs -l'"
+#endif
+
 static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
                                          const char *alloc_name, int sys_errno,
                                          char *buf, size_t max)
 {
-    struct shminfo ipc_info;
     char *p, *endp, *errp;
+#if defined(__linux__)
+    struct shminfo ipc_info;
     int ret;
+#endif
 
     buf[0] = '\0';
     p      = buf;
@@ -979,6 +972,7 @@ static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
     p   += strlen(p);
     errp = p; /* save current string pointer to detect if anything was added */
 
+#if defined(__linux__)
     ret = shmctl(0, IPC_INFO, (struct shmid_ds *)&ipc_info);
     if (ret >= 0) {
         if ((sys_errno == EINVAL) && (alloc_size > ipc_info.shmmax)) {
@@ -998,13 +992,14 @@ static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
         ucs_sysv_shmget_error_check_EPERM(flags, p, endp - p);
         p += strlen(p);
     }
+#endif
 
     /* default error message if no useful information was added to the string */
     if (p == errp) {
-        snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
+        snprintf(p, endp - p, ", please check shared memory limits by "
+                 UCS_SYSV_SHM_LIMITS_HINT);
     }
 }
-#endif
 
 ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                             int flags, const char *alloc_name, int *shmid)
@@ -1400,11 +1395,12 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
     void *ptr;
     size_t copy_length;
 
+    /* __syscall() preserves pointer width and bypasses UCM mmap hooks. */
     new_length = ucs_align_up_pow2(new_length, ucs_get_page_size());
     if (old_ptr == NULL) {
-        ptr = (void*)syscall(SYS_mmap, NULL, new_length,
-                             PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANON, -1, 0ul);
+        ptr = (void*)(uintptr_t)__syscall(SYS_mmap, NULL, new_length,
+                                          PROT_READ | PROT_WRITE,
+                                          MAP_PRIVATE | MAP_ANON, -1, (off_t)0);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
                                 new_length);
@@ -1414,8 +1410,9 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
     }
 
     old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
-    ptr = (void*)syscall(SYS_mmap, NULL, new_length, PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANON, -1, 0ul);
+    ptr = (void*)(uintptr_t)__syscall(SYS_mmap, NULL, new_length,
+                                      PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANON, -1, (off_t)0);
     if (ptr == MAP_FAILED) {
         ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
                             new_length);
@@ -1427,6 +1424,10 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 
     if (syscall(SYS_munmap, old_ptr, old_length) != 0) {
         ucs_log_fatal_error("munmap(%p, %zu) failed: %m", old_ptr, old_length);
+        if (syscall(SYS_munmap, ptr, new_length) != 0) {
+            ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, new_length);
+        }
+        return NULL;
     }
 
     return ptr;
@@ -1462,7 +1463,6 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 }
 #endif
 
-#if defined(__FreeBSD__)
 void ucs_sys_free(void *ptr, size_t length)
 {
     int ret;
@@ -1475,20 +1475,6 @@ void ucs_sys_free(void *ptr, size_t length)
         }
     }
 }
-#else
-void ucs_sys_free(void *ptr, size_t length)
-{
-    int ret;
-
-    if (ptr != NULL) {
-        length = ucs_align_up_pow2(length, ucs_get_page_size());
-        ret = syscall(SYS_munmap, ptr, length);
-        if (ret) {
-            ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
-        }
-    }
-}
-#endif
 
 char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len)
 {
@@ -1554,38 +1540,18 @@ int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset)
     return ret;
 }
 
-#if defined(__FreeBSD__)
 ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
 {
-    long tid;
     int ret;
 
-#ifdef HAVE_SYS_THR_H
-    thr_self(&tid);
-#else
-    /* Fallback: best-effort use process id */
-    tid = (long)getpid();
-#endif
-
-    ret = cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, tid,
-                             sizeof(*cpuset), cpuset);
+    ret = pthread_getaffinity_np(pthread_self(), sizeof(*cpuset), cpuset);
     if (ret != 0) {
-        ucs_error("cpuset_getaffinity(TID=%ld) failed: %m", tid);
-        return UCS_ERR_INVALID_PARAM;
-    }
-    return UCS_OK;
-}
-#else
-ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
-{
-    if (pthread_getaffinity_np(pthread_self(), sizeof(*cpuset), cpuset)) {
-        ucs_error("pthread_getaffinity_np() failed: %m");
+        ucs_error("pthread_getaffinity_np() failed: %s", strerror(ret));
         return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
 }
-#endif
 
 void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
 {
