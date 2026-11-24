@@ -80,7 +80,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
     uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
-    status = ucs_memtype_cache_lookup(address, length, &mem_info);
+    status = ucs_memtype_lookup(address, length, &mem_info);
     if (status == UCS_ERR_NO_ELEM) {
         goto out_host;
     }

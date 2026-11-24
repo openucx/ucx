@@ -558,6 +558,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
         --worker->num_all_eps;
     }
 
+    ucp_worker_ep_path_bw_cleanup(ep);
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
@@ -1607,6 +1608,9 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         }
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+        /* The callback may be called before ucp_worker_discard_uct_ep()
+         * returns, so count it in advance */
+        ++discard_arg->discard_counter;
         status = ucp_worker_discard_uct_ep(ep, uct_ep,
                                            ucp_ep_get_rsc_index(ep, lane),
                                            ep_flush_flags,
@@ -1614,15 +1618,26 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                            UCS_STATUS_PTR(discard_status),
                                            ucp_ep_discard_lanes_callback,
                                            discard_arg);
-        if (status == UCS_INPROGRESS) {
-            ++discard_arg->discard_counter;
+        if (status != UCS_INPROGRESS) {
+            --discard_arg->discard_counter;
         }
     }
 
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
-static ucs_status_t
+int ucp_ep_failover_in_wireup(ucp_ep_h ucp_ep, ucp_lane_index_t lane)
+{
+    /* Sockaddr keeps its CM path. REMOTE_CONNECTED is the p2p handshake;
+     * CONNECT_TO_IFACE is one-sided and can recover without it. */
+    return ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+           !(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) &&
+           (ucp_ep_config(ucp_ep)->p2p_lanes != 0) &&
+           (ucp_ep_get_cm_lane(ucp_ep) == UCP_NULL_LANE) &&
+           (ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane)) != NULL);
+}
+
+ucs_status_t
 ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
@@ -2563,6 +2578,19 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
+    /* TODO: recovery in the middle of p2p wireup is not recoverable,
+     *       need to store address for that and implement re-try logic.
+     *       LOCAL_CONNECTED is set after connect_local; REMOTE_CONNECTED
+     *       is the completed p2p handshake. */
+    if ((ucp_ep_config(ep)->p2p_lanes != 0) &&
+        !(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ucs_diag("ep %p: recovery in the middle of p2p wireup is not "
+                 "recoverable, setting lanes failed", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        ret = 1;
+        goto done;
+    }
+
     arg = ucp_ep_recovery_arg(ep);
     if (arg == NULL) {
         goto done;
@@ -2784,8 +2812,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     ucp_worker_iface_t *wiface;
     size_t tx_len;
 
-    if ((ep->worker->context->config.ext.failover_mode ==
-         UCP_FAILOVER_MODE_SW) ||
+    if (!ucp_context_is_token_failover(ep->worker->context) ||
         (ep->flags & UCP_EP_FLAG_FAILED) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         ucp_ep_has_cm_lane(ep) ||
@@ -3712,6 +3739,16 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return ucp_ep_close_nbx(ep, &param);
 }
 
+void ucp_ep_close_force(ucp_ep_h ep)
+{
+    /* Discard all lanes before destroying the endpoint: the lanes become
+     * failed, so the requests canceled from their pending queues are completed
+     * and not restarted on a failover endpoint */
+    ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)), UCS_ERR_CANCELED,
+                         ep->cfg_index);
+    ucp_ep_disconnected(ep, 1);
+}
+
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
@@ -3737,9 +3774,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
-                             UCS_ERR_CANCELED, ep->cfg_index);
-        ucp_ep_disconnected(ep, 1);
+        ucp_ep_close_force(ep);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
                                         ucp_ep_close_flushed_callback, "close",

@@ -1,5 +1,23 @@
 
 1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
+   Once it is countersigned, a maintainer adds the email named on it, or your
+   company's email domain for a corporate CLA, to the CLA list; the `CLA`
+   check on your pull request fails until then. The author and committer
+   emails of every commit must be covered by a CLA.
+
+1. Every commit must be
+   [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification)
+   with a key registered on your GitHub account (an SSH key as a signing key,
+   not only for authentication), with the committer email verified on that
+   account. With `user.signingkey` set (and `gpg.format ssh` for an SSH key),
+   `git config --global commit.gpgsign true` signs new commits, including
+   merge commits. Commits already pushed unsigned can be
+   re-signed with
+   `git rebase -f --rebase-merges --gpg-sign --onto $(git merge-base HEAD upstream/<pr-base-branch>) upstream/<pr-base-branch>`
+   and force-pushed, an exception to the no-force-push rule below; do it
+   before review starts when you can, since the rewrite also moves the anchors
+   of comments already posted, and merges that resolved conflicts need
+   resolving again.
 
 1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/docs/CodeStyle.md)
    and [logging style](https://github.com/openucx/ucx/blob/master/docs/LoggingStyle.md).

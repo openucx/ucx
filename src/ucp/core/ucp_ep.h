@@ -110,7 +110,7 @@ enum {
                                                         while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_PATH_DEGRADED          = UCS_BIT(11),/* Lane path is degraded */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -863,7 +863,14 @@ void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
+void ucp_ep_close_force(ucp_ep_h ep);
+
 void ucp_ep_destroy_internal(ucp_ep_h ep);
+
+int ucp_ep_failover_in_wireup(ucp_ep_h ucp_ep, ucp_lane_index_t lane);
+
+ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                               ucs_status_t status);
 
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                              ucs_status_t status);

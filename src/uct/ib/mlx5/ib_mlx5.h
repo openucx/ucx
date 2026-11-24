@@ -19,11 +19,6 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/ptr_arith.h>
 
-struct uct_rc_mlx5_ext_ops;
-
-/* The common registry selects one RC provider for an interface lifetime. */
-const struct uct_rc_mlx5_ext_ops *uct_ib_mlx5_ext_get_rc_provider(void);
-
 /**
  * When using a clang version that is higher than 3.0, the GNUC_MINOR is set
  * to 2, which affects the offset of several fields that are used by UCX from
@@ -62,6 +57,7 @@ const struct uct_rc_mlx5_ext_ops *uct_ib_mlx5_ext_get_rc_provider(void);
 #define UCT_IB_MLX5_EXTENDED_UD_AV       0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_AV_GRH_PRESENT       0x40 /* htonl(UCS_BIT(30)) */
 #define UCT_IB_MLX5_BF_REG_SIZE          256
+#define UCT_IB_MLX5_UAR_PAGE_SIZE        4096
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP  0x93
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN  0x99
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK  0x80

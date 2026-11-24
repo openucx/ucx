@@ -29,6 +29,22 @@ static size_t ucp_am_eager_single_hdr_size(ucp_operation_id_t op_id)
            ((op_id == UCP_OP_ID_AM_SEND) ? 0 : sizeof(ucp_am_reply_ftr_t));
 }
 
+static int
+ucp_am_eager_enable_token_failover(ucp_proto_single_init_params_t *params)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+
+    if ((init_params->ep_config_key->err_mode !=
+         UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        !ucp_context_is_token_failover(init_params->worker->context)) {
+        return 0;
+    }
+
+    params->super.flags     |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+    params->tl_v2_cap_flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    return 1;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
@@ -92,6 +108,8 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
                                 ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
+    ucp_lane_index_t am_lane                     =
+            init_params->ep_config_key->am_lane;
     ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -115,6 +133,14 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
+
+    /* Token purge copies the inline payload and reposts it. The short
+     * fast path posts on am_lane, so this protocol has to use that lane. */
+    if (ucp_am_eager_enable_token_failover(&params)) {
+        if (am_lane != UCP_NULL_LANE) {
+            params.super.exclude_map |= ~(ucp_lane_map_t)UCS_BIT(am_lane);
+        }
+    }
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
@@ -247,6 +273,9 @@ static void ucp_am_eager_single_bcopy_probe_common(
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
+
+    /* Token purge copies this descriptor and reposts it on another lane. */
+    ucp_am_eager_enable_token_failover(&params);
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {

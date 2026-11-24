@@ -10,6 +10,7 @@
 
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_iface.h"
+#include "cuda_ipc_vmm_multi.h"
 #include "cuda_ipc.inl"
 
 #include <ucs/datastruct/khash.h>
@@ -177,6 +178,8 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
     ucs_status_t status;
 
     if ((region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) ||
+        (region->key.ph.handle_type ==
+         UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) ||
         (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD)) {
         status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
@@ -196,6 +199,28 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
     return uct_cuda_ipc_close_memhandle_legacy(region);
 }
 
+static void uct_cuda_ipc_cache_lru_add(uct_cuda_ipc_cache_t *cache,
+                                       uct_cuda_ipc_cache_region_t *region)
+{
+    cache->num_regions++;
+    cache->total_size += region->key.b_len;
+    ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+}
+
+static void uct_cuda_ipc_cache_lru_remove(uct_cuda_ipc_cache_t *cache,
+                                          uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_list_del(&region->lru_list);
+
+    ucs_assertv(cache->num_regions > 0, "%s: num_regions=%lu", cache->name,
+                cache->num_regions);
+    ucs_assertv(cache->total_size >= region->key.b_len,
+                "%s: total_size=%zu b_len=%zu", cache->name, cache->total_size,
+                region->key.b_len);
+    cache->num_regions--;
+    cache->total_size -= region->key.b_len;
+}
+
 static void
 uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
                                  uct_cuda_ipc_cache_region_t *region)
@@ -208,17 +233,90 @@ uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
                   (void *)region->key.d_bptr, ucs_status_string(status));
     }
 
-    ucs_list_del(&region->lru_list);
-
-    ucs_assert(cache->num_regions > 0);
-    cache->num_regions--;
-    cache->total_size -= region->key.b_len;
+    uct_cuda_ipc_cache_lru_remove(cache, region);
 }
+
+#if HAVE_CUDA_FABRIC
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_ipc_multi_view_serves(const uct_cuda_ipc_cache_view_t *view,
+                               const uct_cuda_ipc_rkey_t *key)
+{
+    const uct_cuda_ipc_rkey_t *view_key = &view->super.key;
+
+    return (view_key->ph.buffer_id == key->ph.buffer_id) &&
+           (view_key->d_bptr <= key->d_bptr) &&
+           ((key->d_bptr + key->b_len) <=
+            (view_key->d_bptr + view_key->b_len));
+}
+
+static void uct_cuda_ipc_multi_view_collect(ucs_interval_map_node_t *node,
+                                            void *arg)
+{
+    uct_cuda_ipc_cache_view_t *view =
+            ucs_container_of(node, uct_cuda_ipc_cache_view_t, node);
+
+    ucs_list_add_tail((ucs_list_link_t*)arg, &view->super.list);
+}
+
+static void uct_cuda_ipc_multi_view_overlapping(uct_cuda_ipc_cache_t *cache,
+                                                const uct_cuda_ipc_rkey_t *key,
+                                                ucs_list_link_t *list)
+{
+    ucs_list_head_init(list);
+    ucs_interval_map_foreach_overlapping(&cache->views, key->d_bptr,
+                                         key->d_bptr + key->b_len,
+                                         uct_cuda_ipc_multi_view_collect, list);
+}
+
+static uct_cuda_ipc_cache_view_t *
+uct_cuda_ipc_multi_view_find(uct_cuda_ipc_cache_t *cache,
+                             const uct_cuda_ipc_rkey_t *key)
+{
+    ucs_interval_map_node_t *node;
+    uct_cuda_ipc_cache_view_t *view;
+
+    node = ucs_interval_map_find_containing(&cache->views, key->d_bptr,
+                                            key->d_bptr + key->b_len);
+    if (node == NULL) {
+        return NULL;
+    }
+
+    view = ucs_container_of(node, uct_cuda_ipc_cache_view_t, node);
+    return (view->super.key.ph.buffer_id == key->ph.buffer_id) ? view : NULL;
+}
+
+static void uct_cuda_ipc_multi_view_retire(uct_cuda_ipc_cache_t *cache,
+                                           uct_cuda_ipc_cache_view_t *view)
+{
+    uct_cuda_ipc_cache_region_t *region = &view->super;
+
+    if (view->in_map) {
+        ucs_interval_map_remove(&cache->views, &view->node);
+        view->in_map = 0;
+    }
+
+    if (region->refcount == 0) {
+        ucs_trace("%s: destroy multi-chunk view addr:%p size:%lu",
+                  cache->name, (void*)region->key.d_bptr, region->key.b_len);
+        uct_cuda_ipc_cache_lru_remove(cache, region);
+        uct_cuda_ipc_close_memhandle(region);
+        ucs_free(view);
+    }
+}
+#endif
 
 static void
 uct_cuda_ipc_cache_region_destroy(uct_cuda_ipc_cache_t *cache,
                                   uct_cuda_ipc_cache_region_t *region)
 {
+#if HAVE_CUDA_FABRIC
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
+        uct_cuda_ipc_multi_view_retire(
+                cache, ucs_derived_of(region, uct_cuda_ipc_cache_view_t));
+        return;
+    }
+#endif
+
     uct_cuda_ipc_cache_region_remove(cache, region);
 
     ucs_trace("%s: destroy region " UCS_PGT_REGION_FMT " size:%lu",
@@ -260,6 +358,8 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache,
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
+        uct_cuda_ipc_cache_lru_remove(cache, region);
+
         if (close_handles) {
             uct_cuda_ipc_close_memhandle(region);
         }
@@ -267,9 +367,6 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache,
         ucs_free(region);
     }
 
-    ucs_list_head_init(&cache->lru_list);
-    cache->num_regions = 0;
-    cache->total_size  = 0;
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
@@ -300,14 +397,24 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
 }
 
 #if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
-static ucs_status_t
-uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
+static ucs_status_t uct_cuda_ipc_set_memaccess(CUdeviceptr dptr, size_t size,
+                                               CUdevice cu_dev,
+                                               ucs_log_level_t log_level)
+{
+    CUmemAccessDesc access_desc = {};
+
+    uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
+    return UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, size, &access_desc, 1),
+                            log_level);
+}
+
+ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm(size_t length, CUdevice cu_dev,
                                 CUdeviceptr *mapped_addr,
                                 void *shareable_handle,
                                 CUmemAllocationHandleType handle_type,
                                 ucs_log_level_t log_level)
 {
-    CUmemAccessDesc access_desc = {};
     ucs_status_t status;
     CUdeviceptr dptr;
     CUmemGenericAllocationHandle handle;
@@ -320,22 +427,18 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0),
+    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(&dptr, length, 0, 0, 0),
                               log_level);
     if (status != UCS_OK) {
         goto release_handle;
     }
 
-    status = UCT_CUDADRV_FUNC(cuMemMap(dptr, key->b_len, 0, handle, 0),
-                              log_level);
+    status = UCT_CUDADRV_FUNC(cuMemMap(dptr, length, 0, handle, 0), log_level);
     if (status != UCS_OK) {
         goto release_va_range;
     }
 
-    uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
-
-    status = UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, key->b_len, &access_desc, 1),
-                              log_level);
+    status = uct_cuda_ipc_set_memaccess(dptr, length, cu_dev, log_level);
     if (status != UCS_OK) {
         goto unmap_range;
     }
@@ -344,9 +447,9 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     goto release_handle;
 
 unmap_range:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(dptr, key->b_len));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(dptr, length));
 release_va_range:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(dptr, key->b_len));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(dptr, length));
 release_handle:
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
 out:
@@ -450,6 +553,70 @@ err:
     pthread_rwlock_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
     return status;
 }
+
+ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm_multi(const uct_cuda_ipc_rkey_t *key,
+                                      CUdevice cu_dev, CUdeviceptr *mapped_addr,
+                                      ucs_log_level_t log_level)
+{
+    uct_cuda_ipc_vmm_chunk_desc_t *chunks;
+    CUmemGenericAllocationHandle handle;
+    ptrdiff_t chunk_offset;
+    uint16_t i, mapped;
+    ucs_status_t status;
+    CUdeviceptr dptr;
+
+    status = uct_cuda_ipc_vmm_multi_fetch_chunks(key, cu_dev, &chunks,
+                                                 log_level);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0),
+                              log_level);
+    if (status != UCS_OK) {
+        goto out_free_chunks;
+    }
+
+    for (mapped = 0; mapped < key->ph.vmm_multi.num_chunks; mapped++) {
+        status = UCT_CUDADRV_FUNC(cuMemImportFromShareableHandle(
+                                          &handle,
+                                          (void*)&chunks[mapped].fabric_handle,
+                                          CU_MEM_HANDLE_TYPE_FABRIC),
+                                  log_level);
+        if (status != UCS_OK) {
+            goto err_unmap;
+        }
+
+        chunk_offset = chunks[mapped].d_bptr - key->d_bptr;
+        status       = UCT_CUDADRV_FUNC(cuMemMap(dptr + chunk_offset,
+                                                 chunks[mapped].b_len, 0, handle, 0),
+                                        log_level);
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+        if (status != UCS_OK) {
+            goto err_unmap;
+        }
+    }
+
+    status = uct_cuda_ipc_set_memaccess(dptr, key->b_len, cu_dev, log_level);
+    if (status != UCS_OK) {
+        goto err_unmap;
+    }
+
+    *mapped_addr = dptr;
+    goto out_free_chunks;
+
+err_unmap:
+    for (i = 0; i < mapped; i++) {
+        UCT_CUDADRV_FUNC_LOG_WARN(
+                cuMemUnmap(dptr + (chunks[i].d_bptr - key->d_bptr),
+                           chunks[i].b_len));
+    }
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(dptr, key->b_len));
+out_free_chunks:
+    ucs_free(chunks);
+    return status;
+}
 #endif /* HAVE_CUDA_FABRIC */
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
@@ -493,7 +660,7 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_extended_rkey_t *ext_key,
     }
 
     status = uct_cuda_ipc_open_memhandle_vmm(
-            key, cu_dev, mapped_addr, (void*)(uintptr_t)local_fd,
+            key->b_len, cu_dev, mapped_addr, (void*)(uintptr_t)local_fd,
             CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, log_level);
     close(local_fd);
     ucs_trace("posix_fd import from pid=%d: %s", (int)key->pid,
@@ -521,8 +688,9 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
 #if HAVE_CUDA_FABRIC
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM:
         return uct_cuda_ipc_open_memhandle_vmm(
-                key, cu_dev, mapped_addr, (void*)&key->ph.handle.fabric_handle,
-                CU_MEM_HANDLE_TYPE_FABRIC, log_level);
+                key->b_len, cu_dev, mapped_addr,
+                (void*)&key->ph.handle.fabric_handle, CU_MEM_HANDLE_TYPE_FABRIC,
+                log_level);
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
         return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,
                                                    log_level);
@@ -629,6 +797,37 @@ out:
     return UCS_OK;
 }
 
+#if HAVE_CUDA_FABRIC
+/* A view may be wider than the key, and a replaced view is no longer found by
+ * address, so it is released by the reference the mapping holds */
+static void
+uct_cuda_ipc_multi_view_release(uct_cuda_ipc_cache_t *cache,
+                                uct_cuda_ipc_cache_region_t *region,
+                                const void *mapped_addr, int cache_enabled)
+{
+    uct_cuda_ipc_cache_view_t *view;
+
+    ucs_assert(region->key.ph.handle_type ==
+               UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI);
+    view = ucs_derived_of(region, uct_cuda_ipc_cache_view_t);
+
+    pthread_rwlock_wrlock(&cache->lock);
+    ucs_assertv((mapped_addr >= region->mapped_addr) &&
+                (mapped_addr < UCS_PTR_BYTE_OFFSET(region->mapped_addr,
+                                                   region->key.b_len)),
+                "mapped_addr=%p view=%p len=%zu", mapped_addr,
+                region->mapped_addr, region->key.b_len);
+    ucs_assert(region->refcount >= 1);
+    region->refcount--;
+
+    if ((region->refcount == 0) && (!view->in_map || !cache_enabled)) {
+        uct_cuda_ipc_multi_view_retire(cache, view);
+    }
+
+    pthread_rwlock_unlock(&cache->lock);
+}
+#endif
+
 static void
 uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
                                   const void *mapped_addr, int cache_enabled)
@@ -679,21 +878,145 @@ void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_mapping_t *mapping,
 
     ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
     cache = uct_cuda_ipc_remote_cache_get(key);
-    if (cache != NULL) {
-        uct_cuda_ipc_cache_destroy_region(cache, mapping->d_bptr,
-                                          mapping->mapped_addr, cache_enabled);
-    } else {
+    if (cache == NULL) {
         ucs_debug("no remote cache found for key: %d:%u:%d", mapping->pid,
                   mapping->pid_ns, cu_dev);
+        goto out;
     }
 
+#if HAVE_CUDA_FABRIC
+    if (mapping->cache_region != NULL) {
+        uct_cuda_ipc_multi_view_release(cache, mapping->cache_region,
+                                        mapping->mapped_addr, cache_enabled);
+        goto out;
+    }
+#endif
+
+    uct_cuda_ipc_cache_destroy_region(cache, mapping->d_bptr,
+                                      mapping->mapped_addr, cache_enabled);
+
+out:
     ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
 }
+
+#if HAVE_CUDA_FABRIC
+void uct_cuda_ipc_unmap_unused_view(const uct_cuda_ipc_extended_rkey_t *ext_key,
+                                    CUdevice cu_dev)
+{
+    const uct_cuda_ipc_rkey_t *key               = &ext_key->super;
+    const uct_cuda_ipc_cache_hash_key_t hash_key = {key->pid, ext_key->pid_ns,
+                                                    cu_dev};
+    uct_cuda_ipc_cache_view_t *view, *tmp;
+    ucs_list_link_t view_list;
+    uct_cuda_ipc_cache_t *cache;
+
+    ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
+    cache = uct_cuda_ipc_remote_cache_get(hash_key);
+    if (cache == NULL) {
+        goto out;
+    }
+
+    pthread_rwlock_wrlock(&cache->lock);
+    uct_cuda_ipc_multi_view_overlapping(cache, key, &view_list);
+    ucs_list_for_each_safe(view, tmp, &view_list, super.list) {
+        if (uct_cuda_ipc_multi_view_serves(view, key) &&
+            (view->super.refcount == 0)) {
+            uct_cuda_ipc_multi_view_retire(cache, view);
+        }
+    }
+    pthread_rwlock_unlock(&cache->lock);
+
+out:
+    ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
+}
+
+static ucs_status_t
+uct_cuda_ipc_multi_view_get(uct_cuda_ipc_cache_t *cache,
+                            const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
+                            void **mapped_addr_p,
+                            uct_cuda_ipc_cache_region_t **region_p,
+                            ucs_log_level_t log_level)
+{
+    uct_cuda_ipc_cache_view_t *view, *overlap, *tmp;
+    uct_cuda_ipc_cache_region_t *region;
+    ucs_list_link_t view_list;
+    CUdeviceptr mapped_addr;
+    ucs_status_t status;
+
+    view = uct_cuda_ipc_multi_view_find(cache, key);
+    if (view != NULL) {
+        region = &view->super;
+        ucs_trace("%s: multi-chunk view hit addr:%p size:%lu in view "
+                  "%p..%p", cache->name, (void*)key->d_bptr, key->b_len,
+                  (void*)region->key.d_bptr,
+                  (void*)(region->key.d_bptr + region->key.b_len));
+
+        ucs_list_del(&region->lru_list);
+        ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+
+        ucs_assert(region->refcount < UINT64_MAX);
+        region->refcount++;
+        *mapped_addr_p = UCS_PTR_BYTE_OFFSET(region->mapped_addr,
+                                             key->d_bptr - region->key.d_bptr);
+        *region_p      = region;
+        return UCS_OK;
+    }
+
+    view = ucs_malloc(sizeof(*view), "uct_cuda_ipc_cache_view");
+    if (view == NULL) {
+        ucs_warn("failed to allocate uct_cuda_ipc_cache view");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = uct_cuda_ipc_open_memhandle_vmm_multi(key, cu_dev, &mapped_addr,
+                                                   log_level);
+    if (status != UCS_OK) {
+        ucs_debug("%s: failed to open multi-chunk key addr:%p len:%lu",
+                  cache->name, (void*)key->d_bptr, key->b_len);
+        ucs_free(view);
+        return status;
+    }
+
+    region              = &view->super;
+    region->super.start = key->d_bptr;
+    region->super.end   = key->d_bptr + key->b_len;
+    region->key         = *key;
+    region->mapped_addr = (void*)mapped_addr;
+    region->refcount    = 1;
+    region->cu_dev      = cu_dev;
+
+    /* Retire views of other metadata buffers, and views contained in the new
+     * view */
+    uct_cuda_ipc_multi_view_overlapping(cache, key, &view_list);
+    ucs_list_for_each_safe(overlap, tmp, &view_list, super.list) {
+        if ((overlap->super.key.ph.buffer_id != key->ph.buffer_id) ||
+            uct_cuda_ipc_multi_view_serves(view, &overlap->super.key)) {
+            uct_cuda_ipc_multi_view_retire(cache, overlap);
+        }
+    }
+
+    ucs_interval_map_insert(&cache->views, &view->node, key->d_bptr,
+                            key->d_bptr + key->b_len);
+    view->in_map = 1;
+    uct_cuda_ipc_cache_lru_add(cache, region);
+
+    uct_cuda_ipc_cache_evict_lru(cache);
+
+    ucs_trace("%s: new multi-chunk view addr:%p size:%lu chunks:%u",
+              cache->name, (void*)key->d_bptr, key->b_len,
+              key->ph.vmm_multi.num_chunks);
+
+    *mapped_addr_p = region->mapped_addr;
+    *region_p      = region;
+    return UCS_OK;
+}
+#endif
 
 static ucs_status_t
 uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                               uct_cuda_ipc_extended_rkey_t *ext_key,
                               CUdevice cu_dev, void **mapped_addr,
+                              uct_cuda_ipc_cache_region_t **region_p,
                               ucs_log_level_t log_level)
 {
     uct_cuda_ipc_rkey_t *key = &ext_key->super;
@@ -703,6 +1026,15 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
     int ret;
 
     pthread_rwlock_wrlock(&cache->lock);
+#if HAVE_CUDA_FABRIC
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
+        status = uct_cuda_ipc_multi_view_get(cache, key, cu_dev, mapped_addr,
+                                             region_p, log_level);
+        pthread_rwlock_unlock(&cache->lock);
+        return status;
+    }
+#endif
+
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->d_bptr);
     if (ucs_likely(pgt_region != NULL)) {
@@ -809,9 +1141,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         goto err;
     }
 
-    cache->num_regions++;
-    cache->total_size += key->b_len;
-    ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+    uct_cuda_ipc_cache_lru_add(cache, region);
 
     uct_cuda_ipc_cache_evict_lru(cache);
 
@@ -829,9 +1159,10 @@ err:
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
-                 (ext_key, cu_dev, mapped_addr, log_level),
+                 (ext_key, cu_dev, mapped_addr, region_p, log_level),
                  uct_cuda_ipc_extended_rkey_t *ext_key, CUdevice cu_dev,
-                 void **mapped_addr, ucs_log_level_t log_level)
+                 void **mapped_addr, uct_cuda_ipc_cache_region_t **region_p,
+                 ucs_log_level_t log_level)
 {
     uct_cuda_ipc_rkey_t *key                     = &ext_key->super;
     const uct_cuda_ipc_cache_hash_key_t hash_key = {key->pid, ext_key->pid_ns,
@@ -839,6 +1170,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
     CUuuid uuid;
+
+    *region_p = NULL;
 
     if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns)) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
@@ -861,7 +1194,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     status = uct_cuda_ipc_remote_cache_put(hash_key, &cache);
     if (status == UCS_OK) {
         status = uct_cuda_ipc_cache_put_region(cache, ext_key, cu_dev,
-                                               mapped_addr, log_level);
+                                               mapped_addr, region_p,
+                                               log_level);
     }
 
     ucs_rw_spinlock_write_unlock(&uct_cuda_ipc_remote_cache.lock);
@@ -895,6 +1229,10 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
         goto err_destroy_rwlock;
     }
 
+#if HAVE_CUDA_FABRIC
+    ucs_interval_map_init(&cache_desc->views);
+#endif
+
     cache_desc->name = strdup(name);
     if (cache_desc->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -917,7 +1255,27 @@ err:
 
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache, int close_handles)
 {
+#if HAVE_CUDA_FABRIC
+    uct_cuda_ipc_cache_region_t *region, *tmp;
+#endif
+
     uct_cuda_ipc_cache_purge(cache, close_handles);
+
+#if HAVE_CUDA_FABRIC
+    /* Only multi-chunk views are left on the LRU list */
+    ucs_list_for_each_safe(region, tmp, &cache->lru_list, lru_list) {
+        ucs_assertv(region->key.ph.handle_type ==
+                            UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+                    "%s: handle_type=%u", cache->name,
+                    region->key.ph.handle_type);
+        if (close_handles) {
+            uct_cuda_ipc_close_memhandle(region);
+        }
+
+        ucs_free(ucs_derived_of(region, uct_cuda_ipc_cache_view_t));
+    }
+#endif
+
     ucs_pgtable_cleanup(&cache->pgtable);
     pthread_rwlock_destroy(&cache->lock);
     free(cache->name);

@@ -738,7 +738,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    status = ucs_memtype_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
         if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
             ucs_trace_req("address %p length %zu: not found in memtype cache, "
@@ -801,6 +801,16 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
+/* AUTO is rewritten to SW when indirect atomics are enabled. */
+static UCS_F_ALWAYS_INLINE int
+ucp_context_is_token_failover(ucp_context_h context)
+{
+    ucp_failover_mode_t failover_mode = context->config.ext.failover_mode;
+
+    return (failover_mode == UCP_FAILOVER_MODE_TOKEN) ||
+           (failover_mode == UCP_FAILOVER_MODE_AUTO);
 }
 
 static UCS_F_ALWAYS_INLINE int
