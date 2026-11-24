@@ -10,6 +10,8 @@ timeout_minutes: 240
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 16200
   limits: "{memory: 16Gi, cpu: 8000m}"
   # The request is below the limit so that two PR runs fit the namespace quota
   requests: "{memory: 8Gi, cpu: 2000m}"
