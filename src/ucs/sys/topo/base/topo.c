@@ -455,13 +455,15 @@ ucs_topo_get_sysfs_pci_id(const char *dev_name, const char *sysfs_path)
 static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
                                             const char *dev_name,
                                             ucs_numa_node_t *numa_node_p,
-                                            ucs_sys_pci_id_t *pci_id_p)
+                                            ucs_sys_pci_id_t *pci_id_p,
+                                            char **sysfs_path_p)
 {
     char *path;
     ucs_status_t status;
 
-    *numa_node_p = UCS_NUMA_NODE_UNDEFINED;
-    *pci_id_p    = UCS_SYS_PCI_ID_UNDEFINED;
+    *numa_node_p  = UCS_NUMA_NODE_UNDEFINED;
+    *pci_id_p     = UCS_SYS_PCI_ID_UNDEFINED;
+    *sysfs_path_p = NULL;
 
     status = ucs_string_alloc_path_buffer(&path, "sysfs_path");
     if (status != UCS_OK) {
@@ -473,8 +475,9 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
         goto out_free_path;
     }
 
-    *numa_node_p = ucs_numa_node_of_device(path);
-    *pci_id_p    = ucs_topo_get_sysfs_pci_id(dev_name, path);
+    *numa_node_p  = ucs_numa_node_of_device(path);
+    *pci_id_p     = ucs_topo_get_sysfs_pci_id(dev_name, path);
+    *sysfs_path_p = ucs_strdup(path, "sys_dev_sysfs_path");
 
     ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
               dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
@@ -532,6 +535,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
     int kh_put_status;
     khiter_t hash_it;
     ucs_status_t status;
+    char *sysfs_path;
     char *name;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
@@ -560,7 +564,8 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
 
-        ucs_topo_read_device_sysfs_info(bus_id, name, &numa_node, &pci_id);
+        ucs_topo_read_device_sysfs_info(bus_id, name, &numa_node, &pci_id,
+                                        &sysfs_path);
 
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
@@ -568,6 +573,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->bus_id        = *bus_id;
         device->name          = name;
         device->name_priority = 0;
+        device->sysfs_path    = sysfs_path;
         device->numa_node     = numa_node;
         device->pci_id        = pci_id;
         device->user_value    = user_value;
@@ -651,8 +657,8 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 }
 
 static ucs_status_t
-ucs_topo_sys_dev_to_sysfs_path_nolock(ucs_sys_device_t sys_dev, char *path,
-                                      size_t max)
+ucs_topo_sys_dev_get_sysfs_path_nolock(ucs_sys_device_t sys_dev,
+                                       const char **path_p)
 {
     ucs_topo_sys_device_info_t *device;
     ucs_status_t status;
@@ -662,12 +668,13 @@ ucs_topo_sys_dev_to_sysfs_path_nolock(ucs_sys_device_t sys_dev, char *path,
         return status;
     }
 
-    status = ucs_topo_bus_id_to_sysfs_path(&device->bus_id, path, max);
-    if (status != UCS_OK) {
+    if (device->sysfs_path == NULL) {
         ucs_debug("failed to get sysfs path for %s", device->name);
+        return UCS_ERR_NO_ELEM;
     }
 
-    return status;
+    *path_p = device->sysfs_path;
+    return UCS_OK;
 }
 
 static int ucs_topo_is_sys_root(const char *path)
@@ -717,58 +724,43 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
 /**
  * Get the common sysfs path between two system devices.
  *
- * The function allocates memory for the individual device paths and the common
- * parent path. The caller is responsible for freeing the allocated memory for
- * each of the returned path pointers.
+ * The function allocates memory for the common parent path, and the caller is
+ * responsible for freeing it. The individual device paths point to the paths
+ * stored in the device entries, and must not be freed.
  *
  * @param [in]  sys_dev1    First system device
  * @param [in]  sys_dev2    Second system device
- * @param [out] path1       Pointer to the allocated sysfs path for sys_dev1
- * @param [out] path2       Pointer to the allocated sysfs path for sys_dev2
+ * @param [out] path1       Pointer to the sysfs path of sys_dev1
+ * @param [out] path2       Pointer to the sysfs path of sys_dev2
  * @param [out] common_path Pointer to the allocated common parent path
  *
  * @return UCS_OK on success, or error status on failure
  */
 static ucs_status_t ucs_topo_get_common_path_nolock(ucs_sys_device_t sys_dev1,
                                                     ucs_sys_device_t sys_dev2,
-                                                    char **path1, char **path2,
+                                                    const char **path1,
+                                                    const char **path2,
                                                     char **common_path)
 {
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(path1, "path1");
+    status = ucs_topo_sys_dev_get_sysfs_path_nolock(sys_dev1, path1);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path_nolock(sys_dev1, *path1, PATH_MAX);
+    status = ucs_topo_sys_dev_get_sysfs_path_nolock(sys_dev2, path2);
     if (status != UCS_OK) {
-        goto err_free_path1;
-    }
-
-    status = ucs_string_alloc_path_buffer(path2, "path2");
-    if (status != UCS_OK) {
-        goto err_free_path1;
-    }
-
-    status = ucs_topo_sys_dev_to_sysfs_path_nolock(sys_dev2, *path2, PATH_MAX);
-    if (status != UCS_OK) {
-        goto err_free_path2;
+        return status;
     }
 
     status = ucs_string_alloc_path_buffer(common_path, "common_path");
     if (status != UCS_OK) {
-        goto err_free_path2;
+        return status;
     }
 
     ucs_path_get_common_parent(*path1, *path2, *common_path);
     return UCS_OK;
-
-err_free_path2:
-    ucs_free(*path2);
-err_free_path1:
-    ucs_free(*path1);
-    return status;
 }
 
 static void ucs_topo_update_distance_sysfs(ucs_sys_device_t sys_dev1,
@@ -776,8 +768,9 @@ static void ucs_topo_update_distance_sysfs(ucs_sys_device_t sys_dev1,
                                            ucs_sys_dev_distance_t *distance)
 {
     ucs_sys_dev_distance_t new_distance = ucs_topo_default_distance;
+    const char *path1, *path2;
     ucs_status_t status;
-    char *path1, *path2, *common_path;
+    char *common_path;
 
     if (sys_dev1 == sys_dev2) {
         goto out;
@@ -806,8 +799,6 @@ static void ucs_topo_update_distance_sysfs(ucs_sys_device_t sys_dev1,
     }
 
     ucs_free(common_path);
-    ucs_free(path2);
-    ucs_free(path1);
 out:
     if (new_distance.bandwidth > distance->bandwidth) {
         *distance = new_distance;
@@ -1359,8 +1350,9 @@ out_unlock:
 static int ucs_topo_is_pci_bridge_nolock(ucs_sys_device_t sys_dev1,
                                          ucs_sys_device_t sys_dev2)
 {
+    const char *path1, *path2;
     ucs_status_t status;
-    char *path1, *path2, *common_path;
+    char *common_path;
     int result;
 
     ucs_assert(sys_dev1 != UCS_SYS_DEVICE_ID_UNKNOWN);
@@ -1381,8 +1373,6 @@ static int ucs_topo_is_pci_bridge_nolock(ucs_sys_device_t sys_dev1,
              !ucs_topo_is_pci_root(common_path);
 
     ucs_free(common_path);
-    ucs_free(path1);
-    ucs_free(path2);
     return result;
 }
 
@@ -1392,7 +1382,8 @@ ucs_topo_get_common_pci_bridge_depth_nolock(ucs_sys_device_t sys_dev1,
 {
     unsigned depth = 0;
     int count      = -1;
-    char *path1, *path2, *common_path;
+    const char *path1, *path2;
+    char *common_path;
 
     if (ucs_topo_get_common_path_nolock(sys_dev1, sys_dev2, &path1, &path2,
                                         &common_path) != UCS_OK) {
@@ -1411,8 +1402,6 @@ ucs_topo_get_common_pci_bridge_depth_nolock(ucs_sys_device_t sys_dev1,
               ucs_topo_global_ctx.devices[sys_dev2].name, depth, common_path);
 
     ucs_free(common_path);
-    ucs_free(path1);
-    ucs_free(path2);
     return depth;
 }
 
@@ -1561,6 +1550,7 @@ static void ucs_topo_release_devices()
 
     while (ucs_topo_global_ctx.num_devices-- > 0) {
         device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
+        ucs_free(device->sysfs_path);
         ucs_free(device->name);
     }
 }
