@@ -1664,7 +1664,9 @@ protected:
         m_ep    = sender().ep(0, INJECTED_EP_INDEX);
         m_lbuf.reset(new mapped_buffer(size, sender()));
         m_rbuf.reset(new mapped_buffer(size, receiver()));
-        m_rkey = m_rbuf->rkey(sender());
+        /* Assign from an lvalue: ucs::handle has no move assignment */
+        ucs::handle<ucp_rkey_h> rkey = m_rbuf->rkey(sender());
+        m_rkey = rkey;
         ((op_id == UCP_OP_ID_PUT) ? m_lbuf : m_rbuf)->pattern_fill(m_seed);
         ((op_id == UCP_OP_ID_PUT) ? m_rbuf : m_lbuf)->memset(0);
 
