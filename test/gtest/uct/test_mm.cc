@@ -188,6 +188,28 @@ public:
         test_rkey(ptr, memh, size);
     }
 
+    void mem_alloc(uct_allocated_memory_t *mem)
+    {
+        size_t size               = ucs_min(100000u, m_e1->md_attr().max_alloc);
+        uct_md_h md_ref           = m_e1->md();
+        uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+        uct_mem_alloc_params_t params;
+
+        params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                            UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        params.name       = "test_mm";
+        params.mem_type   = UCS_MEMORY_TYPE_HOST;
+        params.address    = NULL;
+        params.mds.mds    = &md_ref;
+        params.mds.count  = 1;
+
+        ASSERT_UCS_OK(uct_mem_alloc(size, &method, 1, &params, mem));
+    }
+
 protected:
     entity *m_e1, *m_e2;
 };
@@ -221,34 +243,27 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, open_for_posix,
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
                      !check_md_caps(UCT_MD_FLAG_ALLOC)) {
-
-    size_t size               = ucs_min(100000u, m_e1->md_attr().max_alloc);
-    void *address             = NULL;
-    uct_md_h md_ref           = m_e1->md();
-    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
-    ucs_status_t status;
-    uct_mem_alloc_params_t params;
     uct_allocated_memory_t mem;
 
-    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
-                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS    |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE   |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MDS        |
-                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
-    params.name            = "test_mm";
-    params.mem_type        = UCS_MEMORY_TYPE_HOST;
-    params.address         = address;
-    params.mds.mds         = &md_ref;
-    params.mds.count       = 1;
-
-    status = uct_mem_alloc(size, &method, 1, &params, &mem);
-    ASSERT_UCS_OK(status);
-
+    mem_alloc(&mem);
     test_memh(mem.address, mem.memh, mem.length);
+    ASSERT_UCS_OK(uct_mem_free(&mem));
+}
 
-    status = uct_mem_free(&mem);
-    ASSERT_UCS_OK(status);
+UCS_TEST_SKIP_COND_P(test_uct_mm, rkey_unpack_freed_segment,
+                     !check_md_caps(UCT_MD_FLAG_ALLOC)) {
+    std::vector<uint8_t> rkey_buffer(m_e1->md_attr().rkey_packed_size);
+    uct_allocated_memory_t mem;
+    uct_rkey_bundle_t rkey_ob;
+
+    mem_alloc(&mem);
+    ASSERT_UCS_OK(uct_md_mkey_pack(m_e1->md(), mem.memh, &rkey_buffer[0]));
+    ASSERT_UCS_OK(uct_mem_free(&mem));
+
+    /* The caller can still use the other memory domains of the remote key */
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              uct_rkey_unpack(GetParam()->component, &rkey_buffer[0],
+                              &rkey_ob));
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
