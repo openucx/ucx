@@ -10,6 +10,8 @@ timeout_minutes: 60
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 5400
   # A port takes one MAD RTE registration, so server and client get a CX8 VF each.
   annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network,cx8-ib-network" }]
   limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 2}"
