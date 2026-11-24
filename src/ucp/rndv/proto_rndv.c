@@ -221,6 +221,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
                                                           ep_cfg_index);
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
     ucp_md_map_t remote_md_map, unreachable_md_map;
+    const ucp_rkey_config_key_t *peer_key;
     ucp_proto_init_params_t remote_init_params;
     ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
@@ -230,23 +231,29 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 
     /* Construct remote key for remote protocol lookup according to the local
      * buffer properties (since remote side is expected to access the local
-     * buffer). The peer is expected to fail unpacking the same MDs that we
-     * failed to unpack from its remote key, so mark them as unreachable.
+     * buffer). If we failed to unpack MDs from the peer's remote key because
+     * the peer device is not reachable, the peer is expected to fail unpacking
+     * them from our remote key as well, so mark them as unreachable. If only
+     * the peer's buffer was not accessible (e.g. it has no IPC handle), local
+     * buffers which keep their full MD map (UCP_PROTO_COMMON_KEEP_MD_MAP, e.g.
+     * the rndv fragments) may still be accessible by the peer.
      */
     remote_md_map = ucp_proto_rndv_md_map_to_remote(params, md_map);
-    if (params->super.super.rkey_config_key != NULL) {
-        unreachable_md_map =
-                remote_md_map &
-                params->super.super.rkey_config_key->unreachable_md_map;
+    peer_key      = params->super.super.rkey_config_key;
+    if ((peer_key != NULL) &&
+        (peer_key->flags & UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE)) {
+        unreachable_md_map = remote_md_map & peer_key->unreachable_md_map;
     } else {
         unreachable_md_map = 0;
     }
 
-    rkey_config_key.md_map       = remote_md_map & ~unreachable_md_map;
-    rkey_config_key.ep_cfg_index = ep_cfg_index;
-    rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
-    rkey_config_key.mem_type     = params->super.reg_mem_info.type;
-    rkey_config_key.flags        = 0;
+    rkey_config_key.md_map             = remote_md_map & ~unreachable_md_map;
+    rkey_config_key.ep_cfg_index       = ep_cfg_index;
+    rkey_config_key.sys_dev            = params->super.reg_mem_info.sys_dev;
+    rkey_config_key.mem_type           = params->super.reg_mem_info.type;
+    rkey_config_key.flags              = (unreachable_md_map != 0) ?
+                                         UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE :
+                                         0;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
     remote_init_params                 = params->super.super;

@@ -2296,10 +2296,11 @@ static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
 {
     ucs_string_buffer_appendf(
             log_strb,
-            "md_map %" PRIx64
-            " cfg_index %d sys_dev %d mem_type %s unrch_md_map %" PRIx64 "\n",
+            "md_map %" PRIx64 " cfg_index %d sys_dev %d mem_type %s "
+            "unrch_md_map %" PRIx64 " flags 0x%x\n",
             key->md_map, key->ep_cfg_index, key->sys_dev,
-            ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
+            ucs_memory_type_names[key->mem_type], key->unreachable_md_map,
+            key->flags);
 }
 
 ucs_status_t
