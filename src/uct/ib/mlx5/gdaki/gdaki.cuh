@@ -421,7 +421,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
 
         uct_rc_mlx5_gda_wqe_prepare_nop(
                 ep, uct_rc_mlx5_gda_get_wqe_ptr(ep, cid, (uint16_t)wqe_base),
-                (uint16_t)wqe_base, DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE,
+                (uint16_t)wqe_base,
+                DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE |
+                        DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_FENCE,
                 cid);
     }
 
