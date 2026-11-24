@@ -13,6 +13,11 @@ dist_examples_DATA =   \
 	ucp_client_server.c \
 	ucp_util.h
 
+EXTRA_DIST = \
+	cmake/CMakeLists.txt \
+	cmake/test_ucp.c \
+	cmake/test_uct.c
+
 if HAVE_CUDA
 EXAMPLE_CUDA_LD_FLAGS = $(CUDA_LDFLAGS)
 EXAMPLE_CUDA_LIBS = $(CUDART_LIBS)

@@ -51,7 +51,8 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
 - most fixtures support memtype skipping via
   `check_skip_test()` patterns; prefer `UCS_TEST_SKIP_R(...)` over silent
   short-circuits so the runner reports skipped cases.
-- New tests must be listed in the relevant `Makefile.am` source list.
+- New tests must be listed in the relevant `Makefile.am` source list,
+  and new headers in `noinst_HEADERS`, so that `make dist` ships them.
   The Makefile already adds `lsan.supp`/`valgrind.supp` and ASAN env
   setup — don't redefine those locally.
 - The default env (`UCX_HANDLE_ERRORS=freeze`) freezes a process on
