@@ -40,6 +40,14 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
                                        params.put.length, channel_id, flags,
                                        req_ptr);
         break;
+    case TEST_UCP_DEVICE_KERNEL_GET:
+        status = ucp_device_get<level>(params.local_mem_list,
+                                       params.put.mem_list_index, 0,
+                                       params.remote_mem_list,
+                                       params.put.remote_mem_list_index, 0,
+                                       params.put.length, channel_id, flags,
+                                       req_ptr);
+        break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_INC:
         status = ucp_device_counter_inc<level>(
                 params.counter_inc.inc_value,

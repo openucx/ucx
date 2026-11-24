@@ -300,6 +300,28 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
 }
 
 template<ucs_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_get(
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *dst_uct_elem,
+        const uct_device_mem_elem_t *tl_mem_elem, void *address,
+        uint64_t remote_address, size_t length, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+    auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
+            tl_mem_elem);
+    auto local_mem_elem =
+            reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
+                    dst_uct_elem);
+    auto cid = channel_id & ep->channel_mask;
+
+    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
+                                            local_mem_elem->lkey,
+                                            remote_address, mem_elem->rkey,
+                                            length, cid, flags, comp,
+                                            MLX5_OPCODE_RDMA_READ, false, 0);
+}
+
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, unsigned channel_id,
@@ -365,6 +387,19 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_check_cqe(uct_rc_gdaki_dev_ep_t *ep,
     return UCS_ERR_IO_ERROR;
 }
 
+/*
+ * Order the calling thread's later loads of RDMA read data after the CQE that
+ * completed it. Every thread that consumes the data must call it.
+ */
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_completion_acquire(ucs_status_t status)
+{
+    if (status == UCS_OK) {
+        doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_SYS>();
+    }
+
+    return status;
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
         uct_device_ep_h tl_ep, uct_device_completion_t *tl_comp)
@@ -372,7 +407,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
     auto ep   = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto comp = &tl_comp->rc_gda;
 
-    return uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx);
+    return uct_rc_mlx5_gda_completion_acquire(
+            uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx));
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
@@ -414,8 +450,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
         } while (status == UCS_INPROGRESS);
     }
 
-    return static_cast<ucs_status_t>(
+    status = static_cast<ucs_status_t>(
             uct_dev_bcast<level>(static_cast<int>(status), lane_id));
+    return uct_rc_mlx5_gda_completion_acquire(status);
 }
 
 #endif /* UCT_GDAKI_CUH_H */

@@ -148,7 +148,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
         const ucp_device_local_mem_list_h src_mem_list_h,
         unsigned src_mem_list_index,
         const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, const void *&address,
+        unsigned dst_mem_list_index, void *&address,
         uint64_t &remote_address, unsigned lane, ucp_device_request_t *req,
         uct_device_ep_t *&device_ep, const uct_device_mem_elem_t *&src_uct_elem,
         const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
@@ -223,7 +223,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
 {
     unsigned uct_channel_id;
     unsigned lane;
-    const void *address;
+    void *address;
     const uct_device_mem_elem_t *uct_elem;
     const uct_device_mem_elem_t *src_uct_elem;
     uint64_t remote_address;
@@ -245,6 +245,85 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                                     src_uct_elem, uct_elem,
                                     UCS_PTR_BYTE_OFFSET(address, src_offset),
                                     remote_address + dst_offset, length,
+                                    uct_channel_id, flags, comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Posts one memory get operation.
+ *
+ * This device routine posts one get operation using descriptor list handles,
+ * reading remote memory into local memory. The @a dst_mem_list_index and
+ * @a src_mem_list_index are used to point at the respective mem_list entry to
+ * be used for the memory transfer. The @a dst_offset and @a src_offset
+ * parameters specify byte offsets within the selected memory list entry. The
+ * @a length, @a dst_offset and @a src_offset parameters must be valid for the
+ * used @a mem_list entry.
+ *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_device_progress_req. The data is available in the
+ * local memory only after the request completes, or after a successful
+ * @ref ucp_device_flush on the same channel.
+ * The routine returns only after the message has been posted or an error has
+ * occurred.
+ *
+ * This routine can be called repeatedly with the same handles and different
+ * offsets and length. The flags parameter can be used to modify the behavior
+ * of the routine with bit from @ref ucp_device_flags_t.
+ *
+ * @tparam      level              Level of cooperation of the transfer.
+ * @param [in]  dst_mem_list_h     Local memory descriptor list handle to use.
+ * @param [in]  dst_mem_list_index Index in descriptor list pointing to the
+ *                                 local memory.
+ * @param [in]  dst_offset         Local offset to receive data to.
+ * @param [in]  src_mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  src_mem_list_index Index in descriptor list pointing to the
+ *                                 remote memory.
+ * @param [in]  src_offset         Remote offset to read data from.
+ * @param [in]  length             Length in bytes of the data to read.
+ * @param [in]  channel_id         Channel ID to use for the transfer.
+ * @param [in]  flags              Flags usable to modify the function behavior.
+ * @param [out] req                Request populated by the call.
+ *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion.
+ * @return UCS_OK             - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t
+ucp_device_get(const ucp_device_local_mem_list_h dst_mem_list_h,
+               unsigned dst_mem_list_index, size_t dst_offset,
+               const ucp_device_remote_mem_list_h src_mem_list_h,
+               unsigned src_mem_list_index, size_t src_offset, size_t length,
+               unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+{
+    unsigned uct_channel_id;
+    unsigned lane;
+    void *address;
+    const uct_device_mem_elem_t *uct_elem;
+    const uct_device_mem_elem_t *dst_uct_elem;
+    uint64_t remote_address;
+    uct_device_completion_t *comp;
+    uct_device_ep_t *device_ep;
+    ucs_status_t status;
+
+    UCP_DEVICE_GET_LANE(src_mem_list_h, channel_id, lane, uct_channel_id);
+
+    status = ucp_device_prepare_send(dst_mem_list_h, dst_mem_list_index,
+                                     src_mem_list_h, src_mem_list_index,
+                                     address, remote_address, lane, req,
+                                     device_ep, dst_uct_elem, uct_elem, comp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_get, device_ep, req,
+                                    dst_uct_elem, uct_elem,
+                                    UCS_PTR_BYTE_OFFSET(address, dst_offset),
+                                    remote_address + src_offset, length,
                                     uct_channel_id, flags, comp);
 }
 

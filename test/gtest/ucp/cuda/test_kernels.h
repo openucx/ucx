@@ -12,6 +12,7 @@
 
 typedef enum {
     TEST_UCP_DEVICE_KERNEL_PUT,
+    TEST_UCP_DEVICE_KERNEL_GET,
     TEST_UCP_DEVICE_KERNEL_COUNTER_INC,
     TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE,
     TEST_UCP_DEVICE_KERNEL_COUNTER_READ
@@ -30,6 +31,7 @@ typedef struct {
     ucp_device_local_mem_list_h  local_mem_list;
     ucp_device_remote_mem_list_h remote_mem_list;
     union {
+        /* Used by both put and get operations */
         struct {
             unsigned   mem_list_index;
             unsigned   remote_mem_list_index;
