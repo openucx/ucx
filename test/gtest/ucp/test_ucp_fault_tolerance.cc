@@ -108,6 +108,7 @@ protected:
     static constexpr size_t SMALL_MSG_SIZE  = 1;
     static constexpr size_t MEDIUM_MSG_SIZE = UCS_KBYTE;
     static constexpr size_t LARGE_MSG_SIZE  = 100 * UCS_MBYTE;
+    static constexpr size_t RMA_IOV_COUNT   = 8;
 
     void init() override {
         if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
@@ -834,11 +835,48 @@ protected:
         return UCS_OK;
     }
 
+    /* Datatype of the local buffer of do_put_and_wait() and do_get_and_wait() */
+    virtual bool rma_iov() const {
+        return false;
+    }
+
+    /* The local buffer of an RMA operation: contiguous, or with rma_iov() split
+     * into RMA_IOV_COUNT equal elements (not the random lengths of
+     * ucp::data_type_desc_t: GET zero-copy of very short elements is a
+     * separate issue) */
+    void rma_local_buffer(void *buffer, size_t size, std::vector<ucp_dt_iov_t> &iov,
+                          void *&ptr, size_t &count, ucp_request_param_t &param) {
+        param.op_attr_mask = 0;
+        if (!rma_iov()) {
+            ptr   = buffer;
+            count = size;
+            return;
+        }
+
+        const size_t elem = size / RMA_IOV_COUNT;
+        iov.resize(RMA_IOV_COUNT);
+        for (size_t i = 0; i < RMA_IOV_COUNT; ++i) {
+            iov[i].buffer = UCS_PTR_BYTE_OFFSET(buffer, i * elem);
+            iov[i].length = (i == RMA_IOV_COUNT - 1) ? size - i * elem : elem;
+        }
+
+        ptr                = iov.data();
+        count              = iov.size();
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = ucp_dt_make_iov();
+    }
+
     ucs_status_t do_put_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
                                  ucp_rkey_h rkey, size_t size, bool flush) {
+        std::vector<ucp_dt_iov_t> iov;
+        ucp_request_param_t param;
+        size_t count;
+        void *ptr;
+
+        rma_local_buffer(lbuf.ptr(), size, iov, ptr, count, param);
         rbuf.memset(0);
-        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()),
-                                                        rkey, &m_req_empty_param);
+        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, ptr, count, uintptr_t(rbuf.ptr()),
+                                                        rkey, &param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &m_req_empty_param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
         if (status == UCS_OK) {
@@ -856,11 +894,15 @@ protected:
 
     ucs_status_t do_get_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
                                  ucp_rkey_h rkey, size_t size, bool flush) {
-        ucp_request_param_t param = {};
+        std::vector<ucp_dt_iov_t> iov;
+        ucp_request_param_t param;
+        size_t count;
+        void *ptr;
 
+        rma_local_buffer(lbuf.ptr(), size, iov, ptr, count, param);
         lbuf.memset(0);
-        ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
-        ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &param) : NULL;
+        ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, ptr, count, uintptr_t(rbuf.ptr()), rkey, &param);
+        ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &m_req_empty_param) : NULL;
         ucs_status_t status               = request_wait(status_ptr);
         EXPECT_EQ(UCS_OK, status) << "get operation returned status: " << ucs_status_string(status);
         if (status == UCS_OK) {
@@ -1408,8 +1450,8 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
 
-/* A zero-copy request with an IOV datatype restarts when one of its fragments
- * completes with an error. */
+/* RMA with an IOV datatype restarts its zero-copy request after a lane
+ * failure */
 class test_ucp_fault_tolerance_iov : public test_ucp_fault_tolerance {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -1417,70 +1459,19 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT, "put");
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET, "get");
     }
+
+protected:
+    bool rma_iov() const override
+    {
+        return true;
+    }
 };
 
-UCS_TEST_P(test_ucp_fault_tolerance_iov, zcopy_restart) {
-    /* At least one zero-copy fragment per element */
-    const size_t iov_count = 8;
-    const size_t size      = iov_count * UCS_MBYTE;
-    const unsigned op_mask = get_variant_value();
-    const bool put         = op_mask & TEST_OP_PUT;
-    ucp_ep_h ep            = sender().ep(0, INJECTED_EP_INDEX);
-    ucp_dt_iov_t iov[iov_count];
-    ucp_proto_query_attr_t attr;
-    ucp_request_param_t param;
-    ucs_status_ptr_t sptr;
-    ucs_status_t status;
-    ucp_request_t *req;
-
-    flush_workers();
-    get_lanes(op_mask);
-
-    mem_buffer lbuf(size, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer rbuf(size, receiver());
-    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
-    mem_buffer &src              = put ? lbuf : rbuf;
-    mem_buffer &dst              = put ? rbuf : lbuf;
-
-    for (size_t i = 0; i < iov_count; ++i) {
-        iov[i].buffer = UCS_PTR_BYTE_OFFSET(lbuf.ptr(), i * UCS_MBYTE);
-        iov[i].length = UCS_MBYTE;
-    }
-
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
-    param.datatype     = ucp_dt_make_iov();
-    src.pattern_fill(m_seed);
-
-    auto send_iov = [&]() {
-        return put ? ucp_put_nbx(ep, iov, iov_count, uintptr_t(rbuf.ptr()),
-                                 rkey, &param) :
-                     ucp_get_nbx(ep, iov, iov_count, uintptr_t(rbuf.ptr()),
-                                 rkey, &param);
-    };
-
-    /* RMA protocols may use fewer lanes than the endpoint has, so take a lane
-     * which the protocol of the request sends on */
-    sptr = send_iov();
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-    req = static_cast<ucp_request_t*>(sptr) - 1;
-    ucp_proto_config_query(sender().worker(), req->send.proto_config, size,
-                           &attr);
-    ASSERT_UCS_OK(request_wait(sptr));
-    ASSERT_NE(0u, attr.lane_map);
-
-    /* Fragments on the invalidated lane complete with an error */
-    status = uct_ep_invalidate(ucp_ep_get_lane(ep, ucs_ffs64(attr.lane_map)),
-                               0);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
-    }
-
-    ASSERT_UCS_OK(status);
-    dst.memset(0);
-    ASSERT_UCS_OK(request_wait(send_iov()));
-    dst.pattern_check(m_seed, size);
-
-    test_recovery(op_mask);
+/* Every RMA lane carries a fragment, so each invalidated lane restarts the
+ * request */
+UCS_TEST_P(test_ucp_fault_tolerance_iov, initiator_failure, "MAX_RMA_LANES=8")
+{
+    run_initiator_failure();
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_iov, rcx, "rc_x")
