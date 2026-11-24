@@ -10,8 +10,6 @@ parameters:
   docs_slices: []
 
 stages:
-  # UCXX results are informational: every job is continueOnError, so failures
-  # surface as warnings and never block the UCX PR.
   - stage: UCXX_build
     dependsOn: ${{ parameters.dependsOn }}
     variables:
@@ -206,7 +204,6 @@ stages:
 
       - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
         - job: ucxx_wheel_tests_ucxx_${{ slice.name }}
-          continueOnError: true
           workspace:
             clean: all
           pool:
