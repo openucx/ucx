@@ -12,6 +12,8 @@ batchSize: 4
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 37800
   limits: "{memory: 10Gi, cpu: 6000m}"
   # The CPU request matches the 2 CPUs each pod is pinned to.
   requests: "{memory: 10Gi, cpu: 2000m}"
