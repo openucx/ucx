@@ -656,7 +656,7 @@ UCS_TEST_F(test_topo, get_distance_pci_devices) {
     for (int retry = 0; retry < (ucs::perf_retry_count + 1); ++retry) {
         start_time = ucs_get_time();
         for (int i = 0; i < num_iters; ++i) {
-            ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
+            ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
         }
         distance_time = ucs_get_time() - start_time;
 
