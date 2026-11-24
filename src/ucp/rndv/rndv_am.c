@@ -32,8 +32,9 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->first.lane_type    = UCP_LANE_TYPE_AM;
     params->middle.lane_type   = UCP_LANE_TYPE_AM_BW;
     params->super.hdr_size     = sizeof(ucp_request_data_hdr_t);
-    params->max_lanes          = context->config.ext.max_rndv_lanes;
-    params->auto_lanes         = ucp_context_max_rndv_lanes_is_auto(context);
+    params->max_lanes          = context->config.ext.max_rndv_rails.max_lanes;
+    params->max_assigned_lanes =
+            context->config.ext.max_rndv_rails.max_assigned_lanes;
     params->opt_align_offs     = UCP_PROTO_COMMON_OFFSET_INVALID;
 
     ucp_proto_multi_probe(params);

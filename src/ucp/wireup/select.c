@@ -2109,9 +2109,10 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     excluded_am_lane          = UCP_NULL_LANE;
 
     if (context->config.ext.proto_enable) {
-        /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
-        bw_info.max_lanes = ucs_max(context->config.ext.max_eager_lanes,
-                                    context->config.ext.max_rndv_lanes);
+        /* rndv/am/zcopy proto should take the rndv rails limit into account */
+        bw_info.max_lanes =
+                ucs_max(context->config.ext.max_eager_lanes,
+                        context->config.ext.max_rndv_rails.max_lanes);
     } else {
         bw_info.max_lanes = context->config.ext.max_eager_lanes - 1;
 
@@ -2209,13 +2210,13 @@ ucp_wireup_is_rma_bw_needed(ucp_context_h context, unsigned ep_init_flags)
 
     /* RMA API is used and RMA bandwidth lanes are enabled */
     if ((context->config.features & UCP_FEATURE_RMA) &&
-        (context->config.ext.max_rma_lanes > 0)) {
+        (context->config.ext.max_rma_rails.max_lanes > 0)) {
         return 1;
     }
 
     /* AM/tag API is used and put/get based rendezvous is enabled */
     if ((context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) &&
-        (context->config.ext.max_rndv_lanes > 0) &&
+        (context->config.ext.max_rndv_rails.max_lanes > 0) &&
         (context->config.ext.rndv_mode != UCP_RNDV_MODE_AM) &&
         (context->config.ext.rndv_mode != UCP_RNDV_MODE_RKEY_PTR)) {
         return 1;
@@ -2306,7 +2307,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.max_lanes = ucp_wireup_max_lanes(select_params,
                                                  bw_info.criteria.lane_type);
     } else {
-        bw_info.max_lanes = context->config.ext.max_rndv_lanes;
+        bw_info.max_lanes = context->config.ext.max_rndv_rails.max_lanes;
     }
 
     /* If error handling is requested and we have RNDV, we require memory

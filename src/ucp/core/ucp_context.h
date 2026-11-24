@@ -82,6 +82,14 @@ ucp_reg_devices_count(unsigned long max_hca_per_gpu)
 }
 
 
+/* Multi-lane limits of an operation */
+typedef struct {
+    /* Limit for buffers that the assigned limit doesn't cover */
+    unsigned max_lanes;
+    /* Limit for GPU buffers with NICs from the GPU-NIC assignment */
+    unsigned max_assigned_lanes;
+} ucp_context_rails_config_t;
+
 
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
@@ -156,18 +164,10 @@ typedef struct ucp_context_config {
     int                                    adaptive_progress;
     /** Eager-am multi-lane support */
     unsigned                               max_eager_lanes;
-    /** Configured rendezvous multi-lane limit: a number or auto */
-    unsigned long                          max_rndv_lanes_config;
-    /** Rendezvous multi-lane limit when max_rndv_lanes_config is auto */
-    unsigned                               max_rndv_lanes_fallback;
-    /** Rendezvous-get multi-lane support */
-    unsigned                               max_rndv_lanes;
-    /** Configured RMA multi-lane limit: a number or auto */
-    unsigned long                          max_rma_lanes_config;
-    /** RMA multi-lane limit when max_rma_lanes_config is auto */
-    unsigned                               max_rma_lanes_fallback;
-    /** RMA multi-lane support */
-    unsigned                               max_rma_lanes;
+    /** Rendezvous multi-lane limits */
+    ucp_context_rails_config_t             max_rndv_rails;
+    /** RMA multi-lane limits */
+    ucp_context_rails_config_t             max_rma_rails;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
@@ -806,18 +806,6 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_context_max_rndv_lanes_is_auto(ucp_context_h context)
-{
-    return context->config.ext.max_rndv_lanes_config == UCS_ULUNITS_AUTO;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_context_max_rma_lanes_is_auto(ucp_context_h context)
-{
-    return context->config.ext.max_rma_lanes_config == UCS_ULUNITS_AUTO;
 }
 
 static UCS_F_ALWAYS_INLINE int

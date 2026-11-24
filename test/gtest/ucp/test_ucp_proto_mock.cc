@@ -3510,8 +3510,8 @@ class test_ucp_proto_mock_rcx_gpu_nic_auto_rails :
 public:
     test_ucp_proto_mock_rcx_gpu_nic_auto_rails()
     {
-        modify_config("MAX_RMA_RAILS", "auto");
-        modify_config("MAX_RNDV_RAILS", "auto");
+        modify_config("MAX_RMA_RAILS", "1,assigned:auto");
+        modify_config("MAX_RNDV_RAILS", "2,assigned:auto");
         modify_config("RNDV_THRESH", "1");
     }
 
@@ -3587,7 +3587,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
-           host_memory_uses_fallback)
+           host_memory_uses_default_limit)
 {
     install_assignment(mapped_gpu(), endpoint_nics());
 
@@ -3596,7 +3596,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
-           host_memory_uses_configured_fallback, "MAX_RMA_RAILS_FALLBACK=2")
+           host_memory_uses_configured_default_limit,
+           "MAX_RMA_RAILS=2,assigned:auto")
 {
     install_assignment(mapped_gpu(), endpoint_nics());
 
@@ -3613,7 +3614,15 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
-           unassigned_gpu_uses_fallback)
+           assigned_limit_caps_assigned_nics, "MAX_RMA_RAILS=3,assigned:1")
+{
+    install_assignment(mapped_gpu(), {nic(0), nic(1)});
+
+    expect_rma_lanes(mapped_gpu(), 1);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
+           unassigned_gpu_uses_default_limit)
 {
     install_assignment(mapped_gpu(), {nic(0), nic(1)});
 
@@ -3622,7 +3631,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_auto_rails,
-           no_assignment_uses_fallback)
+           no_assignment_uses_default_limit)
 {
     expect_rma_lanes(mapped_gpu(), 1);
     expect_rndv_lanes(UCS_MEMORY_TYPE_CUDA, mapped_gpu(), 2);
@@ -3718,7 +3727,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
            rndv_am_auto_uses_assigned_nics, "RNDV_THRESH=1",
-           "MAX_RNDV_RAILS=auto", "MAX_RNDV_RAILS_FALLBACK=2")
+           "MAX_RNDV_RAILS=2,assigned:auto")
 {
     install_assignment(mapped_gpu(), endpoint_nics());
 

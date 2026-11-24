@@ -225,8 +225,10 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
-        .max_lanes                  = context->config.ext.max_rma_lanes,
-        .auto_lanes                 = ucp_context_max_rma_lanes_is_auto(context),
+        .max_lanes                  =
+                context->config.ext.max_rma_rails.max_lanes,
+        .max_assigned_lanes         =
+                context->config.ext.max_rma_rails.max_assigned_lanes,
         .min_chunk                  = context->config.ext.min_rma_chunk_size,
         .use_single_lane_min_length = 1,
         .initial_reg_md_map         = 0,

@@ -461,6 +461,7 @@ static ucs_status_t
 ucp_proto_multi_check_params(const ucp_proto_multi_init_params_t *params)
 {
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
+    ucs_assert(params->max_assigned_lanes <= UCP_PROTO_MAX_LANES);
 
     if ((ucp_proto_select_op_flags(params->super.super.select_param) &
          UCP_PROTO_SELECT_OP_FLAG_RESUME) &&
@@ -511,11 +512,11 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
 }
 
 /* Resolve the owner GPU's assignment and apply it to the assignable lanes.
- * Set *gpu_nic_filtered_p if a lane on the GPU's NICs was kept. */
+ * Set *num_assigned_lanes_p to the number of kept lanes on the GPU's NICs. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
-        ucp_lane_index_t *num_lanes_p, int *gpu_nic_filtered_p)
+        ucp_lane_index_t *num_lanes_p, ucp_lane_index_t *num_assigned_lanes_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
@@ -531,7 +532,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
 
-    *gpu_nic_filtered_p = 0;
+    *num_assigned_lanes_p = 0;
 
     assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params,
                                                                   gpu_sys_dev);
@@ -608,24 +609,25 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     }
 
     ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes, num_lanes);
-    *num_lanes_p        = num_filtered_lanes;
-    *gpu_nic_filtered_p = (num_assigned_lanes_kept > 0);
+    *num_lanes_p          = num_filtered_lanes;
+    *num_assigned_lanes_p = num_assigned_lanes_kept;
     return UCS_OK;
 }
 
 /* Resolve the maximal number of lanes to select. */
 static ucp_lane_index_t
 ucp_proto_multi_resolve_max_lanes(const ucp_proto_multi_init_params_t *params,
-                                  int gpu_nic_filtered)
+                                  ucp_lane_index_t num_assigned_lanes)
 {
-    /* An 'auto' limit uses every lane left on the GPU's NICs */
-    int use_gpu_nic_lanes      = params->auto_lanes && gpu_nic_filtered;
-    ucp_lane_index_t max_lanes = use_gpu_nic_lanes ? UCP_PROTO_MAX_LANES :
-                                                     params->max_lanes;
+    int use_assigned_limit     = (num_assigned_lanes > 0) &&
+                                 (params->max_assigned_lanes > 0);
+    ucp_lane_index_t max_lanes = use_assigned_limit ?
+                                         params->max_assigned_lanes :
+                                         params->max_lanes;
 
     ucs_trace("proto %s max_lanes %u%s",
               ucp_proto_id_field(params->super.super.proto_id, name), max_lanes,
-              use_gpu_nic_lanes ? " (gpu nic lanes)" : "");
+              use_assigned_limit ? " (assigned)" : "");
     return max_lanes;
 }
 
@@ -974,10 +976,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selection;
     double max_bandwidth, max_frag_ratio, min_bandwidth;
-    ucp_lane_index_t num_lanes, max_lanes;
+    ucp_lane_index_t num_lanes, max_lanes, num_assigned_lanes;
     ucp_md_map_t reg_md_map;
     ucs_status_t status;
-    int fixed_first_lane, gpu_nic_filtered;
+    int fixed_first_lane;
     unsigned owner_sys_dev_ord;
 
     status = ucp_proto_multi_check_params(params);
@@ -992,7 +994,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
     status = ucp_proto_multi_filter_gpu_nic_lanes(params, owner_sys_dev, lanes,
                                                   &num_lanes,
-                                                  &gpu_nic_filtered);
+                                                  &num_assigned_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -1029,7 +1031,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                 owner_sys_dev_ord, lanes);
     }
 
-    max_lanes = ucp_proto_multi_resolve_max_lanes(params, gpu_nic_filtered);
+    max_lanes = ucp_proto_multi_resolve_max_lanes(params, num_assigned_lanes);
 
     /* Select the lanes to use, and calculate their aggregate performance */
     ucp_proto_multi_select_lanes(params, lanes, num_lanes, max_lanes,

@@ -216,6 +216,37 @@ protected:
         EXPECT_NE(std::string::npos, m_errors.back().find(error))
                 << m_errors.back();
     }
+
+    void expect_modify_rejected(const char *name, const char *value)
+    {
+        ucs::handle<ucp_config_t*> config;
+        ucs_status_t status;
+
+        UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                               ucp_config_read, NULL, NULL);
+        {
+            const scoped_log_handler slh(hide_errors_logger);
+            status = ucp_config_modify(config.get(), name, value);
+        }
+
+        EXPECT_NE(UCS_OK, status) << name << "=" << value;
+    }
+
+    void expect_rails(const char *value, unsigned max_lanes,
+                      unsigned max_assigned_lanes)
+    {
+        modify_config("MAX_RNDV_RAILS", value);
+        modify_config("MAX_RMA_RAILS", value);
+
+        const ucp_context_config_t &config = create_entity()->ucph()->config.ext;
+
+        EXPECT_EQ(max_lanes, config.max_rndv_rails.max_lanes) << value;
+        EXPECT_EQ(max_assigned_lanes, config.max_rndv_rails.max_assigned_lanes)
+                << value;
+        EXPECT_EQ(max_lanes, config.max_rma_rails.max_lanes) << value;
+        EXPECT_EQ(max_assigned_lanes, config.max_rma_rails.max_assigned_lanes)
+                << value;
+    }
 };
 
 UCS_TEST_P(test_ucp_context_max_rails, max_eager_rails_above_limit)
@@ -242,64 +273,69 @@ UCS_TEST_P(test_ucp_context_max_rails, max_rails_at_limit)
     modify_config("MAX_RNDV_RAILS", value);
     modify_config("MAX_RMA_RAILS", value);
 
-    entity *e = create_entity();
-    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_eager_lanes);
-    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_rndv_lanes);
-    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_rma_lanes);
+    const ucp_context_config_t &config = create_entity()->ucph()->config.ext;
+    EXPECT_EQ(max_lanes, config.max_eager_lanes);
+    EXPECT_EQ(max_lanes, config.max_rndv_rails.max_lanes);
+    EXPECT_EQ(max_lanes, config.max_rndv_rails.max_assigned_lanes);
+    EXPECT_EQ(max_lanes, config.max_rma_rails.max_lanes);
+    EXPECT_EQ(max_lanes, config.max_rma_rails.max_assigned_lanes);
 }
 
-UCS_TEST_P(test_ucp_context_max_rails, max_rndv_rails_fallback_above_limit)
-{
-    expect_init_rejected("MAX_RNDV_RAILS_FALLBACK");
+UCS_TEST_P(test_ucp_context_max_rails, values) {
+    expect_rails("0", 0, 0);
+    expect_rails("3", 3, 3);
+    expect_rails("2,assigned:auto", 2, UCP_MAX_LANES);
+    expect_rails("assigned:auto,2", 2, UCP_MAX_LANES);
+    expect_rails("2,assigned:5", 2, 5);
+    expect_rails("default:3,assigned:2", 3, 2);
+    expect_rails("assigned:2,default:3", 3, 2);
 }
 
-UCS_TEST_P(test_ucp_context_max_rails, max_rma_rails_fallback_above_limit)
-{
-    expect_init_rejected("MAX_RMA_RAILS_FALLBACK");
-}
+UCS_TEST_P(test_ucp_context_max_rails, aliases) {
+    const unsigned max_lanes = UCP_MAX_LANES;
 
-UCS_TEST_P(test_ucp_context_max_rails, auto_uses_fallback)
-{
-    modify_config("MAX_RNDV_RAILS_FALLBACK", "3");
-    modify_config("MAX_RMA_RAILS_FALLBACK", "2");
+    modify_config("MAX_RNDV_LANES", "3");
+    modify_config("MAX_RMA_LANES", "2,assigned:auto");
 
     const ucp_context_config_t &config = create_entity()->ucph()->config.ext;
 
-    EXPECT_EQ(3u, config.max_rndv_lanes);
-    EXPECT_EQ(2u, config.max_rma_lanes);
+    EXPECT_EQ(3u, config.max_rndv_rails.max_lanes);
+    EXPECT_EQ(3u, config.max_rndv_rails.max_assigned_lanes);
+    EXPECT_EQ(2u, config.max_rma_rails.max_lanes);
+    EXPECT_EQ(max_lanes, config.max_rma_rails.max_assigned_lanes);
 }
 
-UCS_TEST_P(test_ucp_context_max_rails, explicit_value_ignores_fallback)
-{
-    modify_config("MAX_RNDV_RAILS", "3");
-    modify_config("MAX_RNDV_RAILS_FALLBACK", "2");
-    modify_config("MAX_RMA_RAILS", "3");
-    modify_config("MAX_RMA_RAILS_FALLBACK", "2");
-
-    const ucp_context_config_t &config = create_entity()->ucph()->config.ext;
-
-    EXPECT_EQ(3ul, config.max_rndv_lanes_config);
-    EXPECT_EQ(3u, config.max_rndv_lanes);
-    EXPECT_EQ(3ul, config.max_rma_lanes_config);
-    EXPECT_EQ(3u, config.max_rma_lanes);
+UCS_TEST_P(test_ucp_context_max_rails, auto_default_rejected) {
+    expect_init_rejected(
+            "MAX_RNDV_RAILS", "auto",
+            "UCX_MAX_RNDV_RAILS: 'auto' is supported only for 'assigned'");
+    expect_init_rejected(
+            "MAX_RMA_RAILS", "auto",
+            "UCX_MAX_RMA_RAILS: 'auto' is supported only for 'assigned'");
 }
 
-UCS_TEST_P(test_ucp_context_max_rails, explicit_value_ignores_invalid_fallback)
-{
-    modify_config("MAX_RMA_RAILS", "2");
-    modify_config("MAX_RMA_RAILS_FALLBACK", std::to_string(UCP_MAX_LANES + 1));
+UCS_TEST_P(test_ucp_context_max_rails, one_sided_zero_rejected) {
+    const std::string error = "UCX_MAX_RMA_RAILS: 'default' and 'assigned' "
+                              "must both be 0 or both non-zero";
 
-    const ucp_context_config_t &config = create_entity()->ucph()->config.ext;
+    expect_init_rejected("MAX_RMA_RAILS", "2,assigned:0", error);
+    expect_init_rejected("MAX_RMA_RAILS", "0,assigned:auto", error);
+    expect_init_rejected("MAX_RMA_RAILS", "0,assigned:2", error);
+}
 
-    EXPECT_EQ(2u, config.max_rma_lanes);
+UCS_TEST_P(test_ucp_context_max_rails, assigned_above_limit_rejected) {
+    const std::string value = "2,assigned:" + std::to_string(UCP_MAX_LANES + 1);
+
+    expect_init_rejected("MAX_RMA_RAILS", value,
+                         "UCX_MAX_RMA_RAILS " +
+                                 std::to_string(UCP_MAX_LANES + 1) +
+                                 " exceeds");
 }
 
 UCS_TEST_P(test_ucp_context_max_rails, inf_rejected)
 {
-    expect_init_rejected("MAX_RNDV_RAILS", "inf",
-                         "UCX_MAX_RNDV_RAILS value 'inf' is not supported");
-    expect_init_rejected("MAX_RMA_RAILS", "inf",
-                         "UCX_MAX_RMA_RAILS value 'inf' is not supported");
+    expect_modify_rejected("MAX_RNDV_RAILS", "inf");
+    expect_modify_rejected("MAX_RMA_RAILS", "2,assigned:inf");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context_max_rails, all, "all")
