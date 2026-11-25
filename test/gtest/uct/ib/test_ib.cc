@@ -138,6 +138,12 @@ protected:
         ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
 
         if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
+            const double max_get_path_bandwidth = 35e9;
+            double get_path_ratio              = 0.4;
+            uct_iface_attr_t iface_attr;
+
+            ASSERT_UCS_OK(uct_iface_query(m_e1->iface(), &iface_attr));
+
             if (expect_equal_bandwidth) {
                 EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
                                  get_perf.bandwidth.shared);
@@ -146,14 +152,23 @@ protected:
                           get_perf.bandwidth.shared);
             }
 
-            if (expect_equal_bandwidth && uct_ib_iface_is_roce(iface) &&
-                (uct_ib_iface_device(iface)->lag_level > 1)) {
-                EXPECT_DOUBLE_EQ(put_perf.path_bandwidth.shared,
-                                 get_perf.path_bandwidth.shared);
-            } else {
-                EXPECT_GT(put_perf.path_bandwidth.shared,
-                          get_perf.path_bandwidth.shared);
+            if (uct_ib_iface_is_roce(iface)) {
+                uct_ib_device_t *dev     = uct_ib_iface_device(iface);
+                const unsigned lag_level = (dev->lag_level != 0) ?
+                        dev->lag_level : uct_ib_device_get_roce_lag_level(
+                                dev, iface->config.port_num,
+                                iface->gid_info.gid_index);
+
+                if (lag_level > 1) {
+                    get_path_ratio = ucs_min(get_path_ratio,
+                                             1.0 / iface_attr.dev_num_paths);
+                }
             }
+
+            EXPECT_DOUBLE_EQ(
+                    ucs_min(iface_attr.bandwidth.shared * get_path_ratio,
+                            max_get_path_bandwidth),
+                    get_perf.path_bandwidth.shared);
         } else {
             EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
                              get_perf.bandwidth.shared);
