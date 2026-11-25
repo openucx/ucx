@@ -106,8 +106,7 @@ typedef struct {
 typedef struct {
     ucp_md_map_t                reg_md_map;   /* Memory domains to register on */
     size_t                      min_frag;     /* Largest minimal fragment size */
-    size_t                      sgl_min_frag; /* Largest 'min_zcopy' of GET
-                                                 lanes, used by SGL protocols */
+    size_t                      sgl_min_frag; /* Largest GET 'min_zcopy' */
     size_t                      max_frag_sum; /* 'max_frag' sum of all lanes */
     ucp_lane_map_t              lane_map;     /* Map of used lanes */
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
