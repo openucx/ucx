@@ -1064,15 +1064,6 @@ uct_rc_mlx5_ep_outstanding_peek_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
 }
 
 static int
-uct_rc_mlx5_ep_is_flush_remote_wqe(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
-{
-    uct_rc_iface_send_op_t *op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep,
-                                                                         pi);
-
-    return (op != NULL) && uct_rc_mlx5_send_op_is_flush_remote(op);
-}
-
-static int
 uct_rc_mlx5_ep_is_cancel_on_purge_wqe(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
 {
     uct_rc_iface_send_op_t *op;
@@ -1899,10 +1890,10 @@ static void uct_rc_mlx5_op_info_fill_sgl(
         size_t *wqe_size, uint32_t *num_packets, void *buffer, size_t max_count,
         uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
 {
-    uct_iov_t *iov        = buffer;
-    uct_ib_mem_t *memh    = (void*)(iov + max_count);
-    uint64_t *addrs       = (void*)(memh + max_count);
-    uct_rkey_t *rkeys     = (void*)(addrs + max_count);
+    uint64_t *addrs    = buffer;
+    uct_rkey_t *rkeys  = (void*)(addrs + max_count);
+    uct_iov_t *iov     = (void*)(rkeys + max_count);
+    uct_ib_mem_t *memh = (void*)(iov + max_count);
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_ep_op_info_t element;
     ucs_status_t status;
@@ -1917,7 +1908,9 @@ static void uct_rc_mlx5_op_info_fill_sgl(
                                               callback_data, &element);
         ucs_assert_always(status == UCS_OK);
         ucs_assert_always(element.rma.payload.zcopy.iovcnt <= 1);
-        if (element.rma.payload.zcopy.iovcnt != 0) {
+        ucs_assert_always((element.rma.payload.zcopy.iov == NULL) ==
+                          (element.rma.payload.zcopy.iovcnt == 0));
+        if (element.rma.payload.zcopy.iov != NULL) {
             iov[i]      = element.rma.payload.zcopy.iov[0];
             memh[i]     = *(uct_ib_mem_t*)iov[i].memh;
             iov[i].memh = &memh[i];
@@ -1967,7 +1960,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
-    int delivered, is_sgl;
+    int delivered, is_sgl, cancel_on_purge;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -2041,7 +2034,9 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
 
-        op     = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+        cancel_on_purge = uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi);
+        op = cancel_on_purge ? NULL :
+             uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
         is_sgl = (op != NULL) && uct_rc_mlx5_send_op_is_sgl_zcopy(op);
         if (is_sgl) {
             uct_rc_mlx5_op_info_fill_sgl(iface, txwq, op, &pi, end_pi, &wqe_size,
@@ -2058,7 +2053,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             if (delivered && (comp != NULL)) {
                 uct_invoke_completion(comp, UCS_OK);
             }
-        } else if ((rx_token != NULL) && (num_packets != 0)) {
+        } else if (!cancel_on_purge && (rx_token != NULL) &&
+                   (num_packets != 0)) {
             /*
              * receiver_next_psn only proves the read request was accepted by
              * the responder. The response data travels in the opposite
@@ -2074,10 +2070,11 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                                                      num_packets) &&
                         ((uct_ib_mlx5_wqe_opcode(ctrl) !=
                           MLX5_OPCODE_RDMA_READ) ||
-                         uct_rc_mlx5_ep_is_flush_remote_wqe(ep, pi));
+                         ((op != NULL) &&
+                          uct_rc_mlx5_send_op_is_flush_remote(op)));
         }
 
-        if (!delivered && !uct_rc_mlx5_ep_is_cancel_on_purge_wqe(ep, pi)) {
+        if (!delivered && !cancel_on_purge) {
             status = is_sgl ? UCS_OK :
                      uct_rc_mlx5_op_info_fill(iface, txwq, op, ctrl, wqe_size,
                                                 &callback_data, &info);
