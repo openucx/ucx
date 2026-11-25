@@ -429,7 +429,8 @@ ucp_proto_rma_sgl_grow_frag(const ucp_datatype_iter_t *dt_iter,
     size_t frag_offset = UCS_PTR_BYTE_DIFF(elem_buffer, *buffer_p);
     size_t new_offset  = ucs_min(frag_offset, elem_length - min_frag);
 
-    ucs_assert(elem_length >= min_frag);
+    ucs_assertv(elem_length >= min_frag, "elem_length=%zu min_frag=%zu",
+                elem_length, min_frag);
 
     *buffer_p       = UCS_PTR_BYTE_OFFSET(elem_buffer, new_offset);
     *remote_addr_p -= frag_offset - new_offset;

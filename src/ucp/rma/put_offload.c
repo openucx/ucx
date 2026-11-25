@@ -615,7 +615,7 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
             param.memh          = dt_iter->type.sgl.memhs[index];
         }
     } else {
-        ucs_assert(elem_offset == 0);
+        ucs_assertv(elem_offset == 0, "elem_offset=%zu", elem_offset);
 
         local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
                            UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
