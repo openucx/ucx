@@ -5883,14 +5883,12 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
 
 static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
 {
-    ucp_worker_h worker                = ep->worker;
-    ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
-    ucp_rkey_config_key_t rkey_cfg_key = rkey_cfg->key;
+    ucp_worker_h worker = ep->worker;
+    ucp_rkey_config_t *rkey_cfg;
     ucs_status_t status;
 
-    rkey_cfg_key.ep_cfg_index = ep->cfg_index;
-    status = ucp_worker_rkey_config_get(worker, &rkey_cfg_key, NULL,
-                                        &rkey->cfg_index);
+    status = ucp_worker_rkey_resolve_ep_config(worker, rkey->cfg_index,
+                                               ep->cfg_index, &rkey->cfg_index);
     if (status != UCS_OK) {
         return status;
     }

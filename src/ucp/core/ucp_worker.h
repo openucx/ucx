@@ -500,6 +500,24 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p);
 
+/**
+ * Get the configuration of the same remote key for another endpoint
+ * configuration, and add it with the lane distances of @a rkey_cfg_index if
+ * it does not exist yet. A lane to a remote device which no lane of
+ * @a rkey_cfg_index goes to gets the default distance.
+ *
+ * @param [in]  worker          UCP worker.
+ * @param [in]  rkey_cfg_index  Remote key configuration index.
+ * @param [in]  ep_cfg_index    Endpoint configuration index.
+ * @param [out] cfg_index_p     Filled with the remote key configuration index
+ *                              for @a ep_cfg_index, on success only.
+ */
+ucs_status_t
+ucp_worker_rkey_resolve_ep_config(ucp_worker_h worker,
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
+                                  ucp_worker_cfg_index_t ep_cfg_index,
+                                  ucp_worker_cfg_index_t *cfg_index_p);
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface);
 

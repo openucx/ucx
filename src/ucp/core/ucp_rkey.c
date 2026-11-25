@@ -803,6 +803,31 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
     ucp_memh_buffer_release(rkey_buffer, &params);
 }
 
+void ucp_rkey_set_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
+                                 ucp_sys_dev_map_t sys_dev_map,
+                                 const ucs_sys_dev_distance_t *distance_by_dev,
+                                 ucs_sys_dev_distance_t *lanes_distance)
+{
+    ucs_sys_device_t sys_dev;
+    ucp_lane_index_t lane;
+    char buf[128];
+
+    for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
+        sys_dev = ep_config_key->lanes[lane].dst_sys_dev;
+        /* UCS_SYS_DEVICE_ID_UNKNOWN is out of the range of the map */
+        if ((sys_dev < UCP_MAX_SYS_DEVICES) &&
+            (sys_dev_map & UCS_BIT(sys_dev))) {
+            lanes_distance[lane] = distance_by_dev[sys_dev];
+        } else {
+            lanes_distance[lane] = ucs_topo_default_distance;
+        }
+
+        ucs_trace("lane[%d] dev %d distance %s", lane, sys_dev,
+                  ucs_topo_distance_str(&lanes_distance[lane], buf,
+                                        sizeof(buf)));
+    }
+}
+
 static void UCS_F_NOINLINE
 ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
                                ucs_sys_dev_distance_t *lanes_distance,
@@ -812,8 +837,6 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     ucp_sys_dev_map_t sys_dev_map = 0;
     ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_COUNT];
     ucs_sys_device_t sys_dev;
-    ucp_lane_index_t lane;
-    char buf[128];
 
     /* Unpack lane distances and update distance_by_dev lookup */
     while (p < buffer_end) {
@@ -829,16 +852,8 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
         sys_dev_map             |= UCS_BIT(sys_dev);
     }
 
-    /* Initialize lane distances according to distance_by_dev */
-    for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
-        sys_dev              = ep_config_key->lanes[lane].dst_sys_dev;
-        lanes_distance[lane] = (sys_dev_map & UCS_BIT(sys_dev)) ?
-                                       distance_by_dev[sys_dev] :
-                                       ucs_topo_default_distance;
-        ucs_trace("lane[%d] dev %d distance %s", lane, sys_dev,
-                  ucs_topo_distance_str(&lanes_distance[lane], buf,
-                                        sizeof(buf)));
-    }
+    ucp_rkey_set_lanes_distance(ep_config_key, sys_dev_map, distance_by_dev,
+                                lanes_distance);
 }
 
 static UCS_F_ALWAYS_INLINE void
