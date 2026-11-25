@@ -303,11 +303,11 @@ ucp_proto_get_sgl_split_min_length(const ucp_request_t *req)
 
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) ||
         (req->send.rma.sgl.min_elem_length == 0) ||
-        (req->send.rma.sgl.min_elem_length >= mpriv->sgl_min_frag)) {
+        (req->send.rma.sgl.min_elem_length >= mpriv->min_get_frag)) {
         return 0;
     }
 
-    return mpriv->sgl_min_frag;
+    return mpriv->min_get_frag;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -340,8 +340,9 @@ ucp_proto_get_sgl_offload_send_func(ucp_request_t *req,
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
 
-    return ucp_proto_rma_sgl_offload_send_func(
-            req, lpriv, next_iter, ucp_proto_get_sgl_offload_post);
+    return ucp_proto_rma_sgl_offload_send_func(req, lpriv, mpriv->min_get_frag,
+                                               next_iter,
+                                               ucp_proto_get_sgl_offload_post);
 }
 
 static ucs_status_t
@@ -421,7 +422,8 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_frags(
-            req, lpriv, 1, next_iter, ucp_proto_get_sgl_offload_sw_post);
+            req, lpriv, 1, mpriv->min_get_frag, next_iter,
+            ucp_proto_get_sgl_offload_sw_post);
 }
 
 static ucs_status_t

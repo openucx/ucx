@@ -916,7 +916,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     ucp_proto_multi_lane_priv_t *lpriv;
     const uct_iface_attr_v2_t *attr_v2;
     uint64_t v2_cap_flags;
-    int sgl_is_put, is_sgl_get;
+    int sgl_is_put;
     size_t min_length;
     size_t max_frag, min_end_offset, min_chunk;
     uint32_t weight_sum;
@@ -927,16 +927,13 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     v2_cap_flags        = params->first.tl_v2_cap_flags |
                           params->middle.tl_v2_cap_flags;
     sgl_is_put          = v2_cap_flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
-    is_sgl_get          = (params->super.send_op == UCT_EP_OP_GET_ZCOPY) &&
-                          (params->super.super.select_param->dt_class ==
-                           UCP_DATATYPE_SGL);
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
                                                       selection->lane_map);
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
     mpriv->lane_map     = selection->lane_map;
     mpriv->num_lanes    = 0;
     mpriv->min_frag     = 0;
-    mpriv->sgl_min_frag = 0;
+    mpriv->min_get_frag = 0;
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
     perf->max_frag      = 0;
@@ -1022,12 +1019,10 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
 
-        if (is_sgl_get) {
-            mpriv->sgl_min_frag = ucs_max(
-                    mpriv->sgl_min_frag,
-                    ucp_proto_common_get_iface_attr(&params->super.super,
-                                                    lane)->cap.get.min_zcopy);
-        }
+        mpriv->min_get_frag = ucs_max(
+                mpriv->min_get_frag,
+                ucp_proto_common_get_iface_attr(&params->super.super,
+                                                lane)->cap.get.min_zcopy);
 
         if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
