@@ -725,7 +725,6 @@ ucp_ep_flush_request_get(ucp_ep_h ep, unsigned req_flags,
 static ucs_status_ptr_t
 ucp_ep_flush_request_start(ucp_request_t *req, const ucp_request_param_t *param)
 {
-    ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
 
     ucp_ep_flush_progress(req);
@@ -734,14 +733,15 @@ ucp_ep_flush_request_start(ucp_request_t *req, const ucp_request_param_t *param)
         status = ucp_ep_flush_mem_start(req);
         if (status == UCS_OK) {
             status = req->status;
-            ucp_trace_req(req, "releasing flush ep %p, returning status %s", ep,
-                          ucs_status_string(status));
+            ucp_trace_req(req, "releasing flush ep %p, returning status %s",
+                          req->send.ep, ucs_status_string(status));
             ucp_request_put_param(param, req);
             return UCS_STATUS_PTR(status);
         }
     }
 
-    ucp_trace_req(req, "return inprogress flush ep %p request %p", ep, req + 1);
+    ucp_trace_req(req, "return inprogress flush ep %p request %p", req->send.ep,
+                  req + 1);
     return req + 1;
 }
 
