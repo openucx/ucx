@@ -313,6 +313,10 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     };
 
     uct_rocm_ipc_export_init();
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* pidfd_getfd() import requires passing the peer's ptrace check. */
+    ucs_sys_ptrace_enable_peers();
+#endif
     *md_p = &md;
     return UCS_OK;
 }
@@ -334,6 +338,20 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     unpacked->super       = *packed;
     unpacked->region      = NULL;
     unpacked->mapped_addr = NULL;
+
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* Map eagerly so an import failure drops the rocm_ipc lane here and UCP
+     * falls back, instead of failing the put/get later. */
+    if (packed->is_vmm) {
+        ucs_status_t status = uct_rocm_ipc_cache_map_memhandle(
+                &unpacked->super, &unpacked->mapped_addr, &unpacked->region);
+        if (status != UCS_OK) {
+            ucs_free(unpacked);
+            return UCS_ERR_UNREACHABLE;
+        }
+    }
+#endif
+
     *handle_p             = NULL;
     *rkey_p               = (uintptr_t)unpacked;
 
