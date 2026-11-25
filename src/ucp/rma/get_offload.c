@@ -336,9 +336,8 @@ ucp_proto_get_sgl_offload_send_func(ucp_request_t *req,
         return ucp_proto_rma_skip_lane(req, next_iter);
     }
 
-    return ucp_proto_rma_sgl_offload_send_func(req, lpriv, mpriv->sgl_min_frag,
-                                               next_iter,
-                                               ucp_proto_get_sgl_offload_post);
+    return ucp_proto_rma_sgl_offload_send_func(
+            req, lpriv, next_iter, ucp_proto_get_sgl_offload_post);
 }
 
 static ucs_status_t
@@ -419,8 +418,7 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     return ucp_proto_rma_sgl_offload_send_frags(
-            req, lpriv, 1, mpriv->sgl_min_frag, next_iter,
-            ucp_proto_get_sgl_offload_sw_post);
+            req, lpriv, 1, next_iter, ucp_proto_get_sgl_offload_sw_post);
 }
 
 static ucs_status_t
