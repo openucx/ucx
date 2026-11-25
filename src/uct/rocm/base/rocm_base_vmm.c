@@ -154,12 +154,14 @@ static void uct_rocm_base_vmm_event_cb(ucm_event_type_t event_type,
     }
 
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
-        /* Only genuine VMEM mappings belong here; skip pool/cuda/reservation events. */
-        status = uct_rocm_base_get_ptr_info(address, size, NULL, NULL,
-                                            &hsa_mem_type, NULL, NULL);
-        if ((status != HSA_STATUS_SUCCESS) ||
-            (hsa_mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
-            return;
+        /* Trust the vmem_map hook's VMM flag; else query to filter non-VMEM. */
+        if (!(event->mem_type.mem_flags & UCS_MEM_FLAG_VMM)) {
+            status = uct_rocm_base_get_ptr_info(address, size, NULL, NULL,
+                                                &hsa_mem_type, NULL, NULL);
+            if ((status != HSA_STATUS_SUCCESS) ||
+                (hsa_mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
+                return;
+            }
         }
 
         ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);

@@ -79,9 +79,15 @@ uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
 
     packed->vaddr   = (uint64_t) mem_hndl->vaddr;
     packed->dev_ptr = mem_hndl->dev_ptr;
-    /* is_vmm was resolved at registration from the HSA pointer type, so the
-     * rkey flag is authoritative even when the ucm registry is disabled. */
     packed->is_vmm  = mem_hndl->is_vmm;
+
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* Re-check the exact user range to correct a stale cached is_vmm. */
+    if (!packed->is_vmm &&
+        uct_rocm_base_vmm_range_overlaps(address, length)) {
+        packed->is_vmm = 1;
+    }
+#endif
 
     return UCS_OK;
 }
