@@ -103,7 +103,7 @@ enum {
     }
 
 #define UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (!uct_rc_ep_has_cqe(_iface, _ep, (uint16_t)(_value))) { \
+    if (!uct_rc_ep_has_cq_credits(_iface, _ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -113,7 +113,7 @@ enum {
     UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
 
 #define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (!uct_rc_ep_has_txqp(_ep, (uint16_t)(_value))) { \
+    if (!uct_rc_ep_has_txqp_credits(_ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -391,31 +391,31 @@ uct_rc_ep_schedule_pending(uct_rc_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_has_txqp(uct_rc_ep_t *ep, uint16_t value)
+uct_rc_ep_has_txqp_credits(uct_rc_ep_t *ep, uint16_t value)
 {
     return uct_rc_txqp_available(&ep->txqp) > ucs_max(ep->txqp_reserve, value);
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_has_cqe(const uct_rc_iface_t *iface, const uct_rc_ep_t *ep,
-                  uint16_t value)
+uct_rc_ep_has_cq_credits(const uct_rc_iface_t *iface, const uct_rc_ep_t *ep,
+                         uint16_t value)
 {
     return iface->tx.cq_available > (signed)ucs_max(ep->cq_reserve, value);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+uct_rc_ep_reserve_txqp_credits(uct_rc_ep_t *ep, uint16_t value)
 {
-    if (!uct_rc_ep_has_txqp(ep, value)) {
+    if (!uct_rc_ep_has_txqp_credits(ep, value)) {
         ep->txqp_reserve = ucs_max(ep->txqp_reserve, value);
     }
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_reserve_cqe(const uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                      uint16_t value)
+uct_rc_ep_reserve_cq_credits(const uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                             uint16_t value)
 {
-    if (!uct_rc_ep_has_cqe(iface, ep, value)) {
+    if (!uct_rc_ep_has_cq_credits(iface, ep, value)) {
         ep->cq_reserve = ucs_max(ep->cq_reserve, value);
     }
 }
@@ -424,7 +424,8 @@ static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
 
-    return uct_rc_ep_has_txqp(ep, 0) && uct_rc_fc_has_resources(iface, &ep->fc);
+    return uct_rc_ep_has_txqp_credits(ep, 0) &&
+           uct_rc_fc_has_resources(iface, &ep->fc);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -433,7 +434,7 @@ uct_rc_ep_have_tx_cqe_avail(uct_rc_ep_t *ep)
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_rc_iface_t);
 
-    return uct_rc_ep_has_cqe(iface, ep, 0);
+    return uct_rc_ep_has_cq_credits(iface, ep, 0);
 }
 
 static UCS_F_ALWAYS_INLINE void

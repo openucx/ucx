@@ -221,7 +221,7 @@ void test_rc::test_sgl_reserve(unsigned flags)
     }
 
     status = sgl_zcopy();
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
     EXPECT_EQ((uint16_t)(cq_limited ? 0 : count - 1), ep->txqp_reserve);
     EXPECT_EQ((uint16_t)(cq_limited ? count - 1 : 0), ep->cq_reserve);
 
