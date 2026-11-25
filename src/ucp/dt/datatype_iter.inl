@@ -636,11 +636,30 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
     }
 }
 
+/* Cut a fragment of the element so that neither the fragment nor the rest of
+ * the element is shorter than min_frag */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_sgl_frag_length(size_t remaining, size_t max_length,
+                                  size_t min_frag)
+{
+    size_t length = ucs_max(max_length, min_frag);
+
+    if (remaining <= length) {
+        return remaining;
+    }
+
+    if ((remaining - length) >= min_frag) {
+        return length;
+    }
+
+    return (remaining >= (2 * min_frag)) ? (remaining - min_frag) : remaining;
+}
+
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
                                  const uint64_t *remote_addrs,
                                  size_t max_frag_count,
-                                 size_t max_total_length,
+                                 size_t max_total_length, size_t min_frag,
                                  ucp_datatype_iter_t *next_iter,
                                  void **out_buffers, size_t *out_lengths,
                                  uint64_t *out_remote_addrs,
@@ -662,8 +681,9 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
             ucs_assert(elem_length > frag_offset);
-            frag_length = ucs_min(elem_length - frag_offset,
-                                  max_total_length - total_length);
+            frag_length = ucp_datatype_iter_sgl_frag_length(
+                    elem_length - frag_offset, max_total_length - total_length,
+                    min_frag);
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
                     dt_iter->type.sgl.buffers[elem_index], frag_offset);

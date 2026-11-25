@@ -417,28 +417,8 @@ ucp_proto_rma_sgl_max_payload(const ucp_request_t *req,
                                         lpriv->max_frag);
 }
 
-/* Read min_frag bytes of the element instead of a shorter fragment. This reads
- * some data twice, which is fine for GET. */
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rma_sgl_grow_frag(const ucp_datatype_iter_t *dt_iter,
-                            size_t elem_index, size_t min_frag, void **buffer_p,
-                            size_t *length_p, uint64_t *remote_addr_p)
-{
-    size_t elem_length = dt_iter->type.sgl.lengths[elem_index];
-    void *elem_buffer  = dt_iter->type.sgl.buffers[elem_index];
-    size_t frag_offset = UCS_PTR_BYTE_DIFF(elem_buffer, *buffer_p);
-    size_t new_offset  = ucs_min(frag_offset, elem_length - min_frag);
-
-    ucs_assertv(elem_length >= min_frag, "elem_length=%zu min_frag=%zu",
-                elem_length, min_frag);
-
-    *buffer_p       = UCS_PTR_BYTE_OFFSET(elem_buffer, new_offset);
-    *remote_addr_p -= frag_offset - new_offset;
-    *length_p       = min_frag;
-}
-
 /* Copy up to max_frag_count fragments (splitting elements if needed) to local
- * arrays, and post them. A fragment shorter than min_frag is grown. */
+ * arrays, and post them */
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rma_sgl_offload_send_frags(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
@@ -470,21 +450,14 @@ ucp_proto_rma_sgl_offload_send_frags(
 
     frag_count = ucp_datatype_iter_next_sgl_frags(
             dt_iter, req->send.rma.sgl.remote_addrs, max_frag_count,
-            ucp_proto_rma_sgl_max_payload(req, lpriv), next_iter, buffers,
-            lengths, remote_addrs, elem_indices);
+            ucp_proto_rma_sgl_max_payload(req, lpriv), min_frag, next_iter,
+            buffers, lengths, remote_addrs, elem_indices);
     if (frag_count == 0) {
         return UCS_OK;
     }
 
     for (frag_index = 0; frag_index < frag_count; frag_index++) {
-        elem_index = elem_indices[frag_index];
-        if (ucs_unlikely(lengths[frag_index] < min_frag)) {
-            ucp_proto_rma_sgl_grow_frag(dt_iter, elem_index, min_frag,
-                                        &buffers[frag_index],
-                                        &lengths[frag_index],
-                                        &remote_addrs[frag_index]);
-        }
-
+        elem_index            = elem_indices[frag_index];
         uct_memhs[frag_index] = (sgl_memhs != NULL) ?
                                 ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
                                                            md_index) :

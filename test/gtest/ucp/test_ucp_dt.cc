@@ -351,21 +351,21 @@ protected:
 
     size_t next_frags(size_t max_frag_count, size_t max_frag_length,
                       void **buffers, size_t *lengths, uint64_t *remote_addrs,
-                      size_t *elem_indices)
+                      size_t *elem_indices, size_t min_frag = 0)
     {
         m_next_iter = {};
         return ucp_datatype_iter_next_sgl_frags(&m_dt_iter,
                                                 m_remote_addrs.data(),
                                                 max_frag_count,
-                                                max_frag_length, &m_next_iter,
-                                                buffers, lengths, remote_addrs,
-                                                elem_indices);
+                                                max_frag_length, min_frag,
+                                                &m_next_iter, buffers, lengths,
+                                                remote_addrs, elem_indices);
     }
 
-    size_t next_frag(size_t max_frag_length)
+    size_t next_frag(size_t max_frag_length, size_t min_frag = 0)
     {
         return next_frags(1, max_frag_length, &m_buffer, &m_length,
-                          &m_remote_addr, &m_elem_index);
+                          &m_remote_addr, &m_elem_index, min_frag);
     }
 
     size_t next_batch(size_t max_frag_count, size_t max_frag_length)
@@ -605,6 +605,39 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_offset) {
     advance();
     check_position(1, 0);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_min_frag) {
+    static constexpr size_t MIN_FRAG = 65;
+
+    init_sgl_iter(1, {300});
+
+    EXPECT_EQ(1u, next_frag(256, MIN_FRAG));
+    check_frag(0, 0, 300 - MIN_FRAG, 0, 300 - MIN_FRAG);
+    advance();
+
+    EXPECT_EQ(1u, next_frag(256, MIN_FRAG));
+    check_frag(0, 300 - MIN_FRAG, MIN_FRAG, 1, 0);
+    advance();
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_min_frag_limit) {
+    static constexpr size_t MIN_FRAG = 65;
+
+    init_sgl_iter(1, {1000});
+
+    EXPECT_EQ(1u, next_frag(10, MIN_FRAG));
+    check_frag(0, 0, MIN_FRAG, 0, MIN_FRAG);
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_min_frag_no_cut) {
+    static constexpr size_t MIN_FRAG = 65;
+
+    init_sgl_iter(1, {100});
+
+    EXPECT_EQ(1u, next_frag(50, MIN_FRAG));
+    check_frag(0, 0, 100, 1, 0);
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_skip_zero_length) {
