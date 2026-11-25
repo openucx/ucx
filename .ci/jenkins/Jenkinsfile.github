@@ -39,8 +39,9 @@ try {
       passed ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
       env.JOB_BASE_NAME
     )
-    // Only the failed rows' logs, with internal hostnames hidden.
-    if (!passed) {
+    // Only the failed rows' logs, with internal hostnames hidden. A stopped build has nothing to report.
+    def stopped = currentBuild.rawBuild.getAction(jenkins.model.InterruptedBuildAction) != null
+    if (!passed && !stopped) {
       githubHelper.uploadParallelLogs(this, env.JOB_NAME, env.BUILD_NUMBER, null,
           [/[\w.-]+\.nvidia\.com/, /[\w.-]+\.mellanox\.com/, /[\w.-]+\.mlnx\b/])
     }
