@@ -380,15 +380,16 @@ ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
     return UCS_OK;
 }
 
-/* The purged lane may take a longer AM short than this lane, for example with
- * device memory. Send the same bytes as AM bcopy then. */
-static ucs_status_t
-ucp_proto_repost_am_short(ucp_request_t *req, ucp_lane_index_t lane,
-                          uct_ep_h uct_ep)
+/* The purged lane may take a longer AM short than the repost lane, for example
+ * with device memory. Send the same bytes as AM bcopy then. */
+static ucs_status_t ucp_proto_repost_am_short(ucp_request_t *req)
 {
-    uct_ep_op_info_t *info = req->send.repost.info;
-    size_t length          = sizeof(info->am.header.value) +
-                             info->am.payload.data.length;
+    const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_lane_index_t lane                = rpriv->lane;
+    uct_ep_h uct_ep                      = ucp_ep_get_lane(req->send.ep, lane);
+    uct_ep_op_info_t *info               = req->send.repost.info;
+    size_t length                        = sizeof(info->am.header.value) +
+                                           info->am.payload.data.length;
     ssize_t packed;
 
     if (length <= ucp_ep_get_iface_attr(req->send.ep, lane)->cap.am.max_short) {
@@ -481,7 +482,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 
     switch (info->operation) {
     case UCT_EP_OP_AM_SHORT:
-        status = ucp_proto_repost_am_short(req, rpriv->lane, uct_ep);
+        status = ucp_proto_repost_am_short(req);
         break;
     case UCT_EP_OP_AM_BCOPY:
         pack.buffer = info->am.payload.data.buffer;
