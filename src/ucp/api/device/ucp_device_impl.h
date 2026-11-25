@@ -144,33 +144,36 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
 }
 
 
-UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
-        const ucp_device_local_mem_list_h src_mem_list_h,
-        unsigned src_mem_list_index,
-        const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, void *&address, uint64_t &remote_address,
-        unsigned lane, ucp_device_request_t *req, uct_device_ep_t *&device_ep,
-        const uct_device_mem_elem_t *&src_uct_elem,
-        const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
+UCS_F_DEVICE ucs_status_t
+ucp_device_prepare_rma(const ucp_device_local_mem_list_h local_mem_list_h,
+                       unsigned local_mem_list_index,
+                       const ucp_device_remote_mem_list_h remote_mem_list_h,
+                       unsigned remote_mem_list_index, void *&local_address,
+                       uint64_t &remote_address, unsigned lane,
+                       ucp_device_request_t *req, uct_device_ep_t *&device_ep,
+                       const uct_device_mem_elem_t *&local_uct_elem,
+                       const uct_device_mem_elem_t *&remote_uct_elem,
+                       uct_device_completion_t *&comp)
 {
     ucs_status_t status;
 
-    status = ucp_device_check_params(src_mem_list_h, src_mem_list_index);
+    status = ucp_device_check_params(local_mem_list_h, local_mem_list_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
+    status = ucp_device_prepare_send_remote(remote_mem_list_h,
+                                            remote_mem_list_index,
                                             remote_address, lane, req,
-                                            device_ep, uct_elem, comp);
+                                            device_ep, remote_uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
-                                                  src_mem_list_index);
-    src_uct_elem            = src_mem_elem->tl + lane;
-    address                 = src_mem_elem->addr;
+    const auto local_mem_elem = UCP_DEVICE_GET_ELEM(local_mem_list_h,
+                                                    local_mem_list_index);
+    local_uct_elem            = local_mem_elem->tl + lane;
+    local_address             = local_mem_elem->addr;
 
     return UCS_OK;
 }
@@ -233,10 +236,10 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
 
     UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id, lane, uct_channel_id);
 
-    status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
-                                     dst_mem_list_h, dst_mem_list_index,
-                                     address, remote_address, lane, req,
-                                     device_ep, src_uct_elem, uct_elem, comp);
+    status = ucp_device_prepare_rma(src_mem_list_h, src_mem_list_index,
+                                    dst_mem_list_h, dst_mem_list_index, address,
+                                    remote_address, lane, req, device_ep,
+                                    src_uct_elem, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
@@ -311,7 +314,7 @@ ucp_device_get(ucp_device_local_mem_list_h dst_mem_list_h,
 
     UCP_DEVICE_GET_LANE(src_mem_list_h, channel_id, lane, uct_channel_id);
 
-    const ucs_status_t status = ucp_device_prepare_send(
+    const ucs_status_t status = ucp_device_prepare_rma(
             dst_mem_list_h, dst_mem_list_index, src_mem_list_h,
             src_mem_list_index, address, remote_address, lane, req, device_ep,
             dst_uct_elem, uct_elem, comp);
