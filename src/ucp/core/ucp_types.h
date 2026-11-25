@@ -361,6 +361,8 @@ typedef enum {
  * see ucp_address_unpack_release_version().
  */
 enum {
+    /* The release version is packed in the worker address */
+    UCP_MIN_DST_VERSION_ADDRESS_RELEASE           = 16,
     /* The lane bandwidth includes the local distance */
     UCP_MIN_DST_VERSION_WIREUP_BW_DISTANCE        = 17,
     /* The AM lane is separated from the RMA BW lanes */

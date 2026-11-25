@@ -3042,6 +3042,18 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
 
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_MASK(ucp_ep_num_lanes(ep)));
 
+    if ((ucp_ep_config(ep)->key.dst_version <
+         UCP_MIN_DST_VERSION_ADDRESS_RELEASE) &&
+        !ucp_ep_has_cm_lane(ep)) {
+        /* Unversioned peers cannot remove an interface lane selected from the
+         * full worker address when they process this request. */
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &ep->worker->context->tl_bitmap) {
+            if (ucp_worker_is_tl_2iface(ep->worker, rsc_index)) {
+                UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
+            }
+        }
+    }
+
     /* TODO make sure such lane would exist */
     rsc_index = ucp_wireup_ep_get_aux_rsc_index(
             ucp_ep_get_lane(ep, ucp_ep_get_wireup_msg_lane(ep)));
