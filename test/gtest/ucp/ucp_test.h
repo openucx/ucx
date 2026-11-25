@@ -97,6 +97,10 @@ public:
                              const ucp_ep_params_t &ep_params, int ep_idx = 0,
                              int do_set_ep = 1);
 
+        void connect_to_address(int worker_index, const ucp_address_t *address,
+                                const ucp_ep_params_t &ep_params,
+                                int ep_idx = 0, int do_set_ep = 1);
+
         bool verify_client_address(struct sockaddr_storage *client_address);
 
         void accept(int worker_index, ucp_conn_request_h conn_request);
