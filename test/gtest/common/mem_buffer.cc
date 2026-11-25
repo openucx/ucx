@@ -416,6 +416,26 @@ bool mem_buffer::cuda_mem_is_gdr_capable()
 #endif
 }
 
+ucs_status_t mem_buffer::query_dmabuf_export(uct_md_h md,
+                                             ucs_memory_type_t mem_type,
+                                             bool *exported_p)
+{
+    uct_md_mem_attr_t mem_attr = {};
+    mem_buffer buffer(ucs_get_page_size(), mem_type);
+    ucs_status_t status;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
+    status = uct_md_mem_query(md, buffer.ptr(), buffer.size(), &mem_attr);
+    if (status == UCS_OK) {
+        *exported_p = (mem_attr.dmabuf_fd != UCT_DMABUF_FD_INVALID);
+        if (*exported_p) {
+            close(mem_attr.dmabuf_fd);
+        }
+    }
+
+    return status;
+}
+
 #if HAVE_ZE
 namespace {
 

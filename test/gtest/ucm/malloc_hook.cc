@@ -1122,6 +1122,43 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
 #endif
 }
 
+UCS_TEST_SKIP_COND_F(malloc_hook, calloc_overflow,
+                     skip_on_bistro_without_valgrind()) {
+    /* volatile - prevent the compiler from folding the call */
+    volatile size_t nmemb = (SIZE_MAX / 2) + 2;
+    volatile size_t size  = 2; /* nmemb * size wraps around to 2 */
+    volatile size_t count = 16;
+    volatile size_t zero  = 0;
+    mmap_event<malloc_hook> event(this);
+    unsigned char *buf;
+    void *ptr;
+    size_t i;
+
+    ASSERT_UCS_OK(event.set(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED));
+
+    errno = 0;
+    ptr   = calloc(nmemb, size);
+    EXPECT_EQ((void*)NULL, ptr);
+    EXPECT_EQ(ENOMEM, errno);
+
+    errno = 0;
+    ptr   = calloc(nmemb, zero);
+    EXPECT_NE(ENOMEM, errno);
+    free(ptr);
+
+    ptr = malloc(count * count);
+    ASSERT_NE((void*)NULL, ptr);
+    memset(ptr, 0xff, count * count);
+    free(ptr);
+
+    buf = (unsigned char*)calloc(count, count);
+    ASSERT_NE((unsigned char*)NULL, buf);
+    for (i = 0; i < (count * count); ++i) {
+        ASSERT_EQ(0, buf[i]) << "offset " << i;
+    }
+    free(buf);
+}
+
 UCS_TEST_SKIP_COND_F(malloc_hook, test_event, RUNNING_ON_VALGRIND) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;

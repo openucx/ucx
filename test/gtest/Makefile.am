@@ -367,6 +367,7 @@ endif
 
 noinst_HEADERS = \
 	common/mem_buffer.h \
+	common/memtype_map_guard.h \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
@@ -387,6 +388,7 @@ noinst_HEADERS = \
 	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
+	ucp/test_ucp_wireup.h \
 	ucp/ucp_test.h \
 	ucp/ucp_datatype.h
 

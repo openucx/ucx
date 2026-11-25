@@ -48,7 +48,7 @@ protected:
 
 UCS_TEST_P(test_ucp_request, test_request_query)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     ucp_request_attr_t attr;
     ucp_worker_attr_t worker_attr;
     void *reqs[2];

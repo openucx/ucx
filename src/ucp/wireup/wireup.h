@@ -126,6 +126,10 @@ typedef struct {
      * Zero allows only scores equal according to ucs_fp_compare(). */
     double                       score_tolerance;
 
+    /* Minimal lane bandwidth: candidates whose local or remote interface
+     * bandwidth is lower are not selected. Zero disables the check. */
+    double                       min_lane_bw;
+
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
 
@@ -185,6 +189,7 @@ typedef struct ucp_wireup_msg_tokens_info_t {
 typedef struct {
     double          score;
     double          tiebreak;
+    double          bandwidth;
     unsigned        addr_index;
     unsigned        path_index;
     ucp_rsc_index_t rsc_index;
@@ -216,6 +221,14 @@ size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
 const char* ucp_wireup_msg_str(uint8_t msg_type);
 
+/**
+ * Progress function of a wireup message request.
+ *
+ * @return UCS_OK if the request is completed, including when sending failed
+ *         and the lanes were failed, or UCS_ERR_NO_RESOURCE if it should stay
+ *         pending. Other statuses are not returned, since a failed send may
+ *         destroy the wireup EP holding the request in its pending queue.
+ */
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
 ucs_status_t

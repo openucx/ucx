@@ -174,6 +174,8 @@ protected:
     }
 
 private:
+    static const unsigned VALIDATE_TIMEOUT_SEC = 10;
+
     void fill_sn_region(void *buffer, size_t length, const ucx_perf_allocator_t *allocator,
                         PSN sn)
     {
@@ -185,26 +187,41 @@ private:
                                     const ucx_perf_allocator_t *allocator,
                                     size_t length, PSN sn, void *host_buffer)
     {
-        const uint8_t *data;
+        const volatile uint8_t *data = static_cast<const volatile uint8_t*>(
+                (mem_type == UCS_MEMORY_TYPE_HOST) ? buffer : host_buffer);
+        ucs_time_t deadline          = ucs_get_time() +
+                                       ucs_time_from_sec(VALIDATE_TIMEOUT_SEC);
+        size_t offset                = 0;
 
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            data = reinterpret_cast<const uint8_t*>(buffer);
-        } else {
-            allocator->memcpy(host_buffer, UCS_MEMORY_TYPE_HOST, buffer,
-                              mem_type, length);
-            data = reinterpret_cast<const uint8_t*>(host_buffer);
-        }
+        /* The sn of a put can become visible before the rest of its data,
+         * e.g. with relaxed ordering memory keys */
+        for (;;) {
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                allocator->memcpy(UCS_PTR_BYTE_OFFSET(host_buffer, offset),
+                                  UCS_MEMORY_TYPE_HOST,
+                                  UCS_PTR_BYTE_OFFSET(buffer, offset), mem_type,
+                                  length - offset);
+            }
 
-        for (size_t i = 0; i < length; ++i) {
-            if (data[i] != static_cast<uint8_t>(sn)) {
-                ucs_error("data validation failed at offset %zu: "
-                          "got 0x%x expected 0x%x",
-                          i, data[i], static_cast<uint8_t>(sn));
+            while ((offset < length) &&
+                   (data[offset] == static_cast<uint8_t>(sn))) {
+                ++offset;
+            }
+
+            if (offset == length) {
+                return UCS_OK;
+            }
+
+            if (ucs_get_time() > deadline) {
+                ucs_error("data validation failed at offset %zu after %u "
+                          "seconds: got 0x%x expected 0x%x",
+                          offset, VALIDATE_TIMEOUT_SEC, data[offset],
+                          static_cast<uint8_t>(sn));
                 return UCS_ERR_IO_ERROR;
             }
-        }
 
-        return UCS_OK;
+            ucp_worker_progress(m_perf.ucp.worker);
+        }
     }
 };
 

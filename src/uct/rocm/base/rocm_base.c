@@ -333,18 +333,29 @@ FILE* uct_rocm_base_load_kernel_config_file()
     return fp;
 }
 
-int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[], const char kernel_opt2[])
+int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char *const opts1[], const char *const opts2[])
 {
     int found_opt1 = 0;
     int found_opt2 = 0;
+    size_t i;
     char buf[256];
 
     while (fgets(buf, sizeof(buf), fp) != NULL) {
-        if (!found_opt1 && (strstr(buf, kernel_opt1) != NULL)) {
-            found_opt1 = 1;
+        if (!found_opt1) {
+            for (i = 0; opts1[i]; i++) {
+                if (strstr(buf, opts1[i]) != NULL) {
+                    found_opt1 = 1;
+                    break;
+                }
+            }
         }
-        if (!found_opt2 && (strstr(buf, kernel_opt2) != NULL)) {
-            found_opt2 = 1;
+        if (!found_opt2) {
+            for (i = 0; opts2[i]; i++) {
+                if (strstr(buf, opts2[i]) != NULL) {
+                    found_opt2 = 1;
+                    break;
+                }
+            }
         }
         if (found_opt1 && found_opt2) {
             return 1;
@@ -357,32 +368,32 @@ int uct_rocm_base_kernel_config_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
-    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
+    const char *opts1[] = { "CONFIG_DMABUF_MOVE_NOTIFY=y", NULL };
+    const char *opts2[] = { "CONFIG_PCI_P2PDMA=y", NULL };
 
     fp = uct_rocm_base_load_kernel_config_file();
     if (fp == NULL) {
         ucs_trace("no kernel conf file found");
         return 0;
     }
-    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_opt1, kernel_opt2);
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, opts1, opts2);
     fclose(fp);
     return dmabuf_supported;
-} 
+}
 
 int uct_rocm_base_kernel_symbols_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    const char kernel_sym1[] = "dma_buf_move_notify";
-    const char kernel_sym2[] = "pci_p2pdma";
+    const char *syms1[] = { "dma_buf_move_notify", "dma_buf_invalidate_mappings", NULL };
+    const char *syms2[] = { "pci_p2pdma", NULL };
 
     fp = fopen("/proc/kallsyms", "r");
     if (fp == NULL) {
         ucs_trace("no /proc/kallsyms file found");
         return dmabuf_supported;
     }
-    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_sym1, kernel_sym2);
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, syms1, syms2);
     fclose(fp);
     return dmabuf_supported;
 }
