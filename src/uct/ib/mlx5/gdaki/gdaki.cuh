@@ -312,7 +312,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_get(
     auto local_mem_elem =
             reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
                     dst_uct_elem);
-    auto cid = channel_id & ep->channel_mask;
+    const unsigned cid = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
                                             local_mem_elem->lkey,

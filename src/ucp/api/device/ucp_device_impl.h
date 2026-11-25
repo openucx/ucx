@@ -294,9 +294,9 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
-ucp_device_get(const ucp_device_local_mem_list_h dst_mem_list_h,
+ucp_device_get(ucp_device_local_mem_list_h dst_mem_list_h,
                unsigned dst_mem_list_index, size_t dst_offset,
-               const ucp_device_remote_mem_list_h src_mem_list_h,
+               ucp_device_remote_mem_list_h src_mem_list_h,
                unsigned src_mem_list_index, size_t src_offset, size_t length,
                unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
@@ -308,14 +308,14 @@ ucp_device_get(const ucp_device_local_mem_list_h dst_mem_list_h,
     uint64_t remote_address;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
-    ucs_status_t status;
 
     UCP_DEVICE_GET_LANE(src_mem_list_h, channel_id, lane, uct_channel_id);
 
-    status = ucp_device_prepare_send(dst_mem_list_h, dst_mem_list_index,
-                                     src_mem_list_h, src_mem_list_index,
-                                     address, remote_address, lane, req,
-                                     device_ep, dst_uct_elem, uct_elem, comp);
+    const ucs_status_t status =
+            ucp_device_prepare_send(dst_mem_list_h, dst_mem_list_index,
+                                    src_mem_list_h, src_mem_list_index,
+                                    address, remote_address, lane, req,
+                                    device_ep, dst_uct_elem, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }

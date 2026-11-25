@@ -316,9 +316,8 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get(
     auto cuda_ipc_mem_element =
             reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
                     mem_elem);
-    void *mapped_rem_addr;
-
-    mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
+    void *mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
+                                                    remote_address);
     uct_cuda_ipc_copy_level<level>(address, mapped_rem_addr, length);
     uct_cuda_ipc_level_sync<level>();
     return UCS_OK;
