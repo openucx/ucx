@@ -293,17 +293,21 @@ ucp_proto_get_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
                                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY);
 }
 
-/* Check whether an element is too short to be read by a lane of the protocol.
- * If so, return the minimal element length which can be read by all lanes. */
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_get_sgl_has_short_elem(const ucp_request_t *req,
-                                 size_t *min_length_p)
+/* On the first progress call, check whether an element is too short to be read
+ * by a lane of the protocol. If so, return the minimal element length which can
+ * be read by all lanes, otherwise 0. */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_get_sgl_split_min_length(const ucp_request_t *req)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
-    *min_length_p = mpriv->sgl_min_frag;
-    return (req->send.rma.sgl.min_elem_length != 0) &&
-           (req->send.rma.sgl.min_elem_length < mpriv->sgl_min_frag);
+    if ((req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) ||
+        (req->send.rma.sgl.min_elem_length == 0) ||
+        (req->send.rma.sgl.min_elem_length >= mpriv->sgl_min_frag)) {
+        return 0;
+    }
+
+    return mpriv->sgl_min_frag;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -344,10 +348,9 @@ static ucs_status_t
 ucp_proto_get_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    size_t min_length;
+    size_t min_length  = ucp_proto_get_sgl_split_min_length(req);
 
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
-        ucp_proto_get_sgl_has_short_elem(req, &min_length)) {
+    if (min_length != 0) {
         return ucp_proto_rma_sgl_split_progress(req, min_length);
     }
 
@@ -425,10 +428,9 @@ static ucs_status_t
 ucp_proto_get_sgl_offload_sw_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    size_t min_length;
+    size_t min_length  = ucp_proto_get_sgl_split_min_length(req);
 
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
-        ucp_proto_get_sgl_has_short_elem(req, &min_length)) {
+    if (min_length != 0) {
         return ucp_proto_rma_sgl_split_progress(req, min_length);
     }
 
