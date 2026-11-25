@@ -13,6 +13,7 @@
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/dt/dt_sgl.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
@@ -569,8 +570,7 @@ static void ucp_proto_rma_sgl_contig_elem_complete(void *request,
 
 static ucs_status_t
 ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
-                              size_t elem_offset, size_t length,
-                              size_t min_length, uint32_t fence_flag)
+                              size_t elem_offset, uint32_t fence_flag)
 {
     ucp_ep_h ep                  = req->send.ep;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
@@ -605,8 +605,8 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
         buffer        = UCS_PTR_BYTE_OFFSET(dt_iter->type.sgl.buffers[index],
                                             elem_offset);
         datatype      = ucp_dt_make_contig(1);
-        contig_length = length;
-        send_count    = length;
+        contig_length = dt_iter->type.sgl.lengths[index] - elem_offset;
+        send_count    = contig_length;
         elem_req->send.rma.remote_addr =
                 req->send.rma.sgl.remote_addrs[index] + elem_offset;
 
@@ -647,8 +647,8 @@ ucp_proto_rma_sgl_contig_send(ucp_request_t *req, size_t index, size_t count,
         elem_req->send.rma.remote_addr         = UCP_REMOTE_ADDR_INVALID;
         elem_req->send.rma.sgl.remote_addrs    = remote.remote_addrs;
         elem_req->send.rma.sgl.rkeys           = remote.rkeys;
-        elem_req->send.rma.sgl.length          = length;
-        elem_req->send.rma.sgl.min_elem_length = min_length;
+        elem_req->send.rma.sgl.length          = ucp_dt_sgl_length(
+                local.lengths, count, &elem_req->send.rma.sgl.min_elem_length);
     }
 
     sptr = ucp_proto_request_send_op_rma(
@@ -671,7 +671,7 @@ ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length)
     uint32_t fence_flag   = req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED;
     size_t elem_offset    = req->send.state.dt_iter.type.sgl.frag_offset;
     ucs_status_t status   = UCS_OK;
-    size_t index, run_count, run_length, run_min_length;
+    size_t index, run_count;
 
     ucp_proto_completion_init(&req->send.state.uct_comp,
                               ucp_proto_rma_sgl_contig_completion);
@@ -683,22 +683,16 @@ ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length)
             continue;
         }
 
-        run_length     = lengths[index] - elem_offset;
-        run_min_length = run_length;
         if ((min_batch_length != 0) && (elem_offset == 0) &&
             (lengths[index] >= min_batch_length)) {
             while (((index + run_count) < count) &&
                    (lengths[index + run_count] >= min_batch_length)) {
-                run_length    += lengths[index + run_count];
-                run_min_length = ucs_min(run_min_length,
-                                         lengths[index + run_count]);
                 ++run_count;
             }
         }
 
         status = ucp_proto_rma_sgl_contig_send(req, index, run_count,
-                                               elem_offset, run_length,
-                                               run_min_length, fence_flag);
+                                               elem_offset, fence_flag);
         if (status != UCS_OK) {
             break;
         }
