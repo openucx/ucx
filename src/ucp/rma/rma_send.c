@@ -322,7 +322,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         goto out_unlock;
     }
 
-    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) {
         datatype = param->datatype;
         if (UCP_DT_IS_SGL(datatype)) {
             UCP_RMA_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
