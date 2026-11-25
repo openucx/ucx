@@ -1321,10 +1321,13 @@ run_rc_verbs_nosrq_gtest() {
 	gtest_filter+=':-*test_rc_no_srq*:*test_rc_srq_select*'
 
 	echo "==== Running rc_verbs gtest with SRQ disabled ===="
+	# Use finite RNR retries so that persistent RNR fails with an explicit
+	# retry-exceeded error instead of hanging until the watchdog aborts.
 	$TIMEOUT env \
 		UCX_RC_VERBS_SRQ_ENABLE=n \
 		UCX_RC_VERBS_RX_CQ_LEN=262144 \
 		UCX_RC_VERBS_RX_MAX_WR=64 \
+		UCX_RC_VERBS_RNR_RETRY_COUNT=6 \
 		GTEST_FILTER="$gtest_filter" \
 		make -C test/gtest test
 }

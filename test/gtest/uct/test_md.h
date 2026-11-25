@@ -53,7 +53,8 @@ protected:
     static bool is_device_detected(ucs_memory_type_t mem_type);
     static void* alloc_thread(void *arg);
     ucs_status_t reg_mem(unsigned flags, void *address, size_t length,
-                         uct_mem_h *memh_p);
+                         uct_mem_h *memh_p,
+                         ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
     void test_reg_mem(unsigned access_mask, unsigned invalidate_flag);
 
     void test_reg_advise(size_t size, size_t advise_size,

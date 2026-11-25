@@ -12,7 +12,7 @@ kubernetes:
   namespace: nbu-swx-ucx
   limits: "{memory: 16Gi, cpu: 8000m}"
   # The request is below the limit so that two PR runs fit the namespace quota
-  requests: "{memory: 8Gi, cpu: 2000m}"
+  requests: "{memory: 8Gi, cpu: 3000m}"
 
 # Modules for builds.sh.
 volumes:
