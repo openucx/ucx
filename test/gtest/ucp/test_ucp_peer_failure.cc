@@ -1235,13 +1235,6 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, OP_GET, "get");
     }
 
-    /* Virtual here, the base class one is not: the failover variant overrides
-     * it and init() below must call the override */
-    virtual ucp_ep_params_t get_ep_params()
-    {
-        return test_ucp_peer_failure::get_ep_params();
-    }
-
     /* Whether the mocked transport reports the failed send through the error
      * handler before it returns the error, as UCT/TCP does. Otherwise the
      * reply sender has to report it. */
@@ -1530,3 +1523,23 @@ UCS_TEST_P(test_ucp_peer_failure_sw_rma_reply_failover, reply_send_fails,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_sw_rma_reply_failover, tcp,
                               "tcp")
+
+/* The transport does not report the failed send, so the reply sender schedules
+ * the lane failure and re-sends the reply once it was processed */
+class test_ucp_peer_failure_sw_rma_reply_failover_unreported :
+        public test_ucp_peer_failure_sw_rma_reply_failover {
+public:
+    bool transport_reports() const override
+    {
+        return false;
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_sw_rma_reply_failover_unreported,
+           reply_send_fails, "MAX_EAGER_LANES=8")
+{
+    run();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(
+        test_ucp_peer_failure_sw_rma_reply_failover_unreported, tcp, "tcp")

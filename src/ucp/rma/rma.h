@@ -92,7 +92,11 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 
 /* A software RMA/AMO reply could not be sent, see rma_sw.c */
 ucs_status_t
-ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len);
+ucp_rma_sw_handle_reply_send_err(ucp_request_t *req, ssize_t packed_len);
+
+/* Release the replies queued for re-sending on an endpoint being destroyed */
+int ucp_rma_sw_reply_resend_remove_filter(const ucs_callbackq_elem_t *elem,
+                                          void *arg);
 
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 

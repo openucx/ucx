@@ -151,7 +151,7 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
                                      ucp_amo_sw_pack_atomic_reply, req, 0);
 
     if (ucs_unlikely(packed_len < 0)) {
-        return ucp_rma_sw_reply_send_failed(req, packed_len);
+        return ucp_rma_sw_handle_reply_send_err(req, packed_len);
     }
 
     ucs_assert(packed_len == sizeof(ucp_rma_rep_hdr_t) + req->send.length);

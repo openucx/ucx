@@ -29,6 +29,42 @@ static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
 }
 
 /*
+ * Re-send a software RMA/AMO reply after the lane failure scheduled by
+ * ucp_rma_sw_handle_reply_send_err() was processed. It is queued with the
+ * endpoint as the key, after the lane failure, so it runs once the endpoint was
+ * either failed or, with UCP_ERR_HANDLING_MODE_FAILOVER, reconfigured.
+ */
+static unsigned ucp_rma_sw_reply_resend_progress(void *arg)
+{
+    ucp_request_t *req = arg;
+    ucp_ep_h ep        = req->send.ep;
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_debug("ep %p: dropping software RMA/AMO reply %p", ep, req);
+        ucp_request_put(req);
+        return 1;
+    }
+
+    ucs_debug("ep %p: re-sending software RMA/AMO reply %p", ep, req);
+    ucp_request_send(req);
+    return 1;
+}
+
+int ucp_rma_sw_reply_resend_remove_filter(const ucs_callbackq_elem_t *elem,
+                                          void *arg)
+{
+    ucp_request_t *req = elem->arg;
+
+    if ((elem->cb == ucp_rma_sw_reply_resend_progress) &&
+        (req->send.ep == arg)) {
+        ucp_request_put(req);
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
  * A software RMA/AMO reply could not be sent: the transport failed the send
  * itself instead of returning UCS_ERR_NO_RESOURCE (UCT/TCP reports a peer which
  * closed its connection this way). A transport reports such a failure through
@@ -37,14 +73,16 @@ static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
  * UCP_ERR_HANDLING_MODE_FAILOVER, reconfigured without the lane: the peer still
  * waits for the reply (its flush counts it), so it is re-sent on the lane the
  * endpoint fell over to. A failure the transport did not report is reported
- * here, as ucp_wireup_msg_progress() does. Either way the error does not reach
- * ucp_request_send(), which has no handling for it and aborts.
+ * here, as ucp_wireup_msg_progress() does, and with failover the reply is
+ * re-sent once the lane failure was processed. Either way the error does not
+ * reach ucp_request_send(), which has no handling for it and aborts.
  */
 ucs_status_t
-ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
+ucp_rma_sw_handle_reply_send_err(ucp_request_t *req, ssize_t packed_len)
 {
     ucs_status_t status = (ucs_status_t)packed_len;
     ucp_ep_h ep         = req->send.ep;
+    ucp_worker_h worker = ep->worker;
     ucp_lane_index_t am_lane;
     uct_ep_h uct_ep;
 
@@ -62,7 +100,16 @@ ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
     uct_ep = ucp_ep_get_lane(ep, req->send.lane);
     if ((uct_ep != NULL) && !ucp_is_uct_ep_failed(uct_ep)) {
         ucp_ep_set_lanes_failed_schedule(ep, UCS_BIT(req->send.lane), status);
-        goto out_drop;
+        if (!ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+            /* The endpoint is going to be failed */
+            goto out_drop;
+        }
+
+        UCS_ASYNC_BLOCK(&worker->async);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
+                                  ucp_rma_sw_reply_resend_progress, req);
+        UCS_ASYNC_UNBLOCK(&worker->async);
+        return UCS_OK;
     }
 
     am_lane = ucp_ep_get_am_lane(ep);
@@ -99,7 +146,7 @@ static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
                                  UCP_AM_ID_CMPL, ucp_rma_sw_pack_rma_ack, req,
                                  0);
     if (ucs_unlikely(packed_len < 0)) {
-        return ucp_rma_sw_reply_send_failed(req, packed_len);
+        return ucp_rma_sw_handle_reply_send_err(req, packed_len);
     }
 
     ucs_assert(packed_len == sizeof(ucp_cmpl_hdr_t));
@@ -190,7 +237,7 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
                                      UCP_AM_ID_GET_REP, ucp_rma_sw_pack_get_reply,
                                      req, 0);
     if (ucs_unlikely(packed_len < 0)) {
-        return ucp_rma_sw_reply_send_failed(req, packed_len);
+        return ucp_rma_sw_handle_reply_send_err(req, packed_len);
     }
 
     payload_len = packed_len - sizeof(ucp_request_data_hdr_t);

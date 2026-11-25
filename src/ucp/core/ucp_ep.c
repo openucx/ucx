@@ -534,7 +534,8 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_ep_set_failed_remove_filter(elem, arg) ||
         ucp_ep_wireup_eps_progress_filter(elem, arg) ||
         ucp_proto_rndv_mtype_fc_reschedule_filter(elem, arg) ||
-        ucp_ep_tf_purge_remove_filter(elem, arg)) {
+        ucp_ep_tf_purge_remove_filter(elem, arg) ||
+        ucp_rma_sw_reply_resend_remove_filter(elem, arg)) {
         return 1;
     }
 
