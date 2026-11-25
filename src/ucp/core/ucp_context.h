@@ -92,6 +92,16 @@ typedef struct {
 } ucp_max_rails_t;
 
 
+/* Same limit for buffers with and without assigned NICs */
+static UCS_F_ALWAYS_INLINE ucp_max_rails_t
+ucp_max_rails_make(unsigned max_lanes)
+{
+    ucp_max_rails_t max_rails = {max_lanes, max_lanes};
+
+    return max_rails;
+}
+
+
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;

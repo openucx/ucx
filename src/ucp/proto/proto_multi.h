@@ -122,11 +122,7 @@ typedef struct {
     ucp_proto_common_init_params_t super;
 
     /* Maximal number of lanes to select */
-    ucp_lane_index_t               max_lanes;
-
-    /* Maximal number of lanes for GPU buffers with assigned NICs,
-     * or 0 to use max_lanes */
-    ucp_lane_index_t               max_assigned_lanes;
+    ucp_max_rails_t                max_rails;
 
     /* Minimal chunk size. It defines the minimal size of the fragment to split into
      * several parts. The goal is to not split below this limit */

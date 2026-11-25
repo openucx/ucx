@@ -44,7 +44,8 @@ ucp_proto_eager_multi_probe_common(ucp_proto_multi_init_params_t *params,
     params->super.latency    = 0;
     params->first.lane_type  = UCP_LANE_TYPE_AM;
     params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
-    params->max_lanes        = context_config->max_eager_lanes;
+    params->max_rails        = ucp_max_rails_make(
+                                       context_config->max_eager_lanes);
     ucp_proto_multi_probe(params);
 }
 
