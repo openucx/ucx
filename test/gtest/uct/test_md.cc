@@ -1177,8 +1177,8 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     if (pid == 0) {
         char buf[REG_SIZE];
         memset(buf, 42, REG_SIZE);
-        /* child touch the page, and exit without the leak check, which reports
-         * the memory of the parent threads that do not exist in the child */
+       /* Touch the page in the child and exit without running leak checks,
+        * which report false leaks for parent threads missing in the child */
         _exit((memcmp(page, buf, REG_SIZE) == 0) ? 0 : 1);
     }
 
