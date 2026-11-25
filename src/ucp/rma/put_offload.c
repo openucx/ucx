@@ -683,8 +683,7 @@ ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length)
             continue;
         }
 
-        if ((min_batch_length != 0) && (elem_offset == 0) &&
-            (lengths[index] >= min_batch_length)) {
+        if ((elem_offset == 0) && (lengths[index] >= min_batch_length)) {
             while (((index + run_count) < count) &&
                    (lengths[index + run_count] >= min_batch_length)) {
                 ++run_count;
@@ -712,7 +711,7 @@ ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_rma_sgl_split_progress(req, 0);
+    return ucp_proto_rma_sgl_split_progress(req, SIZE_MAX);
 }
 
 static void

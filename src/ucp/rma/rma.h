@@ -96,7 +96,7 @@ ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self);
 /**
  * Send the SGL elements as internal requests. A run of elements which are at
  * least @a min_batch_length long is sent as one SGL request, any other element
- * as a contiguous request. If @a min_batch_length is 0, there is no batching.
+ * as a contiguous request.
  */
 ucs_status_t
 ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length);
