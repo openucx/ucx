@@ -5221,8 +5221,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
     }, UCP_OP_ID_GET);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rc_mlx5,
-                              "rc_mlx5")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rcx, "rc_x")
 
 #ifdef ENABLE_STATS
 

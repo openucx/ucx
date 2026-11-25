@@ -221,7 +221,7 @@ ucp_proto_t ucp_put_am_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_put_bcopy_reset
 };
 
 ucp_proto_t ucp_put_sgl_am_bcopy_proto = {

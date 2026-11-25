@@ -11,7 +11,8 @@ kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
   limits: "{memory: 8Gi, cpu: 6000m}"
-  requests: "{memory: 8Gi, cpu: 6000m}"
+  # Requests follow the measured use; the limits allow bursts
+  requests: "{memory: 4Gi, cpu: 4000m}"
 
 volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}

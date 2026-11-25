@@ -4,14 +4,25 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <uct/uct_test.h>
 #include <uct/api/device/uct_device_types.h>
 #include <uct/api/v2/uct_v2.h>
+#include "cuda_vmm_mem_buffer.h"
 #include "test_kernels_uct.h"
 #include <cuda.h>
 #include <common/cuda.h>
+#include <algorithm>
 #include <memory>
+#include <unistd.h>
 #include <vector>
+
+extern "C" {
+#include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+}
 
 class test_cuda_ipc_rma : public uct_test {
 protected:
@@ -443,6 +454,153 @@ protected:
     static void completion_cb(uct_completion_t *self) {
         ucs_container_of(self, sgl_completion, uct)->done = 1;
     }
+
+#if HAVE_CUDA_FABRIC
+    struct remote_rkey {
+        explicit remote_rkey(uct_component_h component) : component(component)
+        {
+        }
+
+        ~remote_rkey()
+        {
+            if (unpacked) {
+                EXPECT_UCS_OK(uct_rkey_release(component, &bundle));
+            }
+        }
+
+        uct_component_h   component;
+        uct_rkey_bundle_t bundle   = {};
+        bool              unpacked = false;
+    };
+
+    /* Pack a multi-chunk key of the receiver and unpack it as another process
+     * would, so that mapping it goes through the remote cache rather than the
+     * same-process shortcut */
+    void unpack_remote_rkey(uct_mem_h memh, void *address, size_t length,
+                            remote_rkey &rkey)
+    {
+        std::vector<uint8_t> buffer(m_receiver->md_attr().rkey_packed_size);
+        uct_md_mkey_pack_params_t pack_params  = {};
+        uct_rkey_unpack_params_t unpack_params = {};
+        uct_cuda_ipc_rkey_t *packed;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_md_mkey_pack_v2(m_receiver->md(), memh, address,
+                                          length, &pack_params,
+                                          buffer.data()));
+        packed = reinterpret_cast<uct_cuda_ipc_rkey_t*>(buffer.data());
+        ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+                  packed->ph.handle_type);
+        packed->pid = getpid() + 100000;
+
+        unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_FLAGS;
+        unpack_params.flags      = UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING;
+        status = uct_rkey_unpack_v2(rkey.component, buffer.data(),
+                                    &unpack_params, &rkey.bundle);
+        if (status == UCS_ERR_UNREACHABLE) {
+            UCS_TEST_SKIP_R("multi-chunk key is unreachable");
+        }
+
+        ASSERT_UCS_OK(status);
+        rkey.unpacked = true;
+    }
+
+    static std::vector<uint8_t> read_device(const void *ptr, size_t length)
+    {
+        std::vector<uint8_t> data(length);
+
+        EXPECT_EQ(CUDA_SUCCESS,
+                  cuMemcpyDtoH(data.data(), (CUdeviceptr)ptr, length));
+        return data;
+    }
+
+    /* One batch with elements inside a chunk, across chunk boundaries, and
+     * through a key of a sub-range of the same registration */
+    void test_sgl_multi_chunk(sgl_op_t op)
+    {
+        static constexpr unsigned num_chunks = 4;
+        struct element {
+            size_t offset;
+            size_t length;
+            bool   sub_range;
+        };
+
+        mem_buffer::set_device_context();
+
+        cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, num_chunks);
+        const size_t chunk = alloc.chunk_size();
+        const std::vector<element> elements = {
+            {chunk / 4, 4 * UCS_KBYTE, false},
+            {chunk - (2 * UCS_KBYTE), 4 * UCS_KBYTE, false},
+            {(2 * chunk) - 100, chunk + 200, false},
+            {(3 * chunk) + 512, UCS_KBYTE, true}
+        };
+        ucs::handle<uct_mem_h, uct_md_h> memh;
+        std::vector<uint8_t> remote(alloc.size());
+        remote_rkey rkey(GetParam()->component);
+        remote_rkey sub_rkey(GetParam()->component);
+        std::vector<uint8_t> expected;
+        uct_mem_h uct_memh;
+        sgl_arrays sgl;
+
+        for (size_t i = 0; i < remote.size(); ++i) {
+            remote[i] = (uint8_t)((i / chunk) * 64 + (i % 61));
+        }
+        ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)alloc.ptr(),
+                                             remote.data(), remote.size()));
+
+        ASSERT_UCS_OK(uct_md_mem_reg(m_receiver->md(), alloc.ptr(),
+                                     alloc.size(), UCT_MD_MEM_ACCESS_ALL,
+                                     &uct_memh));
+        memh.reset(uct_memh, [](uct_mem_h handle, uct_md_h md) {
+            EXPECT_UCS_OK(uct_md_mem_dereg(md, handle));
+        }, m_receiver->md());
+
+        ASSERT_NO_FATAL_FAILURE(
+                unpack_remote_rkey(memh, alloc.ptr(), alloc.size(), rkey));
+        ASSERT_NO_FATAL_FAILURE(unpack_remote_rkey(
+                memh, UCS_PTR_BYTE_OFFSET(alloc.ptr(), 2 * chunk), 2 * chunk,
+                sub_rkey));
+
+        for (size_t i = 0; i < elements.size(); ++i) {
+            sgl.sendbufs.emplace_back(new mapped_buffer(elements[i].length,
+                                                        SEED1 + i, *m_sender,
+                                                        0,
+                                                        UCS_MEMORY_TYPE_CUDA));
+            sgl.buffers.push_back(sgl.sendbufs[i]->ptr());
+            sgl.lengths.push_back(elements[i].length);
+            sgl.memhs.push_back(sgl.sendbufs[i]->memh());
+            sgl.remote_addrs.push_back(
+                    (uint64_t)alloc.ptr() + elements[i].offset);
+            sgl.rkeys.push_back(elements[i].sub_range ? sub_rkey.bundle.rkey :
+                                                        rkey.bundle.rkey);
+        }
+
+        expected = remote;
+        if (op == SGL_OP_PUT) {
+            for (size_t i = 0; i < elements.size(); ++i) {
+                auto data = read_device(sgl.buffers[i], elements[i].length);
+                std::copy(data.begin(), data.end(),
+                          expected.begin() + elements[i].offset);
+            }
+        }
+
+        ASSERT_UCS_OK_OR_INPROGRESS(sgl_op(op, sgl));
+        m_sender->flush();
+
+        if (op == SGL_OP_PUT) {
+            EXPECT_EQ(expected, read_device(alloc.ptr(), alloc.size()));
+        } else {
+            for (size_t i = 0; i < elements.size(); ++i) {
+                auto begin = remote.begin() + elements[i].offset;
+                EXPECT_EQ(std::vector<uint8_t>(begin,
+                                               begin + elements[i].length),
+                          read_device(sgl.buffers[i], elements[i].length))
+                        << "element " << i;
+            }
+        }
+    }
+#endif
 };
 
 UCS_TEST_P(test_cuda_ipc_sgl, iface_caps_v2)
@@ -515,6 +673,32 @@ UCS_TEST_P(test_cuda_ipc_sgl, get_with_callback)
     }
 
     test_sgl_with_callback(SGL_OP_GET);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, put_multi_chunk)
+{
+#if HAVE_CUDA_FABRIC
+    if (!is_sgl_supported(SGL_OP_PUT)) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
+    test_sgl_multi_chunk(SGL_OP_PUT);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, get_multi_chunk)
+{
+#if HAVE_CUDA_FABRIC
+    if (!is_sgl_supported(SGL_OP_GET)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    test_sgl_multi_chunk(SGL_OP_GET);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_sgl, cuda_ipc)
