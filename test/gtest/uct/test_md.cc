@@ -479,6 +479,8 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     ucs_status_t status;
     void *address;
     unsigned mem_type;
+    double timeout;
+    ucs_time_t deadline;
     uct_allocated_memory_t mem;
     uct_mem_alloc_params_t alloc_params;
     uct_md_mkey_pack_params_t pack_params;
@@ -502,6 +504,9 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     max_size               = ucs_align_down_pow2(max_size, sizeof(size_t));
 
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
+        /* Other processes on the host may hold all device memory for a while */
+        timeout  = (mem_type == UCS_MEMORY_TYPE_RDMA) ? 30.0 : 0.0;
+        deadline = ucs_get_time() + ucs_time_from_sec(timeout);
         for (unsigned i = 0; i < iterations; ++i) {
             size = orig_size = ucs::rand() % max_size;
             if (size == 0) {
@@ -513,11 +518,18 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             alloc_params.mem_type = (ucs_memory_type_t)mem_type;
 
             ucs_log_push_handler(ignore_alloc_failure_log_handler);
-            status = uct_mem_alloc(size, &method, 1, &alloc_params, &mem);
+            for (;;) {
+                status = uct_mem_alloc(size, &method, 1, &alloc_params, &mem);
+                if ((status != UCS_ERR_NO_MEMORY) ||
+                    (ucs_get_time() >= deadline)) {
+                    break;
+                }
+
+                usleep(ucs::rand_range(10000));
+            }
             ucs_log_pop_handler();
 
             if (status == UCS_ERR_NO_MEMORY) {
-                usleep(ucs::rand_range(10000));
                 num_alloc_failures++;
                 continue;
             }
