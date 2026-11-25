@@ -1,7 +1,6 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
-job: ucx-wirecompat-repro
-failFast: false
+job: ucx-cx8-legacy-ddp-repro
 timeout_minutes: 120
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
@@ -17,14 +16,6 @@ runs_on_dockers:
     limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}"
     requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}"
     caps_add: "[ IPC_LOCK, NET_RAW ]"
-  - name: cx7-roce
-    arch: x86_64
-    url: harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
-    tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true"
-    annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2"}]
-    limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}"
-    requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}"
-    caps_add: "[ IPC_LOCK, NET_RAW ]"
 matrix:
   axes:
     arch: [x86_64]
@@ -32,10 +23,10 @@ taskName: '${name}/${arch}'
 env:
   UCX_HANDLE_ERRORS: bt
   UCX_CM_REUSEADDR: "y"
-  UCX_LOG_LEVEL: info
+  UCX_LOG_LEVEL: debug
   UCX_WARN_UNUSED_ENV_VARS: "n"
 steps:
-  - name: Build and reproduce worker-address compatibility
+  - name: Compare CX8 legacy RC wire compatibility across DDP settings
     parallel: false
     timeout: 110
     run: |
@@ -44,6 +35,9 @@ steps:
       test -w "${WORKSPACE}"
       gcc --version | head -1
       git rev-parse HEAD
+      if command -v ibv_devinfo >/dev/null; then
+          ibv_devinfo -v | awk '$1 ~ /^(hca_id|fw_ver|vendor_part_id|link_layer|port_lid):$/'
+      fi
       build_wire() (
           cd "$1"
           ./autogen.sh
@@ -58,29 +52,43 @@ steps:
       devices=$(LD_LIBRARY_PATH="${WORKSPACE}/build-wire/install/lib" ./build-wire/install/bin/ucx_info -d)
       printf '%s\n' "${devices}"
       [[ "${devices}" == *"Transport: rc_mlx5"* ]]
-      for revision in v1.14.0:ae505b93582b10ce15c29a546a86c168e2e36216 v1.18.0:693d02837894b9c346c9f91b105e4aff6f259c09; do
-          IFS=: read -r tag revision <<< "${revision}"
-          git clone --depth 1 --branch "${tag}" https://github.com/openucx/ucx.git "${WORKSPACE}/repro-${tag}"
-          git -C "${WORKSPACE}/repro-${tag}" rev-parse HEAD
-          test "$(git -C "${WORKSPACE}/repro-${tag}" rev-parse HEAD)" = "${revision}"
-          build_wire "${WORKSPACE}/repro-${tag}"
-      done
+      legacy_source="${WORKSPACE}/repro-v1.14.0"
+      git clone --depth 1 --branch v1.14.0 https://github.com/openucx/ucx.git "${legacy_source}"
+      git -C "${legacy_source}" rev-parse HEAD
+      test "$(git -C "${legacy_source}" rev-parse HEAD)" = ae505b93582b10ce15c29a546a86c168e2e36216
+      build_wire "${legacy_source}"
       python3 - <<'PY'
       import os, signal, subprocess, time
       from contextlib import suppress
+      from itertools import product
       from pathlib import Path
       root = Path(os.environ["WORKSPACE"])
       current = root / "build-wire/install"
+      legacy = root / "repro-v1.14.0/build-wire/install"
+      setting = "UCX_RC_MLX5_DDP_ENABLE"
+      base_env = dict(os.environ, UCX_TLS="^sm")
+      base_env.pop("UCX_RC_DDP_ENABLE", None)
+      base_env.pop(setting, None)
+      modes = ("try", "n")
+      for mode in modes:
+          env = dict(base_env, LD_LIBRARY_PATH=str(current / "lib"))
+          env[setting] = mode
+          config = subprocess.check_output(
+              [str(current / "bin/ucx_info"), "-c"], env=env, text=True
+          )
+          expected = f"{setting}={mode}"
+          if expected not in config.splitlines():
+              raise RuntimeError(f"current build did not apply {expected}")
+          print("CURRENT CONFIG", expected, flush=True)
+
       failed = False
-      for index, (tag, tls, reverse) in enumerate((tag, tls, rev) for tag in ("v1.14.0", "v1.18.0") for tls in (None, "^sm") for rev in (False, True)):
-          legacy = root / ("repro-" + tag) / "build-wire/install"
+      for index, (reverse, mode) in enumerate(product((False, True), modes)):
           prefixes = (current, legacy) if reverse else (legacy, current)
-          env = os.environ.copy()
-          env.pop("UCX_TLS", None)
-          if tls is not None: env["UCX_TLS"] = tls
-          envs = [dict(env, LD_LIBRARY_PATH=str(prefix / "lib")) for prefix in prefixes]
+          envs = [dict(base_env, LD_LIBRARY_PATH=str(prefix / "lib")) for prefix in prefixes]
+          envs[prefixes.index(current)][setting] = mode
           exe, port, procs = str(legacy / "ucp_hworld"), 12200 + index, []
-          print("CASE", tag, tls or "default", "server/client", *prefixes, "port", port, flush=True)
+          print("CASE", "v1.14.0", "^sm", f"{setting}={mode}",
+                "server/client", *prefixes, "port", port, flush=True)
           try:
               for prefix, process_env in zip(prefixes, envs):
                   subprocess.run([str(prefix / "bin/ucx_info"), "-v"], env=process_env, check=True)
@@ -102,6 +110,7 @@ steps:
               for proc in procs:
                   with suppress(ProcessLookupError):
                       if proc.poll() is None: os.killpg(proc.pid, signal.SIGKILL)
-              for proc in procs: print("PEER", proc.pid, "RC", proc.wait(), flush=True)
+              for role, proc in zip(("server", "client"), procs):
+                  print("PEER", f"port={port}", role, proc.pid, "RC", proc.wait(), flush=True)
       raise SystemExit(1 if failed else 0)
       PY
