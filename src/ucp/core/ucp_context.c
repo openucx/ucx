@@ -2625,11 +2625,11 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
 static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
                                       unsigned max_rails)
 {
-    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+    UCS_STATIC_ASSERT(UCP_PROTO_MAX_LANES == UCP_MAX_LANES);
 
-    if (max_rails > max_lanes) {
-        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
-                  name, max_rails, max_lanes);
+    if (max_rails > UCP_MAX_LANES) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %d", env_prefix,
+                  name, max_rails, UCP_MAX_LANES);
         return 0;
     }
 
@@ -2653,7 +2653,7 @@ static int ucp_context_resolve_rails(const char *env_prefix, const char *name,
 
     if (UCS_CONFIG_UINT_ENUM_INDEX(rails->max_assigned_lanes) ==
         UCP_RAILS_AUTO) {
-        rails->max_assigned_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+        rails->max_assigned_lanes = UCP_MAX_LANES;
     } else if (!ucp_max_rails_config_valid(env_prefix, name,
                                            rails->max_assigned_lanes)) {
         return 0;
