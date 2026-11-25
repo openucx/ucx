@@ -310,8 +310,8 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put(
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get(
         uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
-        void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_device_completion_t *comp)
+        void *address, uint64_t remote_address, size_t length, uint64_t flags,
+        uct_device_completion_t *comp)
 {
     auto cuda_ipc_mem_element =
             reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(

@@ -391,7 +391,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_check_cqe(uct_rc_gdaki_dev_ep_t *ep,
  * Order the calling thread's later loads of RDMA read data after the CQE that
  * completed it. Every thread that consumes the data must call it.
  */
-UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_completion_acquire(ucs_status_t status)
+UCS_F_DEVICE ucs_status_t
+uct_rc_mlx5_gda_completion_acquire(ucs_status_t status)
 {
     if (status == UCS_OK) {
         doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_SYS>();

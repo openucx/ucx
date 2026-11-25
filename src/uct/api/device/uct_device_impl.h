@@ -145,14 +145,17 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
  * The @a flags parameter can be used to modify the behavior of the routine.
  *
  * @param [in]  device_ep       Device endpoint to be used for the operation.
- * @param [in]  dst_mem_elem    Local memory element representing the memory to receive the data.
- * @param [in]  mem_elem        Remote memory element representing the memory to read from.
+ * @param [in]  dst_mem_elem    Local memory element representing the memory
+ *                              to receive the data.
+ * @param [in]  mem_elem        Remote memory element representing the memory
+ *                              to read from.
  * @param [in]  address         Local virtual address to receive data to.
  * @param [in]  remote_address  Remote virtual address to read data from.
  * @param [in]  length          Length in bytes of the data to read.
  * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  flags           Flags to modify the function behavior.
- * @param [in]  comp            Completion object to track the progress of operation.
+ * @param [out] comp            Completion object to track the progress of
+ *                              operation.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted, use @ref
  *                              uct_device_ep_progress and @ref
