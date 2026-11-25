@@ -26,6 +26,10 @@
 
 #define UCT_MUSA_DMABUF_HANDLE_TYPE MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD
 
+/* Matches UCT_CUDA_SYS_DEVICE_NAME_PRIORITY so a GPU name replaces the
+ * bus-id label in ucx_info and the transport tables. */
+#define UCT_MUSA_SYS_DEVICE_NAME_PRIORITY 10
+
 static pthread_once_t uct_musa_base_once = PTHREAD_ONCE_INIT;
 static ucs_status_t  uct_musa_base_init_status;
 static unsigned      uct_musa_base_num_devices;
@@ -142,10 +146,9 @@ uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
         return status;
     }
 
-    /* Priority 10 matches cuda_util.c and rocm_base.c, so a GPU name replaces
-     * the bus-id label in ucx_info and the transport tables. */
     ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%u", device);
-    status = ucs_topo_sys_device_set_name(sys_dev, device_name, 10);
+    status = ucs_topo_sys_device_set_name(sys_dev, device_name,
+                                          UCT_MUSA_SYS_DEVICE_NAME_PRIORITY);
     if (status != UCS_OK) {
         return status;
     }
