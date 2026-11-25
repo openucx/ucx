@@ -1914,7 +1914,12 @@ typedef struct uct_ep_op_info {
      */
     uct_ep_operation_t operation;
 
-    /* Original completion. */
+    /**
+     * Original completion, when @ref UCT_EP_OP_INFO_FIELD_COMP is set. For an
+     * SGL batch, each reported element transfers one reference to the callback,
+     * which must complete it exactly once.
+     * The transport separately releases its original batch reference.
+     */
     uct_completion_t   *comp;
 
     union {

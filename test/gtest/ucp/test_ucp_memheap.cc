@@ -125,3 +125,47 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
         ASSERT_UCS_OK(status);
     }
 }
+
+void test_ucp_memheap::init_sgl_ctx(
+        sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+        ucs_memory_type_t src_type, ucs_memory_type_t dst_type, int ep_index)
+{
+    init_sgl_ctx(ctx, elem_sizes,
+                 std::vector<ucs_memory_type_t>(elem_sizes.size(), src_type),
+                 std::vector<ucs_memory_type_t>(elem_sizes.size(), dst_type),
+                 ep_index);
+}
+
+void test_ucp_memheap::init_sgl_ctx(
+        sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+        const std::vector<ucs_memory_type_t> &src_types,
+        const std::vector<ucs_memory_type_t> &dst_types, int ep_index)
+{
+    size_t num = elem_sizes.size();
+
+    ctx.rkey_handles.resize(num);
+    ctx.buffers.resize(num);
+    ctx.remote_addrs.resize(num);
+    ctx.lengths.resize(num);
+    ctx.memhs.resize(num);
+    ctx.rkeys.resize(num);
+    ctx.src.reserve(num);
+    ctx.dst.reserve(num);
+
+    for (size_t i = 0; i < num; i++) {
+        ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_types[i]);
+        ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_types[i]);
+    }
+
+    for (size_t i = 0; i < num; i++) {
+        ctx.dst[i].rkey(sender(), ctx.rkey_handles[i], ep_index);
+
+        ctx.buffers[i]      = ctx.src[i].ptr();
+        ctx.memhs[i]        = ctx.src[i].memh();
+        ctx.remote_addrs[i] = reinterpret_cast<uint64_t>(ctx.dst[i].ptr());
+        ctx.lengths[i]      = elem_sizes[i];
+        ctx.rkeys[i]        = ctx.rkey_handles[i];
+    }
+
+    ctx.remote_lengths = ctx.lengths;
+}

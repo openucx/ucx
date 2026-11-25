@@ -387,7 +387,8 @@ static void
 ucp_proto_put_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_put_offload_zcopy_probe_param(
-            init_params, 30, 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY);
+            init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+            UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -446,6 +447,21 @@ ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
             ucp_proto_request_zcopy_completion);
 }
 
+static ucs_status_t ucp_proto_put_sgl_offload_reset(ucp_request_t *req)
+{
+    if ((req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        (req->send.state.uct_comp.count != 0)) {
+        /* A pending request still owns its posting reference. Drop it and
+         * defer reset until every outstanding batch has completed. */
+        req->send.state.uct_comp.func =
+                ucp_proto_request_zcopy_restart_completion;
+        ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
+        return UCS_ERR_CANCELED;
+    }
+
+    return ucp_proto_offload_zcopy_reset(req);
+}
+
 ucp_proto_t ucp_put_sgl_offload_proto = {
     .name           = "put/sgl/offload",
     .desc           = "sgl",
@@ -456,13 +472,14 @@ ucp_proto_t ucp_put_sgl_offload_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_sgl_offload_progress},
     .abort          = ucp_proto_request_zcopy_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_sgl_offload_reset
 };
 
 static void
 ucp_proto_put_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0);
+    ucp_proto_put_offload_zcopy_probe_param(
+            init_params, 20, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -543,7 +560,7 @@ ucp_proto_t ucp_put_sgl_offload_sw_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_sgl_offload_sw_progress},
     .abort          = ucp_proto_request_zcopy_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_sgl_offload_reset
 };
 
 static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)

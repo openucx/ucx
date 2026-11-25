@@ -494,6 +494,13 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                       unsigned ep_init_flags,
                                       ucp_worker_cfg_index_t *cfg_index_p);
 
+
+ucs_status_t ucp_worker_reconfigure_rkey(ucp_worker_h worker,
+                                         ucp_worker_cfg_index_t rkey_cfg_index,
+                                         ucp_worker_cfg_index_t ep_cfg_index,
+                                         ucp_worker_cfg_index_t *new_cfg_index);
+
+
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,

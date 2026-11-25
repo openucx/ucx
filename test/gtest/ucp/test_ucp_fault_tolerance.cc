@@ -8,6 +8,8 @@
 #include <common/test_helpers.h>
 #include <algorithm>
 #include <string>
+#include <cerrno>
+#include <unistd.h>
 
 extern "C" {
 #include <ucp/core/ucp_am.h>
@@ -17,6 +19,8 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
+#include <ucp/proto/proto_multi.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/wireup/wireup_ep.h>
@@ -73,7 +77,7 @@ public:
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
-        // reduce UD testing time 
+        // reduce UD testing time
         modify_config("KEEPALIVE_INTERVAL", "0.3s");
     }
 
@@ -1035,7 +1039,8 @@ class test_ucp_flush_lane_recovery : public test_ucp_fault_tolerance {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_WAKEUP,
+                               TEST_OP_AM, "am");
     }
 
     static ucs::mock *m_flush_mock;
@@ -1221,6 +1226,47 @@ UCS_TEST_P(test_ucp_flush_lane_recovery, lane_replaced_during_inprogress_flush,
     }
 
     test_recovery(TEST_OP_AM);
+}
+
+UCS_TEST_P(test_ucp_flush_lane_recovery, recovery_deferral_wakeup)
+{
+    flush_workers();
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_worker_h worker = ep->worker;
+    ucp_request_param_t param = {};
+    ucp_ep_recovery_arg_t recovery = {};
+    ucs_status_ptr_t request;
+    uint64_t value;
+
+    ASSERT_GE(worker->eventfd, 0);
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        auto *saved = ep->ext->recovery_arg;
+        while (read(worker->eventfd, &value, sizeof(value)) > 0) {}
+        ep->ext->recovery_arg = &recovery;
+        request = ucp_ep_flush_nbx(ep, &param);
+        EXPECT_TRUE(UCS_PTR_IS_PTR(request));
+        if (UCS_PTR_IS_PTR(request)) {
+            auto *req = static_cast<ucp_request_t*>(request) - 1;
+            ucs_callbackq_elem_t restart = {};
+            EXPECT_EQ(sizeof(value), read(worker->eventfd, &value,
+                                           sizeof(value)));
+            ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
+                    [](const ucs_callbackq_elem_t *elem, void *arg) {
+                        *static_cast<ucs_callbackq_elem_t*>(arg) = *elem;
+                        return 1;
+                    }, &restart);
+            EXPECT_TRUE(restart.cb != nullptr);
+            if (restart.cb != nullptr) {
+                restart.cb(restart.arg);
+                errno = 0;
+                EXPECT_EQ(-1, read(worker->eventfd, &value, sizeof(value)));
+                EXPECT_EQ(EAGAIN, errno);
+            }
+        }
+        ep->ext->recovery_arg = saved;
+    }
+    EXPECT_UCS_OK(request_wait(request));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush_lane_recovery, shm_ib, "shm,ib")
@@ -1611,3 +1657,180 @@ UCS_TEST_P(test_ucp_fault_tolerance_teardown, inflight_am_force_close)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, tcp, "tcp")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rc, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_teardown, rcx, "rc_x")
+
+class test_ucp_sgl_restart : public test_ucp_fault_tolerance_tf {
+public:
+    static void get_base_variants(std::vector<ucp_test_variant> &variants)
+    {
+        const char *names[] = {"native_token", "native_sw", "sw_token",
+                               "sw_sw"};
+        for (unsigned i = 0; i < ucs_static_array_size(names); ++i) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA | UCP_FEATURE_AM,
+                                   i, names[i]);
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_memtypes(variants, get_base_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+    }
+
+    void init() override
+    {
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
+        modify_config("MULTI_LANE_MAX_RATIO", "1000");
+        modify_config("MAX_RMA_LANES", "2");
+        modify_config("RC_TX_QUEUE_LEN", "64", SETENV_IF_NOT_EXIST);
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("FAILOVER_MODE",
+                      (get_variant_value() & 1) ? "sw" : "token");
+        modify_config("PROTOS", get_variant_value() >= 2 ?
+                      "put/sgl/offload_sw,put/offload/zcopy,reconfig" :
+                      "put/sgl/offload,put/offload/zcopy,reconfig");
+        test_ucp_fault_tolerance_tf::init();
+        flush_workers();
+    }
+
+    enum scenario_t {
+        LANE_FAILURE, PENDING_FAILURE, FORCE_CLOSE, DEFERRED_RESET
+    };
+
+    void test_restart(scenario_t scenario)
+    {
+        const bool pending = scenario != LANE_FAILURE;
+        const bool close   = scenario == FORCE_CLOSE;
+        ucp_ep_h ep = get_ucp_ep_for_err_injection(FAILURE_SIDE_INITIATOR);
+        auto lanes = get_lanes(TEST_OP_PUT);
+        auto mem_type = static_cast<ucs_memory_type_t>(get_variant_value(1));
+        sgl_ctx ctx;
+        std::vector<size_t> sizes = pending ? std::vector<size_t>(512, 4096) :
+                std::vector<size_t>{4096, 4096, 12288, 8192, 20480};
+        test_ucp_memheap::init_sgl_ctx(ctx, sizes, mem_type, mem_type,
+                                     INJECTED_EP_INDEX);
+#if ENABLE_PARAMS_CHECK
+        ASSERT_EQ(ep, ctx.rkeys[0]->ep);
+#endif
+        for (size_t i = 0; i < sizes.size(); ++i) {
+            ctx.src[i].pattern_fill(i + 1);
+            ctx.dst[i].pattern_fill(0);
+        }
+        ctx.lengths[1] = ctx.remote_lengths[1] = 0;
+        auto local = make_local_sgl(ctx, LOCAL_MASK_DEFAULT |
+                (pending ? 0 : UCP_DT_LOCAL_SGL_FIELD_MEMHS));
+        auto remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        auto param  = make_sgl_param(&remote, sizes.size(),
+                UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_USER_DATA |
+                UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+        unsigned completions = 0;
+        param.user_data     = &completions;
+        param.cb.send       = [](void*, ucs_status_t, void *arg) {
+            ++*static_cast<unsigned*>(arg);
+        };
+        auto generation = ep->ext->lane_generation;
+        ASSERT_UCS_OK(uct_ep_invalidate(ucp_ep_get_lane(ep, lanes[0]), nullptr));
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        auto request = ucp_put_nbx(ep, &local, sizes.size(),
+                                   UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                   &param);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(request)) <<
+                ucs_status_string(UCS_PTR_STATUS(request));
+        auto *req = static_cast<ucp_request_t*>(request) - 1;
+        ASSERT_STREQ(get_variant_value() >= 2 ? "put/sgl/offload_sw" :
+                                              "put/sgl/offload",
+                     req->send.proto_config->proto->name);
+        const auto *mpriv = static_cast<const ucp_proto_multi_priv_t*>(
+                req->send.proto_config->priv);
+        ASSERT_EQ(2u, mpriv->num_lanes);
+        auto md0 = ucp_ep_md_index(ep, mpriv->lanes[0].super.lane);
+        auto md1 = ucp_ep_md_index(ep, mpriv->lanes[1].super.lane);
+        EXPECT_NE(md0, md1);
+        EXPECT_NE(0u, mpriv->lane_map & UCS_BIT(lanes[0]));
+        EXPECT_EQ(mem_type, req->send.state.dt_iter.mem_info.type);
+        UCS_TEST_MESSAGE << "SGL_COVERAGE protocol=" <<
+                req->send.proto_config->proto->name << " memory=" <<
+                ucs_memory_type_names[mem_type] << " lanes=" <<
+                unsigned(mpriv->num_lanes) << " md0=" << unsigned(md0) <<
+                " md1=" << unsigned(md1);
+        if (pending) {
+            ASSERT_NE(UCP_NULL_LANE, req->send.lane);
+            EXPECT_LT(req->send.state.dt_iter.offset, sizes.size());
+            EXPECT_GT(req->send.state.uct_comp.count, 1);
+        }
+        if (scenario == DEFERRED_RESET) {
+            /* Model a posted batch whose completion arrives after recovery. */
+            ++req->send.state.uct_comp.count;
+            auto *memhs = req->send.state.dt_iter.type.sgl.memhs;
+            uct_ep_pending_purge(ucp_ep_get_lane(ep, req->send.lane),
+                    [](uct_pending_req_t *pending, void *arg) {
+                        EXPECT_EQ(static_cast<uct_pending_req_t*>(arg), pending);
+                    }, &req->send.uct);
+            auto status = req->send.proto_config->proto->reset(req);
+            EXPECT_EQ(UCS_ERR_CANCELED, status);
+            if (status != UCS_ERR_CANCELED) {
+                /* Drain the posting reference even when reset is broken. */
+                uct_invoke_completion(&req->send.state.uct_comp,
+                                     UCS_ERR_CANCELED);
+            }
+            wait_for_cond([ep, generation]() {
+                return (ep->ext->lane_generation != generation) &&
+                       (ucp_ep_get_failed_lanes(ep) == 0) &&
+                       (ucp_ep_recovery_arg(ep) == nullptr);
+            }, [this]() { short_progress_loop(); });
+            EXPECT_EQ(0u, completions);
+            EXPECT_GT(req->send.state.uct_comp.count, 0);
+            EXPECT_EQ(memhs, req->send.state.dt_iter.type.sgl.memhs);
+            if (completions == 0) {
+                uct_invoke_completion(&req->send.state.uct_comp, UCS_OK);
+            }
+        }
+        if (close) {
+            request_wait(sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                                 UCP_EP_CLOSE_FLAG_FORCE));
+        } else {
+            /* NIXL posts a flush immediately after the SGL and sends its
+             * notification from the flush callback. */
+            ucp_request_param_t flush_param = {};
+            request_wait(ucp_ep_flush_nbx(ep, &flush_param));
+            for (size_t i = 0; i < sizes.size(); ++i) {
+                ctx.dst[i].pattern_check(i == 1 ? 0 : i + 1);
+            }
+        }
+        auto status = request_progress(request, entities());
+        if (status == UCS_INPROGRESS) {
+            request_wait(sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                                 UCP_EP_CLOSE_FLAG_FORCE));
+        }
+        if (!close && (status != UCS_INPROGRESS)) {
+            EXPECT_NE(generation, ep->ext->lane_generation);
+            EXPECT_EQ(0u, ucp_ep_get_failed_lanes(ep));
+            EXPECT_EQ(nullptr, ucp_ep_recovery_arg(ep));
+            UCS_TEST_MESSAGE << "SGL_RECOVERED generation=" << generation <<
+                    "->" << ep->ext->lane_generation;
+        }
+        ucp_request_release(request);
+        ASSERT_NE(UCS_INPROGRESS, status);
+        ASSERT_EQ(1u, completions);
+        EXPECT_EQ(close, UCS_STATUS_IS_ERR(status)) <<
+                ucs_status_string(status);
+    }
+};
+
+UCS_TEST_P(test_ucp_sgl_restart, lane_failure) {
+    test_restart(LANE_FAILURE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, pending_failure) {
+    test_restart(PENDING_FAILURE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, force_close) {
+    test_restart(FORCE_CLOSE);
+}
+
+UCS_TEST_P(test_ucp_sgl_restart, reset_waits_for_completion) {
+    test_restart(DEFERRED_RESET);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sgl_restart, rcx, "rc_x")

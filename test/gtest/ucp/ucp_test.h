@@ -400,7 +400,8 @@ protected:
         virtual ~mapped_buffer();
 
         ucs::handle<ucp_rkey_h> rkey(const entity& entity) const;
-        void rkey(const entity& entity, ucs::handle<ucp_rkey_h> &rkey) const;
+        void rkey(const entity& entity, ucs::handle<ucp_rkey_h> &rkey,
+                  int ep_index = 0) const;
 
         ucp_mem_h memh() const;
 
