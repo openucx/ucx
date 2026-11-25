@@ -205,11 +205,13 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 static void
 ucp_proto_get_offload_zcopy_probe_param(
         const ucp_proto_init_params_t *init_params, unsigned cfg_priority,
-        uint64_t extra_flags, uint64_t tl_v2_cap_flags, int is_sgl)
+        uint64_t extra_flags, uint64_t tl_v2_cap_flags)
 {
     ucp_context_t *context               = init_params->worker->context;
-    ptrdiff_t min_zcopy_offs             = ucs_offsetof(uct_iface_attr_t,
-                                                        cap.get.min_zcopy);
+    ptrdiff_t min_frag_offs              =
+            (extra_flags & UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG) ?
+            ucs_offsetof(uct_iface_attr_t, cap.get.min_zcopy) :
+            UCP_PROTO_COMMON_OFFSET_INVALID;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -219,8 +221,7 @@ ucp_proto_get_offload_zcopy_probe_param(
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
-        .super.min_frag_offs = is_sgl ? UCP_PROTO_COMMON_OFFSET_INVALID :
-                               min_zcopy_offs,
+        .super.min_frag_offs = min_frag_offs,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.get.max_iov),
@@ -263,7 +264,7 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
             init_params, 30,
             UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
                     UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
-            0, 0);
+            0);
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
@@ -289,7 +290,7 @@ static void
 ucp_proto_get_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_get_offload_zcopy_probe_param(init_params, 30, 0,
-                                            UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY, 1);
+                                            UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY);
 }
 
 /* Check whether an element is too short to be read by a lane of the protocol.
@@ -376,7 +377,7 @@ ucp_proto_t ucp_get_sgl_offload_proto = {
 static void
 ucp_proto_get_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_get_offload_zcopy_probe_param(init_params, 20, 0, 0, 1);
+    ucp_proto_get_offload_zcopy_probe_param(init_params, 20, 0, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
