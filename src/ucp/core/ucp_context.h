@@ -83,13 +83,13 @@ ucp_reg_devices_count(unsigned long max_hca_per_gpu)
 }
 
 
-/* Multi-lane limits of an operation */
+/* Lane limits of a multi-lane operation */
 typedef struct {
     /* Limit for buffers that the assigned limit doesn't cover */
     unsigned max_lanes;
     /* Limit for GPU buffers with NICs from the GPU-NIC assignment */
     unsigned max_assigned_lanes;
-} ucp_context_rails_config_t;
+} ucp_max_rails_t;
 
 
 typedef struct ucp_context_config {
@@ -166,9 +166,9 @@ typedef struct ucp_context_config {
     /** Eager-am multi-lane support */
     unsigned                               max_eager_lanes;
     /** Rendezvous multi-lane limits */
-    ucp_context_rails_config_t             max_rndv_rails;
+    ucp_max_rails_t                        max_rndv_rails;
     /** RMA multi-lane limits */
-    ucp_context_rails_config_t             max_rma_rails;
+    ucp_max_rails_t                        max_rma_rails;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;

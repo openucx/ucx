@@ -140,13 +140,13 @@ static const char *ucp_rails_auto_names[] = {
     UCS_CONFIG_TYPE_KEY_VALUE( \
             UCS_CONFIG_TYPE_UINT_ENUM(ucp_rails_auto_names), \
             {"default", "limit for buffers that 'assigned' doesn't cover", \
-             ucs_offsetof(ucp_context_rails_config_t, max_lanes)}, \
+             ucs_offsetof(ucp_max_rails_t, max_lanes)}, \
             {"assigned", \
              "limit for GPU buffers whose GPU has NICs assigned by " \
              "UCX_GPU_NIC_ASSIGNMENT_MODE; 'auto' lifts the limit, so these " \
              "buffers use every lane left after the assignment removes the " \
              "lanes on other NICs", \
-             ucs_offsetof(ucp_context_rails_config_t, max_assigned_lanes)}, \
+             ucs_offsetof(ucp_max_rails_t, max_assigned_lanes)}, \
             {NULL})
 
 static const char *ucp_rndv_modes[] = {
@@ -2637,7 +2637,7 @@ static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
 }
 
 static int ucp_context_resolve_rails(const char *env_prefix, const char *name,
-                                     ucp_context_rails_config_t *rails)
+                                     ucp_max_rails_t *rails)
 {
     if (UCS_CONFIG_UINT_ENUM_INDEX(rails->max_lanes) == UCP_RAILS_AUTO) {
         ucs_error("%s%s: 'auto' is supported only for 'assigned', set "
