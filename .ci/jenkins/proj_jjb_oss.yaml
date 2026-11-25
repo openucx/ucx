@@ -71,6 +71,9 @@
           keep-system-variables: true
           properties-content: |
             jjb_proj={jjb_proj}
+      # No pipeline state save on every log chunk; a build is not resumed after a controller crash
+      - speed-durability:
+          hint: performance-optimized
     description: "{jjb_description}"
     concurrent: true
     sandbox: false
