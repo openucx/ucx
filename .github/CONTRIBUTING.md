@@ -1,5 +1,5 @@
 
-1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
+1. Please sign the [UCX contributors agreement](https://github.com/openucx/ucx/wiki/Guidance-for-contributors).
    Once it is countersigned, a maintainer adds the email named on it, or your
    company's email domain for a corporate CLA, to the CLA list; the `CLA`
    check on your pull request fails until then. The author and committer
