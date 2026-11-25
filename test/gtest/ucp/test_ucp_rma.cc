@@ -1495,9 +1495,11 @@ protected:
         ctx.src.reserve(num);
         ctx.dst.reserve(num);
 
+        /* A zero-length element still needs a buffer, to have a valid rkey */
         for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_mem_type());
-            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_mem_type());
+            size_t alloc_size = std::max<size_t>(elem_sizes[i], 1);
+            ctx.src.emplace_back(alloc_size, sender(), 0, src_mem_type());
+            ctx.dst.emplace_back(alloc_size, receiver(), 0, dst_mem_type());
         }
 
         for (size_t i = 0; i < num; i++) {
@@ -2004,6 +2006,9 @@ UCS_TEST_P(test_ucp_rma_sgl_data, short_elements) {
     test_sgl({1, 2, 3, 4});
     test_sgl({4 * UCS_KBYTE, 5, 4 * UCS_KBYTE});
     test_sgl({4 * UCS_KBYTE, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 9});
+    test_sgl({0, 7, 0, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 0});
+    test_sgl({64, 65, 4 * UCS_KBYTE, 64}, false);
+    test_sgl({1, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 2}, true, true);
 }
 
 /* Fragments of long elements which are shorter than the minimal fragment of a
