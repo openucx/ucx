@@ -1121,7 +1121,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address, addr_indices,
                                    &am_need_flush);
     if (status != UCS_OK) {
-        goto out_delete_ep;
+        goto out_cleanup_lanes;
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
@@ -1141,7 +1141,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
 out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
-out_delete_ep:
     ucp_ep_delete(reply_ep);
 }
 

@@ -2,7 +2,7 @@
 
 ## v{RELEASE} release
 
-* Download [TGZ](https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}.tar.gz) [SRPM](https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}-1.fc30.src.rpm)
+* Download [TGZ](https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}.tar.gz) [SRPM](https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}-1.el7.src.rpm)
 * [Release page](https://github.com/openucx/ucx/releases/tag/v{RELEASE})
 * [Running](running)
 

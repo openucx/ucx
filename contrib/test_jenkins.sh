@@ -632,6 +632,8 @@ run_ucx_perftest() {
 			"$ucx_perftest" -t tag_lat -m host:0 -l
 		expect_failure "device API is not supported for host" \
 			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+		expect_failure "option requires an argument" \
+			"$ucx_perftest" -t tag_lat -l -e
 	fi
 
 	# IP ifaces
@@ -1319,10 +1321,13 @@ run_rc_verbs_nosrq_gtest() {
 	gtest_filter+=':-*test_rc_no_srq*:*test_rc_srq_select*'
 
 	echo "==== Running rc_verbs gtest with SRQ disabled ===="
+	# Use finite RNR retries so that persistent RNR fails with an explicit
+	# retry-exceeded error instead of hanging until the watchdog aborts.
 	$TIMEOUT env \
 		UCX_RC_VERBS_SRQ_ENABLE=n \
 		UCX_RC_VERBS_RX_CQ_LEN=262144 \
 		UCX_RC_VERBS_RX_MAX_WR=64 \
+		UCX_RC_VERBS_RNR_RETRY_COUNT=6 \
 		GTEST_FILTER="$gtest_filter" \
 		make -C test/gtest test
 }

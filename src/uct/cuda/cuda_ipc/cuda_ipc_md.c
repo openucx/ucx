@@ -24,6 +24,8 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/api/device/uct_device_types.h>
 
+#include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <string.h>
 #include <sys/types.h>
@@ -37,10 +39,17 @@
 #define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
     "/dev/nvidia-caps-imex-channels"
 
+/* Multiplier used to derive an emulated host id from the configured host */
+#define UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX 0x9E3779B97F4A7C15ull
+
+/* IMEX channel reported when the NVLink domain is emulated without one */
+#define UCT_CUDA_IPC_NVLINK_DOMAIN_IMEX_CHANNEL 0
+
 typedef struct {
-    const void *mapped_addr;
-    CUdevice   cu_dev;
-    int        free_unused_mapping;
+    const void                  *mapped_addr;
+    CUdevice                    cu_dev;
+    uct_cuda_ipc_cache_region_t *cache_region;
+    int                         free_unused_mapping;
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
@@ -55,6 +64,28 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"ENABLE_MNNVL", "try",
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
+
+    {"NVLINK_DOMAIN", "auto",
+     "NVLink domain used to check multi-node NVLINK reachability.\n"
+     " auto              - fabric cluster UUID and clique ID from NVML.\n"
+     " <domain>[:<host>] - emulate host <host> in NVLink domain <domain>:\n"
+     "                     enable multi-node NVLINK and fabric support even\n"
+     "                     without a GPU fabric or an IMEX channel (then\n"
+     "                     IMEX channel 0 is reported), and treat peers\n"
+     "                     configured with another <host> as different\n"
+     "                     hosts, also when they run on the same machine.\n"
+     "                     <host> defaults to <domain>.\n"
+     "                     Values are decimal, hex (0x...) or octal (0...),\n"
+     "                     and <host> must be smaller than ULONG_MAX.\n"
+     "                     Only reachability is emulated: memory handles\n"
+     "                     still use the real host, so an emulated remote\n"
+     "                     host on the same machine stays local for the\n"
+     "                     data path. Intended for testing the fallback to\n"
+     "                     other transports.\n"
+     "                     Ignored if ENABLE_MNNVL=n, which disables\n"
+     "                     multi-node NVLINK altogether.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
+     UCS_CONFIG_TYPE_STRING},
 
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
@@ -449,6 +480,10 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
     uct_cuda_ipc_extended_rkey_t *ext_rkey;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    const uct_cuda_ipc_vmm_multi_meta_t *meta;
+    uct_cuda_ipc_vmm_multi_range_t range;
+#endif
 
     ucs_list_for_each(key, &memh->list, link) {
         if (((uintptr_t)address >= key->d_bptr) &&
@@ -463,15 +498,37 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
     }
 
 found:
-    ucs_assertv(((uintptr_t)address + length) <= (key->d_bptr + key->b_len),
-                "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
-                (uintptr_t)address + length, key->d_bptr, key->d_bptr +
-                key->b_len);
-
     packed->pid    = memh->pid;
     packed->ph     = key->ph;
     packed->d_bptr = key->d_bptr;
     packed->b_len  = key->b_len;
+
+#if HAVE_CUDA_FABRIC
+    if ((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) &&
+        (((uintptr_t)address + length) > (key->d_bptr + key->b_len))) {
+        status = uct_cuda_ipc_mkey_pack_vmm_multi_chunk(memh, address, length,
+                                                        &meta, &range);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        packed->ph.handle_type          =
+                UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI;
+        packed->ph.handle.fabric_handle = meta->fabric_handle;
+        memset(&packed->ph.ptr, 0, sizeof(packed->ph.ptr));
+        packed->ph.vmm_multi            = range.info;
+        packed->ph.pool                 = NULL;
+        packed->ph.buffer_id            = meta->buffer_id;
+        packed->d_bptr                  = range.d_bptr;
+        packed->b_len                   = range.b_len;
+    }
+#endif
+
+    ucs_assertv(((uintptr_t)address + length) <=
+                        (packed->d_bptr + packed->b_len),
+                "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
+                (uintptr_t)address + length, packed->d_bptr,
+                packed->d_bptr + packed->b_len);
 
     if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
         ext_rkey         = (uct_cuda_ipc_extended_rkey_t*)packed;
@@ -499,6 +556,7 @@ uct_cuda_ipc_create_rkey_handle(uint64_t flags)
 
     rkey_handle->mapped_addr         = NULL;
     rkey_handle->cu_dev              = CU_DEVICE_INVALID;
+    rkey_handle->cache_region        = NULL;
     rkey_handle->free_unused_mapping = !!(
             flags & UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING);
     return rkey_handle;
@@ -633,6 +691,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
         status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
+                                            &rkey_handle->cache_region,
                                             UCS_LOG_LEVEL_DEBUG);
         if (status == UCS_OK) {
             rkey_handle->mapped_addr = mapped_addr;
@@ -670,6 +729,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
     flags   = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0);
+
+#if HAVE_CUDA_FABRIC
+    if ((packed->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) &&
+        !uct_cuda_ipc_vmm_multi_is_supported(&packed->ph.vmm_multi)) {
+        ucs_debug("unsupported multi-chunk VMM key: version %u handle type %u",
+                  packed->ph.vmm_multi.version,
+                  packed->ph.vmm_multi.handle_type);
+        return UCS_ERR_UNREACHABLE;
+    }
+#endif
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
@@ -730,6 +799,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
                                                       const void *handle)
 {
     const uct_cuda_ipc_rkey_handle_t *rkey_handle = handle;
+    uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_mapping_t mapping;
 
     if ((uct_rkey == 0) || (rkey_handle == NULL)) {
@@ -741,9 +811,22 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
         return;
     }
 
-    uct_cuda_ipc_mapping_init(&mapping,
-                              (uct_cuda_ipc_extended_rkey_t*)uct_rkey,
-                              rkey_handle->mapped_addr);
+    extended_rkey = (uct_cuda_ipc_extended_rkey_t*)uct_rkey;
+
+#if HAVE_CUDA_FABRIC
+    /* Views are not in the single-allocation page table, and a view at the
+     * key's base may belong to another metadata buffer */
+    if ((rkey_handle->mapped_addr == NULL) &&
+        (extended_rkey->super.ph.handle_type ==
+         UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI)) {
+        uct_cuda_ipc_unmap_unused_view(extended_rkey, rkey_handle->cu_dev);
+        return;
+    }
+#endif
+
+    uct_cuda_ipc_mapping_init(&mapping, extended_rkey,
+                              rkey_handle->mapped_addr,
+                              rkey_handle->cache_region);
     uct_cuda_ipc_unmap_memhandle(&mapping, rkey_handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache &&
                                          !rkey_handle->free_unused_mapping);
@@ -827,11 +910,6 @@ static void uct_cuda_ipc_md_init_mnnvl(uct_cuda_ipc_md_t *md,
         goto out;
     }
 
-    if (mnnvl_enable == UCS_NO) {
-        mnnvl_supported = 0;
-        goto out;
-    }
-
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto out_not_supported;
@@ -880,6 +958,79 @@ out:
     }
 }
 
+/* Parse an unsigned number (decimal, 0x hex or 0 octal), rejecting a sign,
+ * whitespace and overflow, which strtoul() would accept. *end_p is set after
+ * the number. */
+static ucs_status_t
+uct_cuda_ipc_md_parse_ulong(const char *str, unsigned long *value_p,
+                            char **end_p)
+{
+    if (!isdigit((unsigned char)*str)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    errno    = 0;
+    *value_p = strtoul(str, end_p, 0);
+    return (errno == 0) ? UCS_OK : UCS_ERR_INVALID_PARAM;
+}
+
+/* Parse "<domain>[:<host>]", <host> defaults to <domain> */
+static ucs_status_t
+uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
+                                    unsigned long *host_p)
+{
+    char *end;
+
+    if (uct_cuda_ipc_md_parse_ulong(str, domain_p, &end) != UCS_OK) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (*end == '\0') {
+        *host_p = *domain_p;
+        return UCS_OK;
+    }
+
+    if ((*end != ':') ||
+        (uct_cuda_ipc_md_parse_ulong(end + 1, host_p, &end) != UCS_OK)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return (*end == '\0') ? UCS_OK : UCS_ERR_INVALID_PARAM;
+}
+
+/* Enable MNNVL and set the NVLink domain and host of the MD from the
+ * "<domain>[:<host>]" configuration, instead of the GPU fabric info */
+static ucs_status_t
+uct_cuda_ipc_md_emulate_nvlink_domain(uct_cuda_ipc_md_t *md,
+                                      const char *nvlink_domain)
+{
+    unsigned long domain, host;
+    ucs_status_t status;
+
+    status = uct_cuda_ipc_md_parse_nvlink_domain(nvlink_domain, &domain,
+                                                 &host);
+    /* Host ULONG_MAX would wrap (host + 1) in the host mix to 0 */
+    if ((status != UCS_OK) || (host == ULONG_MAX)) {
+        ucs_error("invalid NVLink domain '%s', expected "
+                  "\"<domain>[:<host>]\" or \"auto\"", nvlink_domain);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    md->nvlink_domain = domain;
+    md->enable_mnnvl  = 1;
+    /* Processes with different emulated hosts look like different hosts to
+     * each other, while real hosts stay distinguishable */
+    md->system_uuid  ^= (host + 1) * UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
+    /* Peers on other hosts are reachable only with fabric support */
+    if (!uct_cuda_ipc_md_fabric_supported(md)) {
+        md->imex_channel = UCT_CUDA_IPC_NVLINK_DOMAIN_IMEX_CHANNEL;
+    }
+
+    ucs_diag("emulating host %lu in NVLink domain %lu, IMEX channel %u", host,
+             domain, md->imex_channel);
+    return UCS_OK;
+}
+
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -894,6 +1045,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     uct_cuda_ipc_md_device_mem_element_t *cuda_ipc_md_mem_element =
             (uct_cuda_ipc_md_device_mem_element_t*)mem_elem;
     uct_cuda_ipc_mem_elem_release_handle_t *release_handle;
+    uct_cuda_ipc_cache_region_t *cache_region;
     ucs_status_t status;
     CUdevice cuda_device;
     void *mapped_addr;
@@ -909,7 +1061,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     }
 
     status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
-                                        UCS_LOG_LEVEL_ERROR);
+                                        &cache_region, UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_free(release_handle);
         return status;
@@ -919,7 +1071,7 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
             UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
 
     uct_cuda_ipc_mapping_init(&release_handle->mapping, &key->super,
-                              mapped_addr);
+                              mapped_addr, cache_region);
     release_handle->cu_dev = cuda_device;
     *release_handle_p      = release_handle;
 
@@ -958,6 +1110,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+    ucs_status_t status;
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -979,6 +1132,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
     md->imex_channel    = uct_cuda_ipc_md_get_imex_channel();
+    md->system_uuid     = ucs_get_system_id();
     if (uct_cuda_ipc_md_fabric_supported(md)) {
         ucs_debug("CUDA fabric IPC support is enabled, IMEX channel %u",
                   md->imex_channel);
@@ -986,7 +1140,19 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         ucs_debug("CUDA fabric IPC support is disabled");
     }
 
-    uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+    if (ipc_config->enable_mnnvl == UCS_NO) {
+        ucs_debug("multi-node NVLINK support is disabled");
+    } else if (!strcasecmp(ipc_config->nvlink_domain, UCS_VALUE_AUTO_STR)) {
+        uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+    } else {
+        status = uct_cuda_ipc_md_emulate_nvlink_domain(
+                md, ipc_config->nvlink_domain);
+        if (status != UCS_OK) {
+            ucs_free(md);
+            return status;
+        }
+    }
+
 #if HAVE_DECL_SYS_PIDFD_GETFD
     /* Peers import POSIX FD handles with pidfd_getfd(), which requires them to
      * pass the ptrace access check against this process. Export the handles
@@ -999,7 +1165,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
 
-    *md_p                 = &md->super;
+    *md_p = &md->super;
 
     return UCS_OK;
 }
@@ -1021,7 +1187,8 @@ uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey, void *handle,
     return uct_cuda_ipc_map_remote_addr(extended_rkey, remote_addr,
                                         rkey_handle->cu_dev,
                                         &rkey_handle->mapped_addr,
-                                        local_addr_p);
+                                        local_addr_p,
+                                        &rkey_handle->cache_region);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {

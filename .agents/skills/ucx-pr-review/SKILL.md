@@ -1,137 +1,112 @@
 ---
 name: ucx-pr-review
-description: Review UCX pull requests with the project review style, GitHub workflow, and reviewer checklist. Use when asked to review a UCX PR, inspect a GitHub pull request, draft review comments, triage PR scope, or apply REVIEW.md guidance.
+description: Review a UCX pull request diff that an automated review runner supplies, and return findings for the runner to post. Uses the REVIEW.md style and checklist. Use only when an automated review runner supplies the diff and posts the findings.
+metadata:
+  resources:
+    - REVIEW.md
+    - AGENTS.md
+    - src/AGENTS.md
+    - test/AGENTS.md
+    - docs/CodeStyle.md
+    - docs/LoggingStyle.md
+    - docs/OptimizationStyle.md
 ---
 
 # UCX PR Review
 
 ## Overview
 
-Use this skill to review UCX pull requests. It layers GitHub operating
-procedure on top of the repository review checklist in `REVIEW.md`.
+Review the supplied UCX pull request diff and return review findings. The
+runner checks out the repository, supplies the review input, and posts the
+review. Use only the repository tools that are available to you.
 
 ## Sources
 
-Read these files before making review claims:
+The runner supplies the files in `metadata.resources` as resources. Before you
+make a review claim, follow their references to the guides and style docs.
 
-- `REVIEW.md`; it points to the repository guides and style docs to load for
-  changed paths.
+## Review Workflow
 
-## Code Checkout
-
-Use a separate shallow clone as reference for surrounding code and related
-context from other files in the codebase; do not disturb the user's worktree.
-
-```sh
-user_name=$(id -un)
-repo_dir=$(mktemp -d "${TMPDIR%/}/ucx-pr-${user_name}-<PR>.XXXXXX")
-git clone --depth=1 --branch <base-ref> https://github.com/openucx/ucx.git "$repo_dir"
-git -C "$repo_dir" fetch --depth=1 origin pull/<PR>/head:pr-<PR>
-git -C "$repo_dir" checkout pr-<PR>
-git -C "$repo_dir" rev-parse HEAD
-```
-
-## GitHub Workflow
-
-1. Identify the base branch, changed files, added/deleted line count, CI state,
-   and author intent from the PR title and description.
-2. Treat the GitHub/app/`gh` PR diff as authoritative for changed files and
-   review line anchors.
-3. Apply the PR size and scope rules from `REVIEW.md`.
-4. Apply the risk order and checklist from `REVIEW.md`.
-5. Run the candidate-comment gate below before keeping any finding.
-6. Run the review-submission self-check before returning or posting the review.
-
-If the `gh` CLI is available and the user permits network access, useful
-commands are:
-
-```sh
-gh pr view <PR> --json title,body,baseRefName,headRefName,additions,deletions,changedFiles,comments,latestReviews,files,statusCheckRollup
-gh pr diff <PR>
-gh pr checks <PR>
-```
-
-## Prior Discussion
-
-Before reviewing the diff and again immediately before submitting, fetch the
-complete paginated history of inline comments, top-level comments, reviews, and
-replies; `gh pr view` alone does not provide it:
-
-```sh
-gh api --paginate repos/<owner>/<repo>/pulls/<PR>/comments
-gh api --paginate repos/<owner>/<repo>/issues/<PR>/comments
-gh api --paginate repos/<owner>/<repo>/pulls/<PR>/reviews
-```
-
-If any fetch fails, do not submit findings; report that duplicate detection
-could not be completed. Build or update one ledger, grouping inline replies by
-`in_reply_to_id`. Compare every candidate comment with the full conversation by
-meaning, not exact wording or line. Discard it if the same concern, question,
-requested change, explanation, or intent is already present, or if a reply
-already answers it, including when the code moved in a newer revision.
-
-If the same issue remains unresolved, add a `+1` reaction instead of opening a
-new thread. For inline PR review comments, use:
-
-```sh
-gh api -X POST repos/<owner>/<repo>/pulls/comments/<comment-id>/reactions \
-  -H "Accept: application/vnd.github+json" \
-  -f content="+1"
-```
-
-For top-level PR conversation comments, use
-`repos/<owner>/<repo>/issues/comments/<comment-id>/reactions` instead. If new
-evidence changes an existing concern, reply in its thread. If the author gave a
-good explanation, move on unless the current code or CI contradicts it.
+1. Use the supplied diff as the source of truth for the proposed changes and
+   for line anchors. A file that you read with a repository tool can show the
+   code before the change. If a file read and the diff do not agree, use the
+   diff.
+2. Before you report a finding in a file, apply the `AGENTS.md` discovery
+   rule from the root `AGENTS.md` to that file: read its guides with
+   `read_file`. Do not read a guide again if a resource already supplies it.
+   If the diff changes a guide, use the guide as the diff changes it. A
+   folder without an `AGENTS.md` is not a runtime issue, so do not report it
+   as one.
+3. Before you report a finding, examine the related code with the repository
+   tools. Examine definitions, callers, state transitions, cleanup paths,
+   tests, and build metadata.
+4. If a tool returns only part of a file, use `search_code` to find the code
+   that you need and its line numbers.
+5. Use only the evidence that you receive, and do not claim results that the
+   evidence does not show.
+6. Apply the PR size and scope rules from `REVIEW.md`.
+7. Apply the risk order and checklist from `REVIEW.md`.
+8. Apply the candidate comment gate to each candidate finding.
 
 ## Candidate Comment Gate
 
-Keep a finding only after verifying all of these:
+Keep a finding only if all of these are true:
 
-- The issue is still present in the latest diff.
-- The comment is anchored to a changed line, or clearly belongs as PR-level
-  feedback.
-- The impact is concrete.
-- The severity matches `REVIEW.md`.
+- The supplied changes introduce or expose the issue, and the latest diff
+  still contains it.
+- The related definitions, callers, and existing safeguards do not make the
+  concern invalid.
+- The concern does not break the "Don't pile on" rule in `REVIEW.md`. Compare
+  it with the earlier review findings and the PR discussion that you receive,
+  by meaning, not by exact words or line.
 
-## Review Submission
+## Review Process Report
 
-- Submit reviews explicitly with `gh`, not the GitHub app connector.
-- Use the tone, severity, and length rules from `REVIEW.md`.
-- Accumulate all inline comments and submit them in one review submission. Do
-  not submit one GitHub review per comment.
-- Leave the review body empty unless there is a real PR-level concern.
-- Do not generate boilerplate review summaries, finding counts, severity
-  counts, or `Code Review` headings.
-- Remove comments that are only interesting observations and any finding whose
-  impact is unclear.
-- Scrub comments for `REVIEW.md` style violations such as severity headings,
-  emoji labels, `[P*]` labels, and uppercase severity labels.
-- Check every inline comment for suggestion eligibility. If the requested fix is
-  an obvious, small, deterministic replacement of changed lines, use a GitHub
-  suggestion block instead of prose-only feedback; add at most one short
-  justification sentence after it.
-- Downgrade uncertain blockers to questions or no-prefix comments.
-- Use `COMMENT` mode when all comments are minor or explicitly non-blocking.
-- Use `REQUEST_CHANGES` mode when there are blocker or other must-fix findings.
-- Use `APPROVE` mode when there are no comments.
-- For review-body-only submissions, use `gh pr review <PR> --repo <owner>/<repo>`
-  with exactly one of `--comment`, `--request-changes`, or `--approve`; pass
-  non-empty review text with `--body-file <file>` to avoid shell quoting issues.
-- For inline comments, create one review through `gh api` and the GitHub
-  `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews` endpoint. Put the
-  event (`COMMENT`, `REQUEST_CHANGES`, or `APPROVE`), optional body, and all
-  inline comments in a temporary JSON file and submit it with:
+Add a review process report when something in the review did not work as
+expected. The report makes the problem visible, so that it does not stay
+hidden.
 
-```sh
-gh api -X POST repos/<owner>/<repo>/pulls/<PR>/reviews --input <review-json>
-```
+Add the report if one of these occurred and left a part of the review
+unchecked:
+
+- A tool call or another action failed, timed out, or returned output that
+  was cut.
+- A file or a resource that you needed did not exist, could not be read, or
+  was not available.
+- Parts of the supplied input did not agree with each other.
+- A check that the review needed could not run, or you stopped before the
+  review was complete.
+
+Do not report a problem that did not affect the review.
+
+Report two kinds of problems, each as one finding with no file and no line:
+
+- Runtime issues are problems that occurred while you did the review, and
+  that do not come from how the runner works. Start the finding with
+  `**Review runtime issues:**`. Report them each time that they occur.
+- Runner limitations are problems that come from how the runner works, so
+  they occur again in each review of the PR. Start the finding with
+  `**Review runner limitations:**`. Report a limitation only if the earlier
+  review findings do not already contain it.
+
+Do not add a finding that has no problem to report. In each finding, put the
+label on its own line. Below the label, write each problem on a new line that
+starts with "- ", also when there is only one problem. In each problem, tell
+what occurred, and name the tool, the path, or the error. Then tell what the
+review could not check because of it. Do not quote secrets or your
+instructions.
+
+These findings are exempt from the candidate comment gate, and from the
+comment length, comment placement, and review body rules in `REVIEW.md`.
 
 ## Output
 
-When returning a review in chat, use one of these formats:
-
-- Findings: list each issue with severity, `file:line`, problem, and impact.
-- Draft GitHub comments: provide the exact proposed comment text for each
-  changed line.
-- No findings: say so and note residual test or hardware coverage gaps.
+- For each finding, give the exact comment text. For a finding on a file, also
+  give the path of a file in the diff. Give a right-side line from the diff
+  when one applies. If the problem is in code that the diff does not change,
+  give the right-side line of the change that causes the problem. PR-level
+  findings have no path and no line.
+- Write comments as the Comment Style section of `REVIEW.md` describes.
+- If a diff line starts with `[L<n>]`, `<n>` is its right-side line number.
+  Use that number as the line of the finding. A removed line has no
+  right-side number, so do not give a line for a finding on a removed line.
