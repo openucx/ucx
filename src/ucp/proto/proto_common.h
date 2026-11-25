@@ -372,4 +372,14 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
 
 ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req);
 
+
+/* Put/get offload on a token-failover endpoint can continue from the current
+ * iterator. The completion stays with the fragments already posted. */
+int ucp_proto_rma_offload_resume(const ucp_request_t *req);
+
+unsigned ucp_proto_rma_offload_resume_flags(
+        const ucp_proto_init_params_t *init_params);
+
+void ucp_proto_rma_offload_resume_reset(ucp_request_t *req);
+
 #endif

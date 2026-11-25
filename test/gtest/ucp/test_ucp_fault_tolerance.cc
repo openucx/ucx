@@ -1788,7 +1788,8 @@ protected:
      * then waits in its pending queue. Token failover moves the request to the
      * recovery queue while the fragments are outstanding on the held lane, and
      * with two lanes, while a fragment is in flight on the other lane. The
-     * request must complete once, after all of its data arrived. */
+     * request must complete once. IB may signal that completion before the
+     * HCA has written host memory. */
     void test_parked_rma(ucp_operation_id_t op_id, const std::string &proto,
                          unsigned num_lanes = 1)
     {
@@ -1847,11 +1848,15 @@ protected:
                                         << " fragments in flight";
         }
 
-        /* The receiver returns the token: the purge, and then the replay. No
-         * operation of the request may complete after it, or write to its
-         * destination. */
+        /* The receiver returns the token: the purge, and then the replay. The
+         * initiator completion may precede the write to host memory. The data
+         * must still arrive, and nothing may write the destination after
+         * that. */
         wait_for_cond([this]() { return m_completions != 0; },
                       [this]() { progress(); });
+        wait_for_cond([this]() { return is_delivered(); },
+                      [this]() { progress(); });
+        EXPECT_TRUE(is_delivered()) << "data did not arrive";
         dst.memset(0);
         short_progress_loop();
         EXPECT_EQ(1u, m_completions);
@@ -1859,7 +1864,6 @@ protected:
         EXPECT_EQ(0, req->send.state.uct_comp.count)
                 << "completed with operations in flight";
         EXPECT_UCS_OK(m_status);
-        EXPECT_TRUE(m_arrived) << "completed before its data arrived";
         EXPECT_TRUE(mem_buffer::compare(zeros.data(), dst.ptr(), size,
                                         UCS_MEMORY_TYPE_HOST))
                 << "wrote to its destination after it completed";
@@ -1868,12 +1872,11 @@ protected:
         test_recovery(op);
     }
 
-    /* Count the completions, and check the data at the first one */
+    /* Count the completions of the request */
     static void rma_cb(void *request, ucs_status_t status, void *user_data)
     {
         if (m_self->m_completions++ == 0) {
-            m_self->m_status  = status;
-            m_self->m_arrived = m_self->is_delivered();
+            m_self->m_status = status;
         }
     }
 
@@ -1889,18 +1892,38 @@ protected:
         return (ep == m_self->m_pending_uct_ep) && (m_self->m_rma_posts-- <= 0);
     }
 
-    /* A zero copy operation of 'm_live_uct_ep' stays in flight until the test
-     * completes it */
+    /* The transport moved the fragment. The test completes UCP separately. */
+    static void live_transport_completion(uct_completion_t *)
+    {
+    }
+
+    /* A zero copy operation of 'm_live_uct_ep' stays in flight for UCP until
+     * the test completes it. The transport still performs the copy: a resumed
+     * request does not post this range again. */
     template<uct_ep_put_zcopy_func_t uct_iface_ops_t::*op>
     static ucs_status_t
     zcopy(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
           uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
     {
+        uct_completion_t *transport_comp;
+        ucs_status_t status;
+
         if (no_resource(ep)) {
             return UCS_ERR_NO_RESOURCE;
         } else if ((ep != m_self->m_live_uct_ep) || (comp == NULL)) {
             return m_self->m_mock.orig_func(&(ep->iface->ops.*op), ep, iov,
                                             iovcnt, remote_addr, rkey, comp);
+        }
+
+        transport_comp         = &m_self->m_live_transport_comp;
+        transport_comp->func   = live_transport_completion;
+        transport_comp->count  = 1;
+        transport_comp->status = UCS_OK;
+        status = m_self->m_mock.orig_func(&(ep->iface->ops.*op), ep, iov,
+                                          iovcnt, remote_addr, rkey,
+                                          transport_comp);
+        if (UCS_STATUS_IS_ERR(status)) {
+            return status;
         }
 
         m_self->m_live_comp = comp;
@@ -1961,11 +1984,11 @@ protected:
     /* The other lane of a request of two lanes */
     uct_ep_h                       m_live_uct_ep    = NULL;
     uct_completion_t               *m_live_comp     = NULL;
+    uct_completion_t               m_live_transport_comp;
     unsigned                       m_live_count     = 0;
     /* The completions of the request of test_parked_rma() */
     unsigned                       m_completions    = 0;
     ucs_status_t                   m_status         = UCS_INPROGRESS;
-    bool                           m_arrived        = false;
 };
 
 test_ucp_ft_tf_hold *test_ucp_ft_tf_hold::m_self = NULL;

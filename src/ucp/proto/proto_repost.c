@@ -15,6 +15,7 @@
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.inl>
+#include <ucp/wireup/wireup_ep.h>
 
 #include <string.h>
 
@@ -398,25 +399,169 @@ static void ucp_proto_repost_abort(ucp_request_t *req, ucs_status_t status)
     ucp_proto_repost_release(req, status);
 }
 
+static uint64_t ucp_proto_repost_cap(uct_ep_operation_t op)
+{
+    switch (op) {
+    case UCT_EP_OP_AM_SHORT:
+        return UCT_IFACE_FLAG_AM_SHORT;
+    case UCT_EP_OP_AM_BCOPY:
+        return UCT_IFACE_FLAG_AM_BCOPY;
+    case UCT_EP_OP_PUT_SHORT:
+        return UCT_IFACE_FLAG_PUT_SHORT;
+    case UCT_EP_OP_PUT_BCOPY:
+        return UCT_IFACE_FLAG_PUT_BCOPY;
+    case UCT_EP_OP_PUT_ZCOPY:
+        return UCT_IFACE_FLAG_PUT_ZCOPY;
+    case UCT_EP_OP_GET_BCOPY:
+        return UCT_IFACE_FLAG_GET_BCOPY;
+    case UCT_EP_OP_GET_ZCOPY:
+        return UCT_IFACE_FLAG_GET_ZCOPY;
+    default:
+        return 0;
+    }
+}
+
+static int ucp_proto_repost_needs_rkey(uct_ep_operation_t op)
+{
+    return (op == UCT_EP_OP_PUT_SHORT) || (op == UCT_EP_OP_PUT_BCOPY) ||
+           (op == UCT_EP_OP_PUT_ZCOPY) || (op == UCT_EP_OP_GET_BCOPY) ||
+           (op == UCT_EP_OP_GET_ZCOPY);
+}
+
+static int ucp_proto_repost_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
+                                           uint64_t cap, int allow_wireup)
+{
+    ucp_worker_iface_t *wiface;
+    uct_ep_h uct_ep;
+
+    if ((lane >= ucp_ep_num_lanes(ep)) || (cap == 0)) {
+        return 0;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, lane);
+    if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep)) {
+        return 0;
+    }
+
+    /* Wireup rejects the send and queues a pending request until the
+     * transport endpoint exists. */
+    if ((allow_wireup == 0) && ucp_wireup_ep_test(uct_ep)) {
+        return 0;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+    return (wiface != NULL) &&
+           ucs_test_all_flags(wiface->attr.cap.flags, cap);
+}
+
+static int
+ucp_proto_repost_zcopy_ok(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    ucp_request_t *origin = ucp_proto_repost_origin_req(req);
+    ucp_md_index_t md_index;
+    ucp_mem_h memh;
+
+    if ((origin == NULL) ||
+        (origin->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
+        return 0;
+    }
+
+    memh     = origin->send.state.dt_iter.type.contig.memh;
+    md_index = ucp_ep_md_index(req->send.ep, lane);
+    return (memh != NULL) && (md_index != UCP_NULL_RESOURCE) &&
+           (memh->md_map & UCS_BIT(md_index));
+}
+
+/* A lane can take this operation when it is connected, supports the op, and
+ * the origin rkey and registration map onto it. */
+static int
+ucp_proto_repost_lane_usable(ucp_request_t *req, ucp_lane_index_t lane,
+                             int allow_wireup)
+{
+    const uct_ep_op_info_t *info = req->send.repost.info;
+    uct_ep_operation_t op        = info->operation;
+    uint64_t cap                 = ucp_proto_repost_cap(op);
+    uct_rkey_t tl_rkey;
+
+    if (!ucp_proto_repost_lane_connected(req->send.ep, lane, cap,
+                                         allow_wireup)) {
+        return 0;
+    }
+
+    if (ucp_proto_repost_needs_rkey(op) &&
+        (ucp_proto_repost_tl_rkey(req, lane, &tl_rkey) != UCS_OK)) {
+        return 0;
+    }
+
+    if (((op == UCT_EP_OP_PUT_ZCOPY) || (op == UCT_EP_OP_GET_ZCOPY)) &&
+        !ucp_proto_repost_zcopy_ok(req, lane)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static ucp_lane_index_t
+ucp_proto_repost_pick_lane(ucp_request_t *req, int allow_wireup)
+{
+    const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_lane_index_t lane, num_lanes     = ucp_ep_num_lanes(req->send.ep);
+
+    if (ucp_proto_repost_lane_usable(req, rpriv->lane, allow_wireup)) {
+        return rpriv->lane;
+    }
+
+    for (lane = 0; lane < num_lanes; ++lane) {
+        if (lane == rpriv->lane) {
+            continue;
+        }
+
+        if (ucp_proto_repost_lane_usable(req, lane, allow_wireup)) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
 static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
-                                                            send.uct);
-    const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
-    const uct_ep_op_info_t *info         = req->send.repost.info;
-    uct_rkey_t tl_rkey                   = UCT_INVALID_RKEY;
+    ucp_request_t *req           = ucs_container_of(self, ucp_request_t,
+                                                    send.uct);
+    const uct_ep_op_info_t *info = req->send.repost.info;
+    uct_rkey_t tl_rkey           = UCT_INVALID_RKEY;
     ucp_proto_repost_pack_t pack;
+    ucp_lane_index_t lane;
     uct_completion_t *comp;
     ucs_status_t status;
+    uint64_t cap;
     uct_ep_h uct_ep;
     ssize_t packed;
 
-    if (rpriv->lane == UCP_NULL_LANE) {
-        ucp_proto_repost_abort(req, UCS_ERR_UNREACHABLE);
+    /* Purge already decided this operation was not delivered. Post it on a
+     * live lane. A wireup lane only queues it until the transport ep exists.
+     * Otherwise keep the origin completion until a lane does. */
+    lane = ucp_proto_repost_pick_lane(req, 0);
+    if (lane == UCP_NULL_LANE) {
+        lane = ucp_proto_repost_pick_lane(req, 1);
+    }
+
+    if (lane == UCP_NULL_LANE) {
+        cap = ucp_proto_repost_cap(info->operation);
+        if ((cap != 0) && !(req->send.ep->flags & UCP_EP_FLAG_FAILED) &&
+            (ucp_ep_recovery_arg(req->send.ep) != NULL)) {
+            ucp_ep_tf_repost_defer(req);
+            return UCS_OK;
+        }
+
+        status = (cap == 0) ? UCS_ERR_UNSUPPORTED :
+                 ((req->send.ep->flags & UCP_EP_FLAG_FAILED) ?
+                  UCS_ERR_CANCELED : UCS_ERR_UNREACHABLE);
+        ucp_proto_repost_abort(req, status);
         return UCS_OK;
     }
 
-    uct_ep = ucp_ep_get_lane(req->send.ep, rpriv->lane);
+    uct_ep = ucp_ep_get_lane(req->send.ep, lane);
     if (uct_ep == NULL) {
         ucp_proto_repost_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
@@ -426,12 +571,8 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
             &req->send.state.uct_comp : NULL;
     ucp_proto_repost_assert_fields(info);
 
-    if ((info->operation == UCT_EP_OP_PUT_SHORT) ||
-        (info->operation == UCT_EP_OP_PUT_BCOPY) ||
-        (info->operation == UCT_EP_OP_PUT_ZCOPY) ||
-        (info->operation == UCT_EP_OP_GET_BCOPY) ||
-        (info->operation == UCT_EP_OP_GET_ZCOPY)) {
-        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey);
+    if (ucp_proto_repost_needs_rkey(info->operation)) {
+        status = ucp_proto_repost_tl_rkey(req, lane, &tl_rkey);
         if (status != UCS_OK) {
             ucp_proto_repost_abort(req, status);
             return UCS_OK;
@@ -465,7 +606,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        status = ucp_proto_repost_zcopy_memh(req, lane);
         if (status != UCS_OK) {
             break;
         }
@@ -481,7 +622,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
                                   info->rma.remote_addr, tl_rkey, comp);
         break;
     case UCT_EP_OP_GET_ZCOPY:
-        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        status = ucp_proto_repost_zcopy_memh(req, lane);
         if (status != UCS_OK) {
             break;
         }
@@ -496,7 +637,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
-        req->send.lane = rpriv->lane;
+        req->send.lane = lane;
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -568,7 +709,6 @@ ucs_status_t
 ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 {
     const ucp_proto_config_t *config;
-    const ucp_proto_repost_priv_t *rpriv;
     ucp_request_t *req;
     ucs_status_t status;
 
@@ -595,12 +735,6 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 
     config = ucp_proto_repost_config(ep);
     if (config == NULL) {
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    rpriv = config->priv;
-    if ((rpriv->lane == UCP_NULL_LANE) ||
-        (ucp_ep_get_lane(ep, rpriv->lane) == NULL)) {
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -634,9 +768,8 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
                                   ucp_proto_repost_completion);
     }
 
-    ucp_trace_req(req, "repost submit op %s lane %u",
-                  uct_ep_operation_names[op_info->operation],
-                  (unsigned)rpriv->lane);
+    ucp_trace_req(req, "repost submit op %s",
+                  uct_ep_operation_names[op_info->operation]);
     ucp_request_send(req);
     return UCS_OK;
 }
