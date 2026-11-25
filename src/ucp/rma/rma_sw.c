@@ -46,6 +46,7 @@ ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
     ucs_status_t status = (ucs_status_t)packed_len;
     ucp_ep_h ep         = req->send.ep;
     ucp_lane_index_t am_lane;
+    uct_ep_h uct_ep;
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return status;
@@ -58,14 +59,19 @@ ucp_rma_sw_reply_send_failed(ucp_request_t *req, ssize_t packed_len)
         goto out_drop;
     }
 
-    if (!ucp_is_uct_ep_failed(ucp_ep_get_lane(ep, req->send.lane))) {
+    uct_ep = ucp_ep_get_lane(ep, req->send.lane);
+    if ((uct_ep != NULL) && !ucp_is_uct_ep_failed(uct_ep)) {
         ucp_ep_set_lanes_failed_schedule(ep, UCS_BIT(req->send.lane), status);
         goto out_drop;
     }
 
     am_lane = ucp_ep_get_am_lane(ep);
-    if ((am_lane == UCP_NULL_LANE) ||
-        ucp_is_uct_ep_failed(ucp_ep_get_lane(ep, am_lane))) {
+    if (am_lane == UCP_NULL_LANE) {
+        goto out_drop;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, am_lane);
+    if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep)) {
         /* No lane to fall over to, the endpoint is being failed */
         goto out_drop;
     }
