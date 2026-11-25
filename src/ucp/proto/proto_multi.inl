@@ -481,7 +481,6 @@ ucp_proto_rma_sgl_offload_send_func(
     ucp_rsc_index_t md_index     = lpriv->super.md_index;
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_payload           = ucp_proto_rma_sgl_max_payload(req, lpriv);
-    size_t min_length            = ucs_max(min_frag, 1);
     size_t max_frag_count        = ucs_min(lpriv->max_sgl_zcopy_count,
                                            UCP_MAX_IOV);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
@@ -508,7 +507,7 @@ ucp_proto_rma_sgl_offload_send_func(
 
     /* The first element must be posted as a whole, otherwise it is fragmented */
     if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
-                     (lengths[start_index] < min_length) ||
+                     (lengths[start_index] == 0) ||
                      (lengths[start_index] > max_payload))) {
         return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, max_frag_count,
                                                     min_frag, next_iter,
@@ -520,9 +519,12 @@ ucp_proto_rma_sgl_offload_send_func(
     for (elem_count = 0, total_length = 0; elem_count < max_elem_count;
          elem_count++) {
         length = lengths[start_index + elem_count];
-        if ((length < min_length) || ((total_length + length) > max_payload)) {
+        if ((length == 0) || ((total_length + length) > max_payload)) {
             break;
         }
+
+        ucs_assertv(length >= min_frag, "length=%zu min_frag=%zu", length,
+                    min_frag);
 
         total_length += length;
     }
