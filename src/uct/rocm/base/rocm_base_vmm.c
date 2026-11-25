@@ -17,6 +17,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include <unistd.h>
 
 #ifdef HAVE_ROCM_VMM_TYPE
 /*
@@ -337,5 +338,80 @@ hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size)
     }
 
     return hsa_amd_vmem_set_access(va, size, descs, num_gpu);
+}
+
+ucs_status_t uct_rocm_base_vmm_export_fd(void *base, int *fd_p)
+{
+    hsa_amd_vmem_alloc_handle_t vmem_handle;
+    hsa_status_t status;
+
+    status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, base);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_retain_alloc_handle(%p) failed: %d", base,
+                  status);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    status = hsa_amd_vmem_export_shareable_handle(fd_p, vmem_handle, 0);
+    hsa_amd_vmem_handle_release(vmem_handle);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_export_shareable_handle(%p) failed: %d", base,
+                  status);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    return UCS_OK;
+}
+
+/* Imports @a fd (consumed and closed here), reserves and maps a VA range, and
+ * grants RW access to all local GPU agents so any copy engine can use it. */
+ucs_status_t uct_rocm_base_vmm_import_map(int fd, size_t length, void **va_p)
+{
+    hsa_amd_vmem_alloc_handle_t vmem_handle;
+    hsa_status_t status;
+    void *va = NULL;
+
+    status = hsa_amd_vmem_import_shareable_handle(fd, &vmem_handle);
+    close(fd);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_import_shareable_handle failed: %d", status);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    status = hsa_amd_vmem_address_reserve(&va, length, 0, 0);
+    if (status != HSA_STATUS_SUCCESS) {
+        goto err_release;
+    }
+
+    status = hsa_amd_vmem_map(va, length, 0, vmem_handle, 0);
+    if (status != HSA_STATUS_SUCCESS) {
+        goto err_free_va;
+    }
+
+    status = uct_rocm_base_vmm_set_gpu_access(va, length);
+    if (status != HSA_STATUS_SUCCESS) {
+        hsa_amd_vmem_unmap(va, length);
+        goto err_free_va;
+    }
+
+    hsa_amd_vmem_handle_release(vmem_handle);
+    *va_p = va;
+    return UCS_OK;
+
+err_free_va:
+    hsa_amd_vmem_address_free(va, length);
+err_release:
+    hsa_amd_vmem_handle_release(vmem_handle);
+    return UCS_ERR_INVALID_ADDR;
+}
+
+void uct_rocm_base_vmm_unmap(void *va, size_t length)
+{
+    if (hsa_amd_vmem_unmap(va, length) != HSA_STATUS_SUCCESS) {
+        ucs_warn("failed to vmem_unmap addr:%p", va);
+    }
+    if (hsa_amd_vmem_address_free(va, length) != HSA_STATUS_SUCCESS) {
+        ucs_warn("failed to free vmm addr:%p", va);
+    }
 }
 #endif

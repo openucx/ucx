@@ -37,15 +37,23 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
                                         hsa_agent_t *agent,
                                         hsa_device_type_t *dev_type);
 
+/* True for a VMM-mapped HSA pointer type; always 0 without VMM support. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_base_is_vmem_type(hsa_amd_pointer_type_t hsa_mem_type)
+{
+#ifdef HAVE_ROCM_VMM_TYPE
+    return hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM;
+#else
+    return 0;
+#endif
+}
+
 /* True for GPU-accessible HSA pointer types: pool (HSA) and VMM-mapped (HSA_VMEM). */
 static UCS_F_ALWAYS_INLINE int
 uct_rocm_base_is_gpu_hsa_mem_type(hsa_amd_pointer_type_t hsa_mem_type)
 {
-    return (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA)
-#ifdef HAVE_ROCM_VMM_TYPE
-           || (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
-#endif
-        ;
+    return (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) ||
+           uct_rocm_base_is_vmem_type(hsa_mem_type);
 }
 
 #ifdef HAVE_ROCM_VMM_TYPE
@@ -66,6 +74,52 @@ hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size);
 
 /* True if [addr, addr+length) overlaps any registered VMM mapping. */
 int uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length);
+
+/* Export a dmabuf fd for the VMM allocation at @a base. */
+ucs_status_t uct_rocm_base_vmm_export_fd(void *base, int *fd_p);
+
+/* Import @a fd (consumed), map it, and return the mapped VA in @a va_p. */
+ucs_status_t uct_rocm_base_vmm_import_map(int fd, size_t length, void **va_p);
+
+/* Unmap and free a VA range mapped by uct_rocm_base_vmm_import_map(). */
+void uct_rocm_base_vmm_unmap(void *va, size_t length);
+#else
+static UCS_F_ALWAYS_INLINE void uct_rocm_base_vmm_registry_init(void) { }
+static UCS_F_ALWAYS_INLINE void uct_rocm_base_vmm_registry_cleanup(void) { }
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rocm_base_vmm_lookup_base(const void *ptr, void **base, size_t *size,
+                              uint64_t *reg_id)
+{
+    return UCS_ERR_NO_ELEM;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_base_vmm_is_pooled(const void *base, size_t size)
+{
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length)
+{
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rocm_base_vmm_export_fd(void *base, int *fd_p)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rocm_base_vmm_import_map(int fd, size_t length, void **va_p)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rocm_base_vmm_unmap(void *va, size_t length) { }
 #endif
 ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool);
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,

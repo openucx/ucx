@@ -55,7 +55,6 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
-#ifdef HAVE_ROCM_VMM_TYPE
     /* A VMM rkey covers a single chunk; a range crossing the chunk boundary
      * cannot be packed, so fall back to staging. */
     if (key->is_vmm &&
@@ -65,17 +64,11 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
                   address, length, (unsigned long)key->address, key->length);
         return UCS_ERR_UNSUPPORTED;
     }
-#endif
 
     *packed = *key;
 
     return UCS_OK;
 }
-
-#ifdef HAVE_ROCM_VMM_TYPE
-/* Unique per-registration id; survives fd reuse for cache matching. */
-static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
-#endif
 
 static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
@@ -96,9 +89,9 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         return UCS_ERR_INVALID_ADDR;
     }
 
-#ifdef HAVE_ROCM_VMM_TYPE
-    if (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
-        hsa_amd_vmem_alloc_handle_t vmem_handle;
+    if (uct_rocm_base_is_vmem_type(mem_type)) {
+        /* Unique per-registration id; survives fd reuse for cache matching. */
+        static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
         void *vmm_base;
         size_t vmm_size;
         uint64_t vmm_reg_id;
@@ -139,19 +132,8 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
             vmm_reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
         }
 
-        hsa_status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, vmm_base);
-        if (hsa_status != HSA_STATUS_SUCCESS) {
-            ucs_error("hsa_amd_vmem_retain_alloc_handle failed for base %p "
-                      "(reg addr %p) status %d", vmm_base, address, hsa_status);
-            return UCS_ERR_INVALID_ADDR;
-        }
-
-        hsa_status = hsa_amd_vmem_export_shareable_handle(&key->vmm.fd,
-                                                          vmem_handle, 0);
-        hsa_amd_vmem_handle_release(vmem_handle);
-        if (hsa_status != HSA_STATUS_SUCCESS) {
-            ucs_error("hsa_amd_vmem_export_shareable_handle failed for %p",
-                      vmm_base);
+        status = uct_rocm_base_vmm_export_fd(vmm_base, &key->vmm.fd);
+        if (status != UCS_OK) {
             return UCS_ERR_INVALID_ADDR;
         }
 
@@ -172,7 +154,6 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         }
         return UCS_OK;
     }
-#endif
 
     hsa_status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
     if (hsa_status != HSA_STATUS_SUCCESS) {
@@ -233,12 +214,10 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
     /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
-#ifdef HAVE_ROCM_VMM_TYPE
     /* The exported dmabuf fd is owned by this registration. */
     if (mem_hndl->is_vmm) {
         close(mem_hndl->vmm.fd);
     }
-#endif
     ucs_free(mem_hndl);
     return UCS_OK;
 }
@@ -339,7 +318,6 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     unpacked->region      = NULL;
     unpacked->mapped_addr = NULL;
 
-#ifdef HAVE_ROCM_VMM_TYPE
     /* Map eagerly so an import failure drops the rocm_ipc lane here and UCP
      * falls back, instead of failing the put/get later. */
     if (packed->is_vmm) {
@@ -350,7 +328,6 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
             return UCS_ERR_UNREACHABLE;
         }
     }
-#endif
 
     *handle_p             = NULL;
     *rkey_p               = (uintptr_t)unpacked;

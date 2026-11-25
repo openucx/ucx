@@ -81,13 +81,11 @@ uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     packed->dev_ptr = mem_hndl->dev_ptr;
     packed->is_vmm  = mem_hndl->is_vmm;
 
-#ifdef HAVE_ROCM_VMM_TYPE
     /* Re-check the exact user range to correct a stale cached is_vmm. */
     if (!packed->is_vmm &&
         uct_rocm_base_vmm_range_overlaps(address, length)) {
         packed->is_vmm = 1;
     }
-#endif
 
     return UCS_OK;
 }
@@ -156,11 +154,9 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         return UCS_ERR_IO_ERROR;
     }
 
-#ifdef HAVE_ROCM_VMM_TYPE
     /* rcache region start may be outside the mapping; registry overlap catches VMM. */
-    is_vmm = (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) ||
+    is_vmm = uct_rocm_base_is_vmem_type(mem_type) ||
              uct_rocm_base_vmm_range_overlaps(address, length);
-#endif
 
     if ((mem_type == HSA_EXT_POINTER_TYPE_HSA) || is_vmm) {
         /* This covers device memory, hipHostMalloc, and VMM-mapped memory.

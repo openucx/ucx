@@ -323,7 +323,6 @@ uct_rocm_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
     ucs_list_add_tail(list, &region->list);
 }
 
-#ifdef HAVE_ROCM_VMM_TYPE
 #if HAVE_DECL_SYS_PIDFD_GETFD
 /* Duplicate the sender's dmabuf fd into this process via pidfd_open/
  * pidfd_getfd. Returns a local fd on success, or -1 if the peer is in a
@@ -362,14 +361,10 @@ static int uct_rocm_ipc_dup_peer_fd(const uct_rocm_ipc_key_t *key)
 }
 #endif
 
-/* Import a cross-process VMM handle into the local address space.
- * Duplicates the sender's dmabuf fd via pidfd_open/pidfd_getfd, then
- * imports the handle, reserves a VA range, maps it, and grants RW access
- * to all local GPU agents so any copy engine can transfer to/from it. */
+/* Import a cross-process VMM handle into the local address space: duplicate the
+ * sender's dmabuf fd via pidfd, then map it through the base layer. */
 static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
 {
-    hsa_amd_vmem_alloc_handle_t vmem_handle;
-    hsa_status_t status;
     void *va = NULL;
     int local_fd;
 
@@ -378,61 +373,24 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
         return NULL;
     }
 
-    status = hsa_amd_vmem_import_shareable_handle(local_fd, &vmem_handle);
-    close(local_fd);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("failed to import vmm handle. addr:%p len:%lu",
+    if (uct_rocm_base_vmm_import_map(local_fd, key->length, &va) != UCS_OK) {
+        ucs_error("failed to map vmm handle. addr:%p len:%lu",
                   (void *)key->address, key->length);
         return NULL;
     }
 
-    status = hsa_amd_vmem_address_reserve(&va, key->length, 0, 0);
-    if (status != HSA_STATUS_SUCCESS) {
-        goto err_release_handle;
-    }
-
-    status = hsa_amd_vmem_map(va, key->length, 0, vmem_handle, 0);
-    if (status != HSA_STATUS_SUCCESS) {
-        goto err_free_va;
-    }
-
-    /* Grant RW access to all local GPU agents so any copy engine can use it */
-    status = uct_rocm_base_vmm_set_gpu_access(va, key->length);
-    if (status != HSA_STATUS_SUCCESS) {
-        hsa_amd_vmem_unmap(va, key->length);
-        goto err_free_va;
-    }
-
-    hsa_amd_vmem_handle_release(vmem_handle);
     return va;
-
-err_free_va:
-    hsa_amd_vmem_address_free(va, key->length);
-err_release_handle:
-    hsa_amd_vmem_handle_release(vmem_handle);
-    ucs_error("failed to map vmm handle. addr:%p len:%lu",
-              (void *)key->address, key->length);
-    return NULL;
 }
-#endif
 
 /* Release a mapping created for @a key: VMM mappings are unmapped and their
  * reserved VA freed; pool IPC handles are detached. */
 static void uct_rocm_ipc_detach_mapping(const uct_rocm_ipc_key_t *key,
                                         void *mapped_addr)
 {
-#ifdef HAVE_ROCM_VMM_TYPE
     if (key->is_vmm) {
-        if (hsa_amd_vmem_unmap(mapped_addr, key->length) != HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to vmem_unmap addr:%p", mapped_addr);
-        }
-        if (hsa_amd_vmem_address_free(mapped_addr, key->length) !=
-            HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to free vmm addr:%p", mapped_addr);
-        }
+        uct_rocm_base_vmm_unmap(mapped_addr, key->length);
         return;
     }
-#endif
     if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
         ucs_warn("failed to unmap addr:%p", mapped_addr);
     }
@@ -442,7 +400,6 @@ static UCS_F_ALWAYS_INLINE int
 uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
                        const uct_rocm_ipc_key_t *key2)
 {
-#ifdef HAVE_ROCM_VMM_TYPE
     /* reg_id is stable per live VMM mapping (from the vmm registry), so
      * concurrent re-registrations of the same chunk compare equal and reuse
      * the cached mapping instead of unmapping one an in-flight copy may read. */
@@ -450,7 +407,6 @@ uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
         return (key1->is_vmm == key2->is_vmm) && (key1->pid == key2->pid) &&
                (key1->vmm.reg_id == key2->vmm.reg_id);
     }
-#endif
     return memcmp(&key1->ipc, &key2->ipc, sizeof(key1->ipc)) == 0;
 }
 
@@ -722,16 +678,13 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         }
     }
 
-#ifdef HAVE_ROCM_VMM_TYPE
     if (key->is_vmm) {
         mapped_addr = uct_rocm_ipc_vmm_map(key);
         if (mapped_addr == NULL) {
             status = UCS_ERR_INVALID_ADDR;
             goto err_destroy_signal;
         }
-    } else
-#endif
-    {
+    } else {
         hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
                                                &mapped_addr);
         if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {

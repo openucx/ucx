@@ -126,14 +126,11 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         remote_agent = local_agent;
     } else {
         /* Grant remote_agent's copy engine access to the local buffer. */
-#ifdef HAVE_ROCM_VMM_TYPE
-        if ((local_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) &&
+        if (uct_rocm_base_is_vmem_type(local_mem_type) &&
             uct_rocm_base_vmm_range_overlaps(local_addr, size)) {
             /* Registered VMM buffer already granted access at map time. */
             status = HSA_STATUS_SUCCESS;
-        } else
-#endif
-        {
+        } else {
             num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
             status  = UCS_PROFILE_CALL_ALWAYS(hsa_amd_agents_allow_access,
                                               num_gpu, gpu_agents, NULL,

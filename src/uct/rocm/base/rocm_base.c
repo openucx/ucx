@@ -166,10 +166,8 @@ hsa_status_t uct_rocm_base_init(void)
         goto end;
     }
 
-#ifdef HAVE_ROCM_VMM_TYPE
     /* Best-effort: a failure leaves VMM IPC to the align-down fallback. */
     uct_rocm_base_vmm_registry_init();
-#endif
 
     rocm_ucx_initialized = 1;
 
@@ -485,8 +483,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
-#ifdef HAVE_ROCM_VMM_TYPE
-        if (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+        if (uct_rocm_base_is_vmem_type(hsa_mem_type)) {
             void *vmm_base;
             size_t vmm_size;
 
@@ -500,7 +497,6 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                 base_size = vmm_size;
             }
         }
-#endif
     } else {
         base_addr = (void*)addr;
         base_size = length;
@@ -696,8 +692,6 @@ UCS_MODULE_INIT() {
     return UCS_OK;
 }
 
-#ifdef HAVE_ROCM_VMM_TYPE
 UCS_STATIC_CLEANUP {
     uct_rocm_base_vmm_registry_cleanup();
 }
-#endif

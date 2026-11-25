@@ -32,14 +32,10 @@
 static UCS_F_ALWAYS_INLINE int
 uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr, size_t length)
 {
-#ifdef HAVE_ROCM_VMM_TYPE
     if (rkey != UCT_INVALID_RKEY) {
         return ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
     }
     return uct_rocm_base_vmm_range_overlaps((void*)remote_addr, length);
-#else
-    return 0;
-#endif
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
