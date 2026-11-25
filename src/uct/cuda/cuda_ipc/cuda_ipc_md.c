@@ -123,7 +123,7 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
     cache->dev_num = dev_num;
     for (i = 0; i < num_devices; ++i) {
-        cache->accessible[i] = UCS_TRY;
+        cache->accessible[i] = UCT_CUDA_IPC_ACCESS_UNKNOWN;
     }
 
     return cache;
@@ -643,17 +643,17 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
      * stream sequentialization */
     rkey->stream_id = cache->dev_num;
     accessible      = &cache->accessible[cu_dev];
-    if (ucs_unlikely(*accessible == UCS_TRY)) { /* unchecked, add to cache */
+    if (ucs_unlikely(*accessible == UCT_CUDA_IPC_ACCESS_UNKNOWN)) {
+        /* unchecked, add to cache */
         peer_accessible = uct_cuda_ipc_nvml_peer_accessible(
                 cu_dev, &rkey->super.super.uuid);
         if (peer_accessible == UCS_NO) {
-            *accessible = UCS_NO;
+            *accessible = UCT_CUDA_IPC_ACCESS_UNREACHABLE;
             ucs_debug("nvml p2p check: device %d has no native p2p access to "
                       "remote memory addr %p len %zu",
                       cu_dev, (void*)rkey->super.super.d_bptr,
                       rkey->super.super.b_len);
-            status = UCS_ERR_UNREACHABLE;
-            goto err;
+            goto out;
         }
 
         /* Check if peer is reachable by trying to open memory handle. This is
@@ -679,11 +679,38 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
             rkey_handle->mapped_addr = mapped_addr;
         }
 
-        *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
-                      ? UCS_YES : UCS_NO;
+        if ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS)) {
+            *accessible = UCT_CUDA_IPC_ACCESS_OK;
+        } else if ((peer_accessible == UCS_YES) &&
+                   (rkey->super.super.ph.handle_type ==
+                    UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC)) {
+            /* The devices have P2P access, but the remote buffer has no IPC
+             * handle (e.g. a memory pool without an exportable handle type),
+             * so other buffers of the peer may still be accessible */
+            *accessible = UCT_CUDA_IPC_ACCESS_NO_HANDLE;
+            ucs_debug("device %d has p2p access, but remote memory addr %p "
+                      "len %zu has no ipc handle",
+                      cu_dev, (void*)rkey->super.super.d_bptr,
+                      rkey->super.super.b_len);
+        } else {
+            /* The failure may be caused by missing P2P access */
+            *accessible = UCT_CUDA_IPC_ACCESS_UNREACHABLE;
+        }
     }
 
-    status = (*accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
+out:
+    switch (*accessible) {
+    case UCT_CUDA_IPC_ACCESS_OK:
+        status = UCS_OK;
+        break;
+    case UCT_CUDA_IPC_ACCESS_NO_HANDLE:
+        /* Only this kind of remote memory handle cannot be used */
+        status = UCS_ERR_UNSUPPORTED;
+        break;
+    default:
+        status = UCS_ERR_UNREACHABLE;
+        break;
+    }
 
 err:
     pthread_mutex_unlock(&component->lock);

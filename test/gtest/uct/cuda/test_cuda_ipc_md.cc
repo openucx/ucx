@@ -159,15 +159,6 @@ protected:
         key->b_len                   = range.b_len;
     }
 
-    void mem_dereg(uct_mem_h memh)
-    {
-        uct_md_mem_dereg_params_t params;
-
-        params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-        params.memh       = memh;
-        EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
-    }
-
     /* The key as another process receives it, so that mapping it goes through
      * the remote cache rather than the same-process shortcut */
     static uct_cuda_ipc_extended_rkey_t
@@ -309,6 +300,23 @@ protected:
        EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
     }
 
+    void mem_dereg(uct_mem_h memh)
+    {
+        uct_md_mem_dereg_params_t params;
+
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        params.memh       = memh;
+        EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    }
+
+    static void
+    tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0, int64_t value1)
+    {
+        int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
+        uuid64[0]       = value0;
+        uuid64[1]       = value1;
+    }
+
 #if HAVE_DECL_SYS_PIDFD_GETFD
     ucs_status_t pack_posix_fd_key(cuda_posix_fd_mem_buffer &buf, size_t size,
                                    uct_mem_h *memh, uct_cuda_ipc_rkey_t *rkey)
@@ -324,14 +332,6 @@ protected:
 
         return uct_md_mkey_pack_v2(md(), *memh, buf.ptr(), size, &pack_params,
                                    rkey);
-    }
-
-    static void
-    tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0, int64_t value1)
-    {
-        int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
-        uuid64[0]       = value0;
-        uuid64[1]       = value1;
     }
 
 #endif
@@ -428,6 +428,50 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
     free_mempool(&ptr, &mpool, &cu_stream);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+/*
+ * Memory without an exportable IPC handle (e.g. from the default memory pool)
+ * cannot be mapped by any peer. If NVML reports P2P access to the peer device,
+ * this does not mean that the peer device is unreachable, so the rkey unpack
+ * must return UCS_ERR_UNSUPPORTED. If NVML cannot tell, missing P2P access may
+ * be the reason, so it must return UCS_ERR_UNREACHABLE.
+ */
+UCS_TEST_P(test_cuda_ipc_md, unpack_no_ipc_handle)
+{
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+    mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA, mem_buffer::alloc_mode::ASYNC);
+    uct_rkey_unpack_params_t unpack_params = {0};
+    uct_cuda_ipc_extended_rkey_t rkey;
+    uct_rkey_bundle_t rkey_bundle;
+    uct_mem_h memh;
+
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), buf.ptr(), buf.size(), NULL,
+                                     &memh));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh, buf.ptr(), buf.size(),
+                                       NULL, &rkey));
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC, rkey.super.ph.handle_type);
+
+    /* A key of this process on the same device is accessible directly */
+    ASSERT_UCS_OK(uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
+                                     &rkey_bundle));
+    uct_rkey_release(md()->component, &rkey_bundle);
+
+    /* Pretend the key is from another process on the same device: NVML
+     * reports P2P access for the same UUID */
+    rkey.super.pid ^= 1;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params, NULL));
+
+    /* NVML cannot resolve this UUID */
+    tamper_rkey_uuid(&rkey.super, 0xDEADLL, 0xBEEFLL);
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params, NULL));
+
+    mem_dereg(memh);
+#else
+    UCS_TEST_SKIP_R("built without fabric or pidfd support");
 #endif
 }
 
