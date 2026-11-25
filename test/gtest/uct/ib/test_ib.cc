@@ -139,7 +139,7 @@ protected:
 
         if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
             const double max_get_path_bandwidth = 35e9;
-            double get_path_ratio              = 0.4;
+            double get_path_ratio               = 0.4;
             uct_iface_attr_t iface_attr;
 
             ASSERT_UCS_OK(uct_iface_query(m_e1->iface(), &iface_attr));
@@ -148,8 +148,13 @@ protected:
                 EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
                                  get_perf.bandwidth.shared);
             } else {
-                EXPECT_GT(put_perf.bandwidth.shared,
-                          get_perf.bandwidth.shared);
+                const double max_get_bandwidth = put_perf.bandwidth.shared *
+                                                 iface_attr.dev_num_paths *
+                                                 get_path_ratio;
+
+                EXPECT_DOUBLE_EQ(ucs_min(put_perf.bandwidth.shared,
+                                         max_get_bandwidth),
+                                 get_perf.bandwidth.shared);
             }
 
             if (uct_ib_iface_is_roce(iface)) {
