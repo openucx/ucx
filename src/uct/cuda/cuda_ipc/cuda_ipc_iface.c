@@ -75,21 +75,19 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    uct_cuda_ipc_imex_device_addr_t *imex_addr =
-            (uct_cuda_ipc_imex_device_addr_t*)addr;
-    uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr = &imex_addr->super;
-    uct_cuda_ipc_device_addr_t *dev_addr         = &mnnvl_addr->super;
-    const uct_cuda_ipc_iface_t *iface            =
-            ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    const uct_cuda_ipc_md_t *md                  =
-            ucs_derived_of(iface->super.super.md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr =
+            (uct_cuda_ipc_mnnvl_device_addr_t*)addr;
+    uct_cuda_ipc_device_addr_t *dev_addr = &mnnvl_addr->super;
+    const uct_cuda_ipc_iface_t *iface    = ucs_derived_of(tl_iface,
+                                                          uct_cuda_ipc_iface_t);
+    const uct_cuda_ipc_md_t *md          = ucs_derived_of(iface->super.super.md,
+                                                          uct_cuda_ipc_md_t);
 
     if (md->enable_mnnvl || uct_cuda_ipc_md_fabric_supported(md)) {
         dev_addr->flags = 0;
         if (md->enable_mnnvl) {
             dev_addr->flags          |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
             mnnvl_addr->nvlink_domain = md->nvlink_domain;
-            imex_addr->imex_channel   = md->imex_channel;
         }
 
         if (uct_cuda_ipc_md_fabric_supported(md)) {
@@ -105,7 +103,12 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
 {
-    uct_cuda_ipc_iface_address_pack(iface_addr);
+    const uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface,
+                                                       uct_cuda_ipc_iface_t);
+    const uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                                       uct_cuda_ipc_md_t);
+
+    uct_cuda_ipc_iface_address_pack(iface_addr, md->imex_channel);
     return UCS_OK;
 }
 
@@ -134,30 +137,28 @@ uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
             UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
 }
 
-/* Return the device address if the peer sent at least min_len bytes of it, or
- * NULL otherwise */
+/* Return the address if the peer sent at least min_len bytes of it, or NULL
+ * otherwise */
 static const void *
-uct_cuda_ipc_iface_dev_addr_ext(const uct_device_addr_t *addr,
-                                size_t dev_addr_len, size_t min_len)
+uct_cuda_ipc_iface_addr_ext(const void *addr, size_t addr_len, size_t min_len)
 {
-    return (dev_addr_len >= min_len) ? addr : NULL;
+    return (addr_len >= min_len) ? addr : NULL;
 }
 
 /* Whether fabric IPC handles exported by the peer can be imported: both peers
- * must support them, and use the same IMEX channel. The channel is sent only
- * with MNNVL, so it is compared only if both peers sent it, to keep the check
- * symmetric. */
+ * must support them, and use the same IMEX channel. Older peers do not send the
+ * channel, so it is compared only if the peer sent it. */
 static int uct_cuda_ipc_iface_fabric_reachable(
         const uct_cuda_ipc_md_t *md,
         const uct_iface_is_reachable_params_t *params,
         const uct_cuda_ipc_device_addr_t *dev_addr, size_t dev_addr_len,
-        const char *reason)
+        size_t iface_addr_len, const char *reason)
 {
     const int local_fabric_supported  = uct_cuda_ipc_md_fabric_supported(md);
     const int remote_fabric_supported =
             !!(uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
                UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
-    const uct_cuda_ipc_imex_device_addr_t *imex_addr;
+    const uct_cuda_ipc_iface_imex_address_t *imex_addr;
 
     if (!local_fabric_supported || !remote_fabric_supported) {
         uct_iface_fill_info_str_buf(
@@ -166,11 +167,10 @@ static int uct_cuda_ipc_iface_fabric_reachable(
         return 0;
     }
 
-    imex_addr = uct_cuda_ipc_iface_dev_addr_ext(params->device_addr,
-                                                dev_addr_len,
-                                                sizeof(*imex_addr));
-    if (md->enable_mnnvl && (imex_addr != NULL) &&
-        (imex_addr->imex_channel != md->imex_channel)) {
+    imex_addr = uct_cuda_ipc_iface_addr_ext(params->iface_addr,
+                                            iface_addr_len,
+                                            sizeof(*imex_addr));
+    if ((imex_addr != NULL) && (imex_addr->imex_channel != md->imex_channel)) {
         uct_iface_fill_info_str_buf(
                 params, "%s and different IMEX channel local %u vs %u", reason,
                 md->imex_channel, imex_addr->imex_channel);
@@ -224,9 +224,9 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         /* Multi-node NVLINK connects only GPUs in the same NVLink domain. All
          * GPUs of a host are assumed to be in the same domain (it is probed
          * from GPU 0), so the domain is checked only against other hosts. */
-        mnnvl_addr = uct_cuda_ipc_iface_dev_addr_ext(params->device_addr,
-                                                     dev_addr_len,
-                                                     sizeof(*mnnvl_addr));
+        mnnvl_addr = uct_cuda_ipc_iface_addr_ext(params->device_addr,
+                                                 dev_addr_len,
+                                                 sizeof(*mnnvl_addr));
         if (mnnvl_addr == NULL) {
             ucs_debug("peer does not advertise NVLink domain, using legacy "
                       "MNNVL reachability");
@@ -247,6 +247,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
              */
             if (!uct_cuda_ipc_iface_fabric_reachable(md, params, dev_addr,
                                                      dev_addr_len,
+                                                     iface_addr_len,
                                                      "different machine")) {
                 return 0;
             }
@@ -261,7 +262,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     if ((iface_addr_len >= sizeof(ipc_addr)) &&
         (ipc_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) &&
         !uct_cuda_ipc_iface_fabric_reachable(md, params, dev_addr,
-                                             dev_addr_len,
+                                             dev_addr_len, iface_addr_len,
                                              "different PID namespace")) {
         return 0;
     }
@@ -393,7 +394,7 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
 static size_t uct_cuda_ipc_iface_device_addr_length(const uct_cuda_ipc_md_t *md)
 {
     if (md->enable_mnnvl) {
-        return sizeof(uct_cuda_ipc_imex_device_addr_t);
+        return sizeof(uct_cuda_ipc_mnnvl_device_addr_t);
     } else if (uct_cuda_ipc_md_fabric_supported(md)) {
         return sizeof(uct_cuda_ipc_device_addr_t);
     }

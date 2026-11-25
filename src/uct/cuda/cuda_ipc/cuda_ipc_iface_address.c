@@ -34,18 +34,24 @@ uct_cuda_ipc_iface_address_unpack_pid_ns(const uct_iface_addr_t *iface_addr,
     return cuda_ipc_iface_address->pid_ns;
 }
 
-void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr)
+void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr,
+                                     uint32_t imex_channel)
 {
-    uct_cuda_ipc_iface_address_t *cuda_ipc_iface_address;
+    uct_cuda_ipc_iface_imex_address_t *imex_addr =
+            (uct_cuda_ipc_iface_imex_address_t*)iface_addr;
 
-    cuda_ipc_iface_address         = (uct_cuda_ipc_iface_address_t*)iface_addr;
-    cuda_ipc_iface_address->pid    = getpid();
-    cuda_ipc_iface_address->pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    imex_addr->super.pid    = getpid();
+    imex_addr->super.pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    imex_addr->imex_channel = imex_channel;
 }
 
 size_t uct_cuda_ipc_iface_address_length(void)
 {
-    return sizeof(uct_cuda_ipc_iface_address_t);
+    /* The address is sent to other processes, which may run another version,
+     * so its layout must not change */
+    UCS_STATIC_ASSERT(sizeof(uct_cuda_ipc_iface_address_t) == 8);
+    UCS_STATIC_ASSERT(sizeof(uct_cuda_ipc_iface_imex_address_t) == 12);
+    return sizeof(uct_cuda_ipc_iface_imex_address_t);
 }
 
 uct_cuda_ipc_iface_address_t
