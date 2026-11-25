@@ -224,12 +224,26 @@ protected:
     void connect(uct_test::entity &e, unsigned index,
                  uct_ep_disconnect_cb_t disconnect_cb,
                  const ucs::sock_addr_storage *local_addr = NULL) {
+        ASSERT_UCS_OK(try_connect(e, index, disconnect_cb, local_addr));
+    }
+
+    ucs_status_t try_connect(uct_test::entity &e, unsigned index,
+                             uct_ep_disconnect_cb_t disconnect_cb,
+                             const ucs::sock_addr_storage *local_addr = NULL) {
         client_user_data *user_data = new client_user_data(*this, e, index);
         ucs::scoped_async_lock lock(e.async());
-        e.connect_to_sockaddr(index, m_connect_addr, local_addr,
-                              client_resolve_cb, client_connect_cb,
-                              disconnect_cb, user_data);
-        add_user_data(user_data);
+        ucs_status_t status;
+
+        status = e.try_connect_to_sockaddr(index, m_connect_addr, local_addr,
+                                           client_resolve_cb, client_connect_cb,
+                                           disconnect_cb, user_data);
+        if (status == UCS_OK) {
+            add_user_data(user_data);
+        } else {
+            delete user_data;
+        }
+
+        return status;
     }
 
     void connect(unsigned index = 0) {
@@ -690,7 +704,8 @@ protected:
             std::string err_str = format_message(message, ap);
             if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
                 (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
-                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0")) ||
+                ((strcmp(function, UCS_PP_QUOTE(ucs_socket_connect)) == 0) &&
+                 (strstr(err_str.c_str(), "connect(fd="))) ||
                 (strstr(err_str.c_str(), "error event on client ep"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -1197,23 +1212,21 @@ public:
 
 UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
 {
-    struct sockaddr_in addr;
+    struct sockaddr_storage addr = {};
     ucs_status_t status;
     size_t size;
 
     /* Listen */
     start_listen(test_uct_sockaddr::conn_request_cb);
 
-    /* 240.0.0.0/4 - This block, formerly known as the Class E address
-       space, is reserved for future use; see [RFC1112], Section 4.
-       therefore, this value can be used as a non-existing IP for this test */
-    memset(&addr, 0, sizeof(struct sockaddr_in));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("240.0.0.0");
-    addr.sin_port        = m_listen_addr.get_port();
-
-    status = ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size);
-    ASSERT_UCS_OK(status);
+    /* Use reserved addresses (RFC1112 class E and RFC3849 documentation)
+     * in the same family as the original destination. */
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(
+            m_connect_addr.get_sock_addr_ptr()->sa_family == AF_INET ?
+                    "240.0.0.0" : "2001:db8::1", &addr));
+    ASSERT_UCS_OK(ucs_sockaddr_set_port((struct sockaddr*)&addr,
+                                       m_listen_addr.get_port()));
+    ASSERT_UCS_OK(ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size));
 
     m_connect_addr.set_sock_addr(*(struct sockaddr*)&addr, size);
 
@@ -1221,9 +1234,15 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
-        connect();
-        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
-        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
+        status = try_connect(*m_client, 0, client_disconnect_cb);
+
+        if (status == UCS_OK) {
+            wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE,
+                          300);
+            EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
+        } else {
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+        }
 
         EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
         EXPECT_FALSE(m_state &
