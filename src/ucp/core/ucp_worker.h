@@ -513,10 +513,10 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
  *                              for @a ep_cfg_index, on success only.
  */
 ucs_status_t
-ucp_worker_rkey_config_switch_ep(ucp_worker_h worker,
-                                 ucp_worker_cfg_index_t rkey_cfg_index,
-                                 ucp_worker_cfg_index_t ep_cfg_index,
-                                 ucp_worker_cfg_index_t *cfg_index_p);
+ucp_worker_rkey_resolve_ep_config(ucp_worker_h worker,
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
+                                  ucp_worker_cfg_index_t ep_cfg_index,
+                                  ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface);

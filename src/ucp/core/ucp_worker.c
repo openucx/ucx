@@ -2718,10 +2718,10 @@ err:
 }
 
 ucs_status_t
-ucp_worker_rkey_config_switch_ep(ucp_worker_h worker,
-                                 ucp_worker_cfg_index_t rkey_cfg_index,
-                                 ucp_worker_cfg_index_t ep_cfg_index,
-                                 ucp_worker_cfg_index_t *cfg_index_p)
+ucp_worker_rkey_resolve_ep_config(ucp_worker_h worker,
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
+                                  ucp_worker_cfg_index_t ep_cfg_index,
+                                  ucp_worker_cfg_index_t *cfg_index_p)
 {
     const ucp_rkey_config_t *rkey_config = ucp_worker_rkey_config(
             worker, rkey_cfg_index);

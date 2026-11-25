@@ -5882,8 +5882,8 @@ static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
     ucp_rkey_config_t *rkey_cfg;
     ucs_status_t status;
 
-    status = ucp_worker_rkey_config_switch_ep(worker, rkey->cfg_index,
-                                              ep->cfg_index, &rkey->cfg_index);
+    status = ucp_worker_rkey_resolve_ep_config(worker, rkey->cfg_index,
+                                               ep->cfg_index, &rkey->cfg_index);
     if (status != UCS_OK) {
         return status;
     }

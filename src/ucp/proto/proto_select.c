@@ -936,9 +936,9 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
-        status = ucp_worker_rkey_config_switch_ep(worker, rkey_cfg_index,
-                                                  ep_cfg_index,
-                                                  new_rkey_cfg_index);
+        status = ucp_worker_rkey_resolve_ep_config(worker, rkey_cfg_index,
+                                                   ep_cfg_index,
+                                                   new_rkey_cfg_index);
         if (status != UCS_OK) {
             ucs_error("failed to switch to new rkey");
             return NULL;
