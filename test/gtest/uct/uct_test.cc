@@ -998,6 +998,23 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
     }
 }
 
+static ucs_log_func_rc_t
+drop_errors_logger(const char *file, unsigned line, const char *function,
+                   ucs_log_level_t level,
+                   const ucs_log_component_config_t *comp_conf,
+                   const char *message, va_list ap)
+{
+    if (level != UCS_LOG_LEVEL_ERROR) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    /* Do not save the message, wrap_errors_logger() aborts after 1000 saved
+     * errors */
+    ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
+                            comp_conf, message, ap);
+    return UCS_LOG_FUNC_RC_STOP;
+}
+
 void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                                  uct_allocated_memory_t *mem,
                                  ucs_memory_type_t mem_type) const
@@ -1011,7 +1028,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     ucs_time_t deadline   = start_time + ucs_time_from_sec(timeout);
     bool waiting          = false;
     uct_mem_alloc_params_t params;
-    bool last;
+    bool last, hide_errors;
 
     params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
@@ -1024,9 +1041,11 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     do {
         /* Do not repeat the allocation errors while waiting */
         last         = ucs_get_time() >= deadline;
+        hide_errors  = waiting && !last;
         params.flags = mem_flags |
-                       ((waiting && !last) ? UCT_MD_MEM_FLAG_HIDE_ERRORS : 0);
-        scoped_log_handler slh(wrap_errors_logger);
+                       (hide_errors ? UCT_MD_MEM_FLAG_HIDE_ERRORS : 0);
+        scoped_log_handler slh(hide_errors ? drop_errors_logger :
+                                             wrap_errors_logger);
         if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
             (mem_type == UCS_MEMORY_TYPE_HOST)) {
             status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
@@ -1053,8 +1072,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                 waiting = true;
             }
 
-            /* Keep errors not hidden by the flag below the logger limit */
-            usleep(100000 + (ucs::rand() % 10000));
+            usleep(ucs::rand_range(10000));
         }
     } while (!last);
 
