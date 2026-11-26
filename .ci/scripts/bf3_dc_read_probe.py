@@ -402,6 +402,8 @@ def raw():
                         failure[:3], result["banner"]))
     for line in summary:
         log("SUMMARY", *line)
+    if any(line[1] == "SETUP" for line in summary):
+        raise SystemExit("SETUP: a raw case could not run")
 
 
 def screen(ucx_dir):
@@ -531,6 +533,8 @@ def screen(ucx_dir):
                   if status in statuses}
         log("SUMMARY", name, test, "%dB" % size, "instances=%d" % pairs,
             counts)
+    if any("SETUP" in statuses for statuses in results.values()):
+        raise SystemExit("SETUP: a UCX run could not run")
 
 
 def main():
