@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -18,13 +18,11 @@
 #include <ucm/util/replace.h>
 #include <ucm/util/sys.h>
 #include <ucm/bistro/bistro.h>
-#include <ucs/arch/atomic.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/arch/bitops.h>
-#include <ucs/debug/assert.h>
 
 #include <sys/mman.h>
 #include <sys/shm.h>

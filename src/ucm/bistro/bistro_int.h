@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -21,12 +21,6 @@
 
 #define UCM_PROT_READ_WRITE_EXEC (PROT_READ | PROT_WRITE | PROT_EXEC)
 #define UCM_PROT_READ_EXEC       (PROT_READ | PROT_EXEC)
-
-#define UCM_LOOKUP_SYMBOL(_func, _symbol) \
-    _func = ucm_bistro_lookup(_symbol);   \
-    if (!_func) {                         \
-        return UCS_ERR_NO_ELEM;           \
-    }
 
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len);
 
