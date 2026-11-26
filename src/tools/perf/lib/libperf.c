@@ -311,6 +311,7 @@ static int ucx_perf_buffer_rotation_supported(const ucx_perf_params_t *params)
            ((params->command == UCX_PERF_CMD_PUT) ||
             (params->command == UCX_PERF_CMD_GET) ||
             (params->command == UCX_PERF_CMD_TAG) ||
+            (params->command == UCX_PERF_CMD_TAG_SYNC) ||
             (params->command == UCX_PERF_CMD_AM)) &&
            (params->test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) &&
            !(params->flags & UCX_PERF_TEST_FLAG_DEVICE) &&
@@ -388,11 +389,12 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         }
     }
 
-    if ((params->ucp.buffer_count > 1) &&
+    if ((ucx_perf_get_buffer_count(params) > 1) &&
         !ucx_perf_buffer_rotation_supported(params)) {
         ucs_error("multiple message buffers are only supported by the "
-                  "ucp_put_bw, ucp_get, tag_bw and ucp_am_bw tests with "
-                  "contiguous datatype");
+                  "ucp_put_bw, ucp_get, tag_bw, tag_sync_bw and ucp_am_bw "
+                  "tests with contiguous datatype, and not with device API, "
+                  "daemon mode or IOV stride");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -2400,7 +2402,7 @@ size_t ucx_perf_get_buffer_count(const ucx_perf_params_t *params)
     size_t length;
 
     if (params->ucp.buffer_count != UCP_PERF_BUFFER_COUNT_AUTO) {
-        return params->ucp.buffer_count;
+        return ucs_max(params->ucp.buffer_count, 1ul);
     }
 
     if (!ucx_perf_buffer_rotation_supported(params)) {
@@ -2418,11 +2420,11 @@ size_t ucx_perf_get_buffer_count(const ucx_perf_params_t *params)
      * - big messages (>= 256 MB) exceed the L2 by themselves, the count drops
      *   to one buffer */
     length = ucx_perf_get_message_size(params);
-    if (length < UCS_MBYTE) {
+    if (length < UCP_PERF_BUFFER_COUNT_AUTO_MIN_SIZE) {
         return 1;
     }
 
-    return ucs_div_round_up(256 * UCS_MBYTE, length);
+    return ucs_div_round_up(UCP_PERF_BUFFER_COUNT_AUTO_SPAN_SIZE, length);
 }
 
 unsigned rte_peer_index(unsigned group_size, unsigned group_index)

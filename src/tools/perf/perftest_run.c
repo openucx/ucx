@@ -110,6 +110,7 @@ static void print_header(struct perftest_context *ctx)
     const char *test_data_str;
     const char *test_api_str;
     test_type_t *test;
+    size_t buffer_count;
     unsigned i;
 
     test = (ctx->params.test_id == TEST_ID_UNDEFINED) ? NULL :
@@ -164,6 +165,11 @@ static void print_header(struct perftest_context *ctx)
                    ctx->params.super.recv_device_id);
         }
         printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
+        buffer_count = ucx_perf_get_buffer_count(&ctx->params.super);
+        if (buffer_count > 1) {
+            printf("| Buffer count: %-60zu                               |\n",
+                   buffer_count);
+        }
         printf("| Window size:  %-60u                               |\n", ctx->params.super.max_outstanding);
 
         if ((test->api == UCX_PERF_API_UCP) &&

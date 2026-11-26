@@ -36,6 +36,7 @@ dist_perftest__DATA = \
 	contrib/ucx_perftest_config/test_types_ucp_rma \
 	contrib/ucx_perftest_config/test_types_ucp_rma_iov \
 	contrib/ucx_perftest_config/test_types_ucp_amo \
+	contrib/ucx_perftest_config/test_types_ucp_buffers \
 	contrib/ucx_perftest_config/test_types_ucp_daemon \
 	contrib/ucx_perftest_config/test_types_ucp_device_cuda \
 	contrib/ucx_perftest_config/test_types_ucp_sgl \

@@ -952,6 +952,16 @@ run_ucx_perftest_sgl() {
 }
 
 #
+# Run UCX bandwidth performance test rotating several message buffers
+#
+run_ucx_perftest_buffers() {
+	expect_failure "multiple message buffers are only supported" \
+		"$ucx_inst/bin/ucx_perftest" -t ucp_put_lat -u 2 -l
+	run_ucx_perftest_config test_types_ucp_buffers test_types_buffers_ucp \
+		"buffer rotation"
+}
+
+#
 # Run UCX one-sided performance test with IOV datatype
 #
 run_ucx_perftest_rma_iov() {
@@ -1581,6 +1591,7 @@ run_tests() {
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
 	do_distributed_task 2 4 run_ucx_perftest_sgl
 	do_distributed_task 3 4 run_ucx_perftest_rma_iov
+	do_distributed_task 0 4 run_ucx_perftest_buffers
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

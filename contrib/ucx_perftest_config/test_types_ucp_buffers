@@ -1,0 +1,22 @@
+#
+# UCP bandwidth tests rotating several message buffers
+#
+
+# host -> host
+buffers_put_bw_HH        -t ucp_put_bw  -m host,host -s 65536   -u 4    -n 1000
+buffers_put_bw_auto_HH   -t ucp_put_bw  -m host,host -s 1048576 -u auto -n 100
+buffers_get_HH           -t ucp_get     -m host,host -s 65536   -u 4    -n 1000
+buffers_tag_bw_HH        -t tag_bw      -m host,host -s 65536   -u 4    -n 1000
+buffers_tag_bw_auto_HH   -t tag_bw      -m host,host -s 1048576 -u auto -n 100
+buffers_tag_sync_bw_HH   -t tag_sync_bw -m host,host -s 65536   -u 4    -n 1000
+buffers_am_bw_HH         -t ucp_am_bw   -m host,host -s 65536   -u 4    -n 1000
+buffers_am_bw_copy_HH    -t ucp_am_bw   -m host,host -s 1024    -u 4 -y -n 1000
+buffers_am_bw_auto_HH    -t ucp_am_bw   -m host,host -s 1048576 -u auto -n 100
+
+# host -> host, multi-threaded
+buffers_put_bw_mt_HH     -t ucp_put_bw  -m host,host -s 65536   -u 4 -T 2 -n 1000
+
+# cuda -> cuda
+buffers_put_bw_auto_DD   -t ucp_put_bw  -m cuda,cuda -s 1048576 -u auto -n 100
+buffers_tag_bw_auto_DD   -t tag_bw      -m cuda,cuda -s 1048576 -u auto -n 100
+buffers_am_bw_auto_DD    -t ucp_am_bw   -m cuda,cuda -s 1048576 -u auto -n 100

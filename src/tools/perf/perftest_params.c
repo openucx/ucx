@@ -22,6 +22,7 @@ const struct option TEST_PARAMS_ARGS_LONG[] =
     {"daemon-local",  required_argument, 0, 'g'},
     {"daemon-remote", required_argument, 0, 'G'},
     {"device-api",    no_argument,       0, 'a'},
+    {"buffer-count",  required_argument, 0, 'u'},
     {0, 0, 0, 0}
 };
 
@@ -188,13 +189,16 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
     printf("     -V             validate data correctness for pingpong tests\n");
-    printf("     -u <count>     number of message buffers that consecutive "
+    printf("     -u <count>, --buffer-count <count>\n");
+    printf("                    number of message buffers that consecutive "
            "operations of\n");
-    printf("                    ucp_put_bw, ucp_get, tag_bw and ucp_am_bw "
-           "rotate through (%zu):\n",
+    printf("                    ucp_put_bw, ucp_get, tag_bw, tag_sync_bw and "
+           "ucp_am_bw rotate through (%zu):\n",
            ctx->params.super.ucp.buffer_count);
-    printf("                        auto - 1 below 1 MB messages, else about "
-           "256 MB of buffers\n");
+    printf("                        auto - 1 below %llu MB messages, else "
+           "about %llu MB of buffers\n",
+           UCP_PERF_BUFFER_COUNT_AUTO_MIN_SIZE / UCS_MBYTE,
+           UCP_PERF_BUFFER_COUNT_AUTO_SPAN_SIZE / UCS_MBYTE);
     printf("     -g <IP>[:<port>], --daemon-local <IP>[:<port>]\n");
     printf("                    IP address and port of the local daemon to offload UCP operations to\n");
     printf("                    Port is optional, by default daemon port is (%d)\n",
