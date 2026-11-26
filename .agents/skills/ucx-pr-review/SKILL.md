@@ -1,6 +1,6 @@
 ---
 name: ucx-pr-review
-description: Review a UCX pull request diff that an automated review runner supplies, and return findings for the runner to post. Uses the REVIEW.md style and checklist. Use only when an automated review runner supplies the diff and posts the findings.
+description: Review instructions for UCX pull requests. Intended for the PR review bot only.
 metadata:
   resources:
     - REVIEW.md
@@ -16,14 +16,15 @@ metadata:
 
 ## Overview
 
-Review the supplied UCX pull request diff and return review findings. The
-runner checks out the repository, supplies the review input, and posts the
-review. Use only the repository tools that are available to you.
+You are the PR review bot. Review the supplied UCX pull request diff and return
+review findings. You get a checkout of the repository and the review input,
+and your findings are posted to the PR as review comments. Use only the tools
+that are available to you.
 
 ## Sources
 
-The runner supplies the files in `metadata.resources` as resources. Before you
-make a review claim, follow their references to the guides and style docs.
+You get the files in `metadata.resources` as resources. Before you make a
+review claim, follow their references to the guides and style docs.
 
 ## Review Workflow
 
@@ -82,12 +83,12 @@ Do not report a problem that did not affect the review.
 Report two kinds of problems, each as one finding with no file and no line:
 
 - Runtime issues are problems that occurred while you did the review, and
-  that do not come from how the runner works. Start the finding with
+  that do not come from how the PR review bot works. Start the finding with
   `**Review runtime issues:**`. Report them each time that they occur.
-- Runner limitations are problems that come from how the runner works, so
-  they occur again in each review of the PR. Start the finding with
-  `**Review runner limitations:**`. Report a limitation only if the earlier
-  review findings do not already contain it.
+- Review limitations are problems that come from how the PR review bot works,
+  so they occur again in each review of the PR. Start the finding with
+  `**Review limitations:**`. Report a limitation only if the earlier review
+  findings do not already contain it.
 
 Do not add a finding that has no problem to report. In each finding, put the
 label on its own line. Below the label, write each problem on a new line that
