@@ -933,7 +933,9 @@ enum ucp_dt_local_sgl_field {
 enum ucp_dt_remote_sgl_field {
     UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS = UCS_BIT(0), /**< remote_addrs array is valid */
     UCP_DT_REMOTE_SGL_FIELD_LENGTHS      = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2)  /**< rkeys array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2), /**< rkeys array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_COUNTS       = UCS_BIT(3), /**< counts array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_STRIDES      = UCS_BIT(4)  /**< strides array is valid */
 };
 
 
@@ -941,15 +943,18 @@ enum ucp_dt_remote_sgl_field {
  * @ingroup UCP_DATATYPE
  * @brief Local SGL descriptor for multi-element operations.
  *
- * This structure describes per-element local buffers, lengths, and memory
- * handles. Element @a i describes a local buffer at @a buffers[i] of
- * @a lengths[i] bytes with memory handle @a memhs[i].
+ * This structure describes per-element local buffers, lengths, memory
+ * handles, and optionally strides. Element @a i describes a local buffer at
+ * @a buffers[i] of @a lengths[i] bytes with memory handle @a memhs[i].
  *
  * Optionally, the @a counts and @a strides arrays describe a repeating
  * pattern for each element: element @a i represents @a counts[i] blocks
  * of @a lengths[i] bytes, each separated by @a strides[i] bytes, starting
  * at @a buffers[i]. When @a counts and @a strides are not set, each
- * element is transferred once (equivalent to count=1, stride=0).
+ * element is transferred once (equivalent to count=1, stride=0). The stride is
+ * ignored when @a counts[i] is 1.
+ * @ref UCP_DT_LOCAL_SGL_FIELD_COUNTS and @ref UCP_DT_LOCAL_SGL_FIELD_STRIDES
+ * must be set together.
  *
  * The descriptor @ref ucp_dt_local_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
@@ -960,7 +965,9 @@ enum ucp_dt_remote_sgl_field {
  * with @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
  *
  * @note Currently only N->N mapping is supported: both sides must use
- *       the SGL datatype with equal counts and matching lengths.
+ *       the SGL datatype with an equal number of elements, and element @a i
+ *       must have the same total length on both sides, but may have a
+ *       different block pattern (see @ref ucp_dt_remote_sgl_t).
  *
  * @note All buffers in the descriptor must share the same memory type
  *       (see @ref ucs_memory_type_t), otherwise @ref UCS_ERR_INVALID_PARAM
@@ -970,9 +977,10 @@ typedef struct {
     uint64_t        field_mask; /**< Valid fields, using bits from
                                      @ref ucp_dt_local_sgl_field */
     void * const    *buffers;   /**< Array of local buffer pointers */
-    const size_t    *lengths;   /**< Array of transfer lengths in bytes */
+    const size_t    *lengths;   /**< Array of block lengths in bytes */
     ucp_mem_h const *memhs;     /**< Array of local memory handles */
-    const size_t    *counts;    /**< Array of repetition counts */
+    const size_t    *counts;    /**< Array of the number of blocks in each
+                                     element */
     const size_t    *strides;   /**< Array of strides in bytes */
 } ucp_dt_local_sgl_t;
 
@@ -981,14 +989,29 @@ typedef struct {
  * @ingroup UCP_DATATYPE
  * @brief Remote SGL descriptor for multi-element operations.
  *
- * This structure describes per-element remote addresses, lengths, and keys.
- * Element @a i targets remote address @a remote_addrs[i] using key
- * @a rkeys[i].
+ * This structure describes per-element remote addresses, lengths, keys, and
+ * optionally strides. Element @a i targets remote address @a remote_addrs[i]
+ * using key @a rkeys[i].
+ *
+ * Optionally, the @a counts and @a strides arrays describe a repeating
+ * pattern for each element: element @a i represents @a counts[i] blocks of
+ * @a lengths[i] bytes, each separated by @a strides[i] bytes, starting at
+ * @a remote_addrs[i]. When @a counts and @a strides are not set, the element
+ * is a single block (equivalent to count=1, stride=0). The stride is ignored
+ * when @a counts[i] is 1.
+ * @ref UCP_DT_REMOTE_SGL_FIELD_COUNTS and @ref UCP_DT_REMOTE_SGL_FIELD_STRIDES
+ * must be set together.
+ *
+ * The remote pattern does not have to match the local one, only the total
+ * length of element @a i, @a counts[i] * @a lengths[i], must be equal on both
+ * sides. For example, a strided local element can be transferred to a single
+ * remote block, and a single local block can be transferred to a strided
+ * remote element.
  *
  * The descriptor @ref ucp_dt_remote_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
- * @a remote_addrs, @a lengths, and @a rkeys are not copied and must remain
- * valid until the data transfer request is completed.
+ * @a remote_addrs, @a lengths, @a rkeys, @a counts, and @a strides are not
+ * copied and must remain valid until the data transfer request is completed.
  *
  * Pass via @ref ucp_request_param_t::remote with
  * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_sgl().
@@ -997,8 +1020,11 @@ typedef struct {
     uint64_t         field_mask;    /**< Valid fields, using bits from
                                          @ref ucp_dt_remote_sgl_field */
     const uint64_t   *remote_addrs; /**< Array of remote memory addresses */
-    const size_t     *lengths;      /**< Array of transfer lengths in bytes */
+    const size_t     *lengths;      /**< Array of block lengths in bytes */
     ucp_rkey_h const *rkeys;        /**< Array of remote memory keys */
+    const size_t     *counts;       /**< Array of the number of blocks in each
+                                         element */
+    const size_t     *strides;      /**< Array of strides in bytes */
 } ucp_dt_remote_sgl_t;
 
 
