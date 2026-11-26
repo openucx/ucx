@@ -963,13 +963,23 @@ run_ucx_perftest_rma_iov() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
+	# Match the absolute dlopen paths in test_memhooks before MPI loads UCX.
+	local -x LD_LIBRARY_PATH="$PWD/src/ucs/.libs:$PWD/src/ucm/.libs:$LD_LIBRARY_PATH"
+	local -x UCX_MEM_MMAP_HOOK_MODE
+
 	for mode in reloc bistro
 	do
 		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 		do
+			# UCS initialization must preserve the selected test mode.
+			UCX_MEM_MMAP_HOOK_MODE=$mode
+			if [[ $tname == external_events || $tname == flag_no_install ]]; then
+				UCX_MEM_MMAP_HOOK_MODE=none
+			fi
+
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
 			which mpirun
-			$MPIRUN -np 1 \
+			$MPIRUN -np 1 -x LD_LIBRARY_PATH -x UCX_MEM_MMAP_HOOK_MODE \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
 
@@ -977,7 +987,9 @@ test_malloc_hooks_mpi() {
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
 		which mpirun
-		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib \
+		UCX_MEM_MMAP_HOOK_MODE=$mode
+		$MPIRUN -np 1 -x LD_LIBRARY_PATH -x UCX_MEM_MMAP_HOOK_MODE \
+			-x LD_PRELOAD=$ucm_lib \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
 }
