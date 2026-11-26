@@ -35,9 +35,11 @@ uct_cuda_base_query_devices_common(
         }
 
         sys_device = uct_cuda_get_sys_dev(cuda_device);
-    } else if ((cuDeviceGetCount(&num_devices) == CUDA_SUCCESS) &&
+    } else if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetCount(&num_devices)) ==
+                UCS_OK) &&
                (num_devices == 1) &&
-               (cuDeviceGet(&cuda_device, 0) == CUDA_SUCCESS)) {
+               (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&cuda_device, 0)) ==
+                UCS_OK)) {
         /* No context is current, use the only visible device */
         sys_device = uct_cuda_get_sys_dev(cuda_device);
     } else {
