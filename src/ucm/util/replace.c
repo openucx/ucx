@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -124,10 +124,6 @@ int ucm_orig_shmdt(const void *shmaddr)
     }
 }
 
-#endif
-
-#if HAVE_BRK
-_UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, void*)
 #endif
 
 int ucm_orig_brk(void *addr)

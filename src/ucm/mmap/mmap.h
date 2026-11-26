@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -37,7 +37,6 @@ void *ucm_override_mremap(void *old_address, size_t old_size, size_t new_size,
 void *ucm_override_shmat(int shmid, const void *shmaddr, int shmflg);
 int ucm_override_shmdt(const void *shmaddr);
 void *ucm_override_sbrk(intptr_t increment);
-void *ucm_sbrk_select(intptr_t increment);
 int ucm_override_brk(void *addr);
 int ucm_override_madvise(void *addr, size_t length, int advice);
 void *ucm_get_current_brk();

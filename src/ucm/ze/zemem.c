@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,11 +14,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
-#include <ucs/debug/assert.h>
-#include <ucs/sys/preprocessor.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <stdlib.h>
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(zeMemAllocHost, ze_result_t, -1,
                               ze_context_handle_t,

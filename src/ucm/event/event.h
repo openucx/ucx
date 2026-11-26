@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -40,8 +40,6 @@ typedef struct ucm_event_installer {
 } ucm_event_installer_t;
 
 extern ucs_list_link_t ucm_event_installer_list;
-
-ucs_status_t ucm_set_mmap_hooks();
 
 void ucm_event_handler_add(ucm_event_handler_t *handler);
 

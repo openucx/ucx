@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,7 +13,6 @@
 #include <ucm/mmap/mmap.h>
 #include <ucm/malloc/malloc_hook.h>
 #include <ucm/util/sys.h>
-#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/module.h>
