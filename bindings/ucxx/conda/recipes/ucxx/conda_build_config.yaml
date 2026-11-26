@@ -1,0 +1,29 @@
+c_compiler_version:
+  - 14
+
+cxx_compiler_version:
+  - 14
+
+cuda_compiler:
+  - cuda-nvcc
+
+c_stdlib:
+  - sysroot
+
+c_stdlib_version:
+  - "2.28"
+
+cmake:
+  - ">=4.0,<4.5"
+
+ucx_min:
+  - "1.20"
+
+ucx_max:
+  - "1.23"
+
+gmock:
+  - ">=1.13.0"
+
+gtest:
+  - ">=1.13.0"

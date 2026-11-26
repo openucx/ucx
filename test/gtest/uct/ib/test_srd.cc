@@ -872,4 +872,17 @@ UCS_TEST_P(test_srd, iface_fence_outstanding)
     pending_purge_check(0);
 }
 
+UCS_TEST_P(test_srd, ctl_req_exceeds_max_inline)
+{
+    /* Leave no room for the device address in an inline connection request */
+    modify_config("IB_TX_MIN_INLINE",
+                  ucs::to_string(sizeof(uct_srd_ctl_hdr_t)));
+    scoped_log_handler slh(wrap_errors_logger);
+    uct_iface_h iface;
+    ucs_status_t status = uct_iface_open(m_e1->md(), m_e1->worker(),
+                                         &m_e1->iface_params(), m_iface_config,
+                                         &iface);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}
+
 UCT_INSTANTIATE_SRD_TEST_CASE(test_srd)

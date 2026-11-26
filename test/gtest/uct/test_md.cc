@@ -75,15 +75,17 @@ void* test_md::alloc_thread(void *arg)
 }
 
 ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
-                              uct_mem_h *memh_p)
+                              uct_mem_h *memh_p, ucs_memory_type_t mem_type)
 {
     /* Register memory respecting MD reg_alignment */
     ucs_align_ptr_range(&address, &length, md_attr().reg_alignment);
 
     uct_md_mem_reg_params_t reg_params;
 
-    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                            UCT_MD_MEM_REG_FIELD_MEM_TYPE;
     reg_params.flags      = flags;
+    reg_params.mem_type   = mem_type;
 
     return uct_md_mem_reg_v2(md(), address, length, &reg_params, memh_p);
 }
@@ -263,27 +265,15 @@ bool test_md::check_alloc_mem_type(ucs_memory_type_t mem_type)
  * refuse it, as it does under an MPS MLOPart device */
 bool test_md::check_dmabuf_export(ucs_memory_type_t mem_type)
 {
-    uct_md_mem_attr_t mem_attr = {};
+    bool exported;
 
     if (!(m_md_attr.dmabuf_mem_types & UCS_BIT(mem_type)) ||
         !mem_buffer::is_mem_type_supported(mem_type)) {
         return false;
     }
 
-    mem_buffer buffer(ucs_get_page_size(), mem_type);
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
-    if (uct_md_mem_query(md(), buffer.ptr(), buffer.size(), &mem_attr) !=
-        UCS_OK) {
-        return false;
-    }
-
-    if (mem_attr.dmabuf_fd == UCT_DMABUF_FD_INVALID) {
-        return false;
-    }
-
-    close(mem_attr.dmabuf_fd);
-    return true;
+    return (mem_buffer::query_dmabuf_export(md(), mem_type, &exported) ==
+            UCS_OK) && exported;
 }
 
 /* Under an MPS MLOPart device the driver allocates no GDR capable memory and
@@ -410,7 +400,8 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
             // allocate memory using system allocator and register it
             alloc_memory(&ptr, size, nullptr, mem_type);
             rva = static_cast<unsigned *>(ptr);
-            ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh));
+            ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh,
+                                  mem_type));
         }
 
         // pack
@@ -723,7 +714,8 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
             alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
-            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh,
+                             mem_type);
 
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
@@ -761,7 +753,8 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
             unsigned n = 0;
             while (n < count) {
                 uct_mem_h memh;
-                status = reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh);
+                status = reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh,
+                                 mem_type);
                 ASSERT_UCS_OK(status);
                 ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -1184,9 +1177,9 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     if (pid == 0) {
         char buf[REG_SIZE];
         memset(buf, 42, REG_SIZE);
-        /* child touch the page */
-        EXPECT_EQ(0, memcmp(page, buf, REG_SIZE));
-        exit(0);
+       /* Touch the page in the child and exit without running leak checks,
+        * which report false leaks for parent threads missing in the child */
+        _exit((memcmp(page, buf, REG_SIZE) == 0) ? 0 : 1);
     }
 
     EXPECT_NE(-1, pid);
@@ -1204,15 +1197,13 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
     EXPECT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
 
-#ifndef __SANITIZE_ADDRESS__
     if (!RUNNING_ON_VALGRIND) {
-        /* Under valgrind or ASAN, leaks are possible due to early exit,
+        /* Under valgrind, leaks are possible due to early exit,
          * so don't expect an exit status of 0
          */
         EXPECT_EQ(0, WEXITSTATUS(child_status)) <<
                 ucs::exit_status_info(child_status);
     }
-#endif
 
     free(page);
 }

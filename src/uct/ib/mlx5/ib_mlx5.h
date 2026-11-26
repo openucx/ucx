@@ -57,6 +57,7 @@
 #define UCT_IB_MLX5_EXTENDED_UD_AV       0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_AV_GRH_PRESENT       0x40 /* htonl(UCS_BIT(30)) */
 #define UCT_IB_MLX5_BF_REG_SIZE          256
+#define UCT_IB_MLX5_UAR_PAGE_SIZE        4096
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP  0x93
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN  0x99
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK  0x80
@@ -219,6 +220,8 @@ enum {
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
+    /* Device supports dump/fill memory keys */
+    UCT_IB_MLX5_MD_FLAG_DUMP_FILL_MKEY       = UCS_BIT(19),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,

@@ -930,18 +930,15 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
                      ucp_worker_cfg_index_t rkey_cfg_index,
                      ucp_worker_cfg_index_t *new_rkey_cfg_index)
 {
-    ucp_rkey_config_key_t rkey_config_key;
     ucs_status_t status;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
-        rkey_config_key = ucp_worker_rkey_config(worker, rkey_cfg_index)->key;
-
-        rkey_config_key.ep_cfg_index = ep_cfg_index;
-        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
-                                            new_rkey_cfg_index);
+        status = ucp_worker_rkey_resolve_ep_config(worker, rkey_cfg_index,
+                                                   ep_cfg_index,
+                                                   new_rkey_cfg_index);
         if (status != UCS_OK) {
             ucs_error("failed to switch to new rkey");
             return NULL;
@@ -949,6 +946,28 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
 
         return &ucp_worker_rkey_config(worker, *new_rkey_cfg_index)->proto_select;
     }
+}
+
+const ucp_proto_select_init_protocols_t *
+ucp_proto_select_lookup_init(const ucp_proto_init_params_t *init_params,
+                             const ucp_proto_select_param_t *select_param,
+                             ucp_worker_cfg_index_t *rkey_cfg_index_p)
+{
+    ucp_worker_h worker = init_params->worker;
+    ucp_proto_select_elem_t *select_elem;
+    ucp_proto_select_t *proto_select;
+
+    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+                                        init_params->rkey_cfg_index,
+                                        rkey_cfg_index_p);
+    if (proto_select == NULL) {
+        return NULL;
+    }
+
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
+                                               init_params->ep_cfg_index,
+                                               *rkey_cfg_index_p, select_param);
+    return (select_elem == NULL) ? NULL : &select_elem->proto_init;
 }
 
 void ucp_proto_config_query(ucp_worker_h worker,

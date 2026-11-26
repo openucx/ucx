@@ -1383,6 +1383,63 @@ UCS_TEST_SKIP_COND_P(test_ud_peer_failure, send_am_after_kill,
     EXPECT_EQ(1, m_err_count);
 }
 
+/* A completion callback can send on its endpoint, e.g. a request of a
+ * FAILOVER endpoint is restarted from its completion with an error. When the
+ * peer times out, the endpoint purge completes the window with an error: a
+ * send from such a callback must not leave a new packet in the window. */
+struct ud_purge_send_comp {
+    uct_completion_t super;
+    uct_ep_h         ep;
+    unsigned         count;
+    ucs_status_t     status;
+    ucs_status_t     send_status;
+};
+
+static void ud_purge_send_comp_cb(uct_completion_t *self)
+{
+    ud_purge_send_comp *comp = ucs_container_of(self, ud_purge_send_comp,
+                                                super);
+    const uint64_t send_data = 0;
+
+    ++comp->count;
+    comp->status = self->status;
+    if (self->status != UCS_ERR_CANCELED) {
+        /* Not from the endpoint destroy, if the test failed before the purge */
+        comp->send_status = uct_ep_am_short(comp->ep, 0, 0, &send_data,
+                                            sizeof(send_data));
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_ud_peer_failure, send_from_purge_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    const uint64_t send_data = 0;
+    /* Outlives the test body: the flush stays in the window if it fails */
+    static ud_purge_send_comp comp;
+
+    flush();
+    set_tx_win(m_e1, 1024);
+    kill_receiver();
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, &send_data,
+                                  sizeof(send_data)));
+
+    comp.super.func   = ud_purge_send_comp_cb;
+    comp.super.count  = 1;
+    comp.super.status = UCS_OK;
+    comp.ep           = m_e1->ep(0);
+    comp.count        = 0;
+    comp.status       = UCS_OK;
+    comp.send_status  = UCS_OK;
+    ASSERT_EQ(UCS_INPROGRESS, uct_ep_flush(m_e1->ep(0), 0, &comp.super));
+
+    wait_for_flag(&m_err_count, 10.0);
+    EXPECT_EQ(1, m_err_count);
+    EXPECT_EQ(1u, comp.count);
+    EXPECT_NE(UCS_OK, comp.status);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, comp.send_status);
+}
+
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_peer_failure)
 
 

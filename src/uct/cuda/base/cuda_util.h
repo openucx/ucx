@@ -107,8 +107,9 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
  * Initialize CUDA devices in the system topology.
  *
  * Register and name all CUDA-visible devices, then use NVML to register
- * physical GPUs hidden by CUDA_VISIBLE_DEVICES. Initialization is performed
- * once and its result is cached.
+ * physical GPUs hidden by CUDA_VISIBLE_DEVICES, and set the topology flags
+ * of all of them (e.g. UCS_TOPO_DEVICE_FLAG_RUBIN). Initialization is
+ * performed once and its result is cached.
  *
  * @return Number of CUDA-visible devices.
  */

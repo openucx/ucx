@@ -402,8 +402,8 @@ fill_request_param(ucp_dt_iov_t *iov, int is_client,
 static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                             int current_iter)
 {
-    ucp_dt_iov_t *iov = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
-    ucp_request_param_t param;
+    ucp_dt_iov_t *iov         = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
+    ucp_request_param_t param = {0};
     test_req_t *request;
     size_t msg_length;
     void *msg;
@@ -441,8 +441,8 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
 static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                          int current_iter)
 {
-    ucp_dt_iov_t *iov = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
-    ucp_request_param_t param;
+    ucp_dt_iov_t *iov         = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
+    ucp_request_param_t param = {0};
     void *request;
     size_t msg_length;
     void *msg;
@@ -525,10 +525,10 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
 static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                         int current_iter)
 {
-    static int last   = 0;
-    ucp_dt_iov_t *iov = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
+    static int last            = 0;
+    ucp_dt_iov_t *iov          = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
+    ucp_request_param_t params = {0};
     test_req_t *request;
-    ucp_request_param_t params;
     size_t msg_length;
     void *msg;
     test_req_t ctx;

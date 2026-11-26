@@ -21,6 +21,13 @@ extern "C" {
 #include <string>
 
 
+/* Indices of gpu_nic_assignment_modes */
+enum {
+    GPU_NIC_ASSIGNMENT_MODE_FLIP,
+    GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+    GPU_NIC_ASSIGNMENT_MODE_SHARED
+};
+
 /* UCX_GPU_NIC_ASSIGNMENT_MODE values that set explicit assignment modes */
 static const char *gpu_nic_assignment_modes[] = {
     "flip",
@@ -28,9 +35,26 @@ static const char *gpu_nic_assignment_modes[] = {
     "shared",
 };
 
+/* Indices of gpu_nic_assignment_group_by */
+enum {
+    GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA,
+    GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH
+};
+
+/* UCX_GPU_NIC_ASSIGNMENT_GROUP_BY values that set explicit grouping criteria */
+static const char *gpu_nic_assignment_group_by[] = {
+    "numa",
+    "pci_switch",
+};
+
 /* Helpers for tests that move GPU memory with a gpu-nic assignment */
 class gpu_nic_assignment_checks {
 protected:
+    static std::string no_assignable_devices_error()
+    {
+        return "no assignable network devices";
+    }
+
     gpu_nic_assignment_checks() :
         m_proto_used(false), m_has_unassigned_bw_lane(false)
     {

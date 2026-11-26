@@ -1005,6 +1005,21 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
               msg->dst_ep_id, msg->conn_sn);
 
     ucp_ep_match_remove_ep(worker, ep);
+
+    /* The EP is already bound to another remote EP (set when a connection
+     * request from it was processed, whether accepted or ignored as a
+     * simultaneous connect). A reply from a different remote EP means the
+     * bound one was destroyed after sending its request (e.g. force closed)
+     * and the peer created a new EP to reply to us. */
+    if ((ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
+        (msg->src_ep_id != ucp_ep_remote_id(ep))) {
+        ucs_diag("ep %p: got wireup reply from remote ep 0x%" PRIx64
+                 " while bound to remote ep 0x%" PRIxPTR,
+                 ep, msg->src_ep_id, ucp_ep_remote_id(ep));
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+        return;
+    }
+
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
     /* Connect p2p addresses to remote endpoint */
@@ -1106,7 +1121,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address, addr_indices,
                                    &am_need_flush);
     if (status != UCS_OK) {
-        goto out_delete_ep;
+        goto out_cleanup_lanes;
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
@@ -1126,7 +1141,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
 out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
-out_delete_ep:
     ucp_ep_delete(reply_ep);
 }
 
@@ -1309,9 +1323,10 @@ ucp_wireup_free_lane_tokens(ucp_lane_map_t lane_map,
     }
 }
 
-/* Reply saved until every lane in waiting has an error completion. The
- * address bytes are a copy of the request payload. The unpacked form points
- * into the message and does not outlive that handler. */
+/* Reply saved until every lane in waiting has an error completion. A later
+ * request updates this same reply: the sender matches only the new id.
+ * The address bytes are a copy of the request payload. The unpacked form
+ * points into the message and does not outlive that handler. */
 typedef struct {
     uint32_t                request_id;
     ucp_lane_map_t          requested_lane_map;
@@ -1540,12 +1555,20 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     reply->requested_lane_map = info->requested_lane_map;
     reply->provided_lane_map  = info->provided_lane_map;
     reply->skip_lanes         = skip_lanes;
-    reply->waiting           |= waiting;
+    /* The sender matches the new id only. A lane this request does not
+     * name is no longer answered here. */
+    reply->waiting            = (reply->waiting & info->provided_lane_map) |
+                                waiting;
     reply->address            = copy;
     memcpy(reply->rx_tokens, rx_tokens, sizeof(reply->rx_tokens));
     memset(rx_tokens, 0, sizeof(reply->rx_tokens));
     ucs_debug("ep %p: LANES_ADDR_REQ defer reply id 0x%x waiting 0x%" PRIx64,
               ep, request_id, (uint64_t)reply->waiting);
+    /* A lane dropped by this request has no completion that sends the reply. */
+    if (reply->waiting == 0) {
+        ucp_wireup_tf_reply_schedule(ep);
+    }
+
     return UCS_OK;
 }
 
@@ -1616,8 +1639,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens, 1);
-        /* A newer request can name another lane while that lane's error
-         * completion is still queued. Leave its waiting bit set. */
+        /* This request replaces the parked reply. A lane already waiting
+         * keeps that bit and is not invalidated again. */
         already = 0;
         if (ucp_wireup_tf_reply_get(ep) != NULL) {
             already = ucp_wireup_tf_reply_get(ep)->waiting;

@@ -1,11 +1,13 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/sys/lib.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/module_int.h>
 #include <ucs/sys/sys.h>
@@ -21,6 +23,26 @@ extern "C" {
 
 class test_sys : public ucs::test {
 protected:
+    static const void *libucs_base()
+    {
+        return reinterpret_cast<const void*>(ucs_sys_get_lib_base_addr());
+    }
+
+    /* A static libucs is part of the test executable, not a loaded library */
+    static void skip_if_libucs_static()
+    {
+        Dl_info test_info;
+
+        if (dladdr(reinterpret_cast<const void*>(&libucs_base), &test_info) ==
+            0) {
+            UCS_TEST_ABORT("dladdr() failed for the test executable");
+        }
+
+        if (test_info.dli_fbase == libucs_base()) {
+            UCS_TEST_SKIP_R("libucs is linked statically");
+        }
+    }
+
     static int get_mem_prot(void *address, size_t size) {
         return ucs_get_mem_prot((uintptr_t)address, (uintptr_t)address + size);
     }
@@ -224,6 +246,58 @@ UCS_TEST_F(test_sys, module_file_suffix) {
     EXPECT_STREQ("libtest_module", plain_base);
     EXPECT_STREQ("libother_module" UCX_MODULE_FILE_SUFFIX, other_base);
 #endif
+}
+
+UCS_TEST_F(test_sys, lib_dlsym) {
+    Dl_info sym_info;
+    void *sym;
+
+    skip_if_libucs_static();
+
+    sym = ucs_sys_lib_dlsym(libucs_base(), "ucs_sys_get_lib_path");
+    ASSERT_NE(nullptr, sym);
+    ASSERT_NE(0, dladdr(sym, &sym_info));
+    EXPECT_EQ(libucs_base(), sym_info.dli_fbase);
+    EXPECT_STREQ(ucs_sys_get_lib_path(), sym_info.dli_fname);
+}
+
+/* A symbol of a dependency is found by dlsym() on the library, but it is not
+ * defined by the library itself */
+UCS_TEST_F(test_sys, lib_dlsym_dependency) {
+    const char *symbol = "ucm_set_event_handler";
+    Dl_info sym_info;
+    void *sym;
+
+    skip_if_libucs_static();
+
+    ucs::handle<void*> lib(dlopen(ucs_sys_get_lib_path(),
+                                  RTLD_LAZY | RTLD_NOLOAD),
+                           [](void *handle) {
+                               if (handle != nullptr) {
+                                   dlclose(handle);
+                               }
+                           });
+    ASSERT_NE(nullptr, lib.get());
+
+    sym = dlsym(lib.get(), symbol);
+    ASSERT_NE(nullptr, sym);
+    ASSERT_NE(0, dladdr(sym, &sym_info));
+    ASSERT_NE(libucs_base(), sym_info.dli_fbase);
+
+    EXPECT_EQ(nullptr, ucs_sys_lib_dlsym(libucs_base(), symbol));
+}
+
+UCS_TEST_F(test_sys, lib_dlsym_missing) {
+    skip_if_libucs_static();
+
+    EXPECT_EQ(nullptr,
+              ucs_sys_lib_dlsym(libucs_base(), "ucs_sys_lib_dlsym_missing"));
+}
+
+UCS_TEST_F(test_sys, lib_dlsym_not_in_library) {
+    int on_stack = 0;
+
+    EXPECT_EQ(nullptr, ucs_sys_lib_dlsym(&on_stack, "ucs_sys_get_lib_path"));
 }
 
 UCS_TEST_F(test_sys, dirname) {

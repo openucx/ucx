@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <uct/uct_test.h>
 
 extern "C" {
@@ -13,6 +17,7 @@ extern "C" {
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -492,6 +497,14 @@ protected:
 
     void run_exporter(bool other_device, bool collide_fd)
     {
+#if HAVE_DECL_PR_SET_PTRACER
+        /* Make the importer depend on the exception that opening the ze_ipc MD
+         * grants, not one granted before, e.g. by the CMA resource query.
+         * EINVAL means no Yama, which has no exception to clear. */
+        ASSERT_TRUE((prctl(PR_SET_PTRACER, 0, 0, 0, 0) == 0) ||
+                    (errno == EINVAL))
+                << "prctl(PR_SET_PTRACER, 0) failed: " << strerror(errno);
+#endif
         entity *e = uct_test::create_entity(0);
         m_entities.push_back(e);
 

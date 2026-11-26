@@ -620,7 +620,7 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     EXPECT_EQ(301u, pa.size);
     EXPECT_EQ(101u, index);
 
-    void *vc;
+    void *vc    = NULL;
     int present = ucs_ptr_array_lookup(&pa, 2, vc);
     ASSERT_TRUE(present);
     EXPECT_EQ(&c, vc);

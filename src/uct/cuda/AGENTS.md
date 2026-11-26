@@ -40,6 +40,13 @@ absent.
 - IPC (`cuda_ipc_cache`) entries are keyed per-handle and invalidated on
   the matching `cudaFree` event from `ucm/cuda`. When invalidating, drop
   the full cache entry — never a partial mapping.
+- Multi-chunk VMM keys are cached as views in the cache's interval map,
+  not its page table. A view is named by the `buffer_id` of the peer's
+  metadata buffer and serves any key of that buffer inside its range, so
+  it can be wider than the key. A replaced view leaves the map at once but
+  stays mapped and on the LRU list until its last reference, which
+  releases it through `uct_cuda_ipc_mapping_t::cache_region`, not by
+  address.
 - `gdr_copy` registration is configurable via `UCX_GDR_COPY_*` env vars
   parsed in `gdr_copy_md.c` (notably `RCACHE`, `MEM_REG_OVERHEAD`,
   `MEM_REG_GROWTH`). Pinning falls back across `GDR_PIN_FLAG_*` modes,

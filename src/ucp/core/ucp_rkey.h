@@ -52,7 +52,12 @@ enum {
     UCP_RKEY_CONFIG_FLAG_FLUSH            = UCS_BIT(0),
 
     /* Synthetic key used only for protocol performance estimation */
-    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1)
+    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1),
+
+    /* Some MDs in unreachable_md_map failed to unpack because the remote
+     * device is not reachable at all (rather than only the remote buffer), so
+     * the peer is not expected to access local buffers through them either */
+    UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE = UCS_BIT(2)
 };
 
 
@@ -241,6 +246,23 @@ ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
 /* Unpack a remote key passing zero flags to uct_rkey_unpack */
 ucs_status_t ucp_ep_rkey_unpack_wo_flags(ucp_ep_h ep, const void *rkey_buffer,
                                          ucp_rkey_h *rkey_p);
+
+
+/**
+ * Set the distance of each lane of an endpoint configuration to the distance
+ * of the lane's remote device, or to the default distance if the distance of
+ * that device is not known.
+ *
+ * @param [in]  ep_config_key    Endpoint configuration key.
+ * @param [in]  sys_dev_map      Remote devices whose distance is known.
+ * @param [in]  distance_by_dev  Distances of the devices in @a sys_dev_map,
+ *                               indexed by the device.
+ * @param [out] lanes_distance   Filled with the distance of each lane.
+ */
+void ucp_rkey_set_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
+                                 ucp_sys_dev_map_t sys_dev_map,
+                                 const ucs_sys_dev_distance_t *distance_by_dev,
+                                 ucs_sys_dev_distance_t *lanes_distance);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,

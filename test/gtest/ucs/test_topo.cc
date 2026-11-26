@@ -29,6 +29,40 @@ static std::string get_sysfs_device_path(const std::string &bdf)
     }
 }
 
+// Find two PCI devices under different PCI root complexes
+static bool
+find_pci_devices_on_different_roots(std::string &bdf1, std::string &bdf2)
+{
+    static const std::string root_prefix = "/sys/devices/pci";
+    std::string root1;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir("/sys/bus/pci/devices");
+    if (dir == NULL) {
+        return false;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        auto path = get_sysfs_device_path(entry->d_name);
+        if (path.compare(0, root_prefix.size(), root_prefix) != 0) {
+            continue;
+        }
+
+        auto root = path.substr(0, path.find('/', root_prefix.size()));
+        if (root1.empty()) {
+            root1 = root;
+            bdf1  = entry->d_name;
+        } else if (root != root1) {
+            bdf2 = entry->d_name;
+            break;
+        }
+    }
+
+    closedir(dir);
+    return !bdf2.empty();
+}
+
 static ucs_status_t topo_test_distance_a(ucs_sys_device_t, ucs_sys_device_t,
                                          ucs_sys_dev_distance_t *distance)
 {
@@ -410,6 +444,38 @@ UCS_TEST_F(test_topo, device_flags) {
     }
 }
 
+UCS_TEST_F(test_topo, device_class) {
+    const unsigned num_devices = ucs_topo_num_devices();
+    ucs_sys_device_t sys_dev, other_sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xc1a5;
+    bus_id.bus      = 0x01;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &other_sys_dev));
+
+    EXPECT_EQ(UCS_TOPO_DEVICE_CLASS_UNKNOWN,
+              ucs_topo_sys_device_get_class(sys_dev));
+
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(UCS_TOPO_DEVICE_CLASS_ACC,
+              ucs_topo_sys_device_get_class(sys_dev));
+    EXPECT_EQ(UCS_TOPO_DEVICE_CLASS_UNKNOWN,
+              ucs_topo_sys_device_get_class(other_sys_dev));
+
+    ASSERT_LT(num_devices + 2, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices + 2);
+
+    EXPECT_EQ(UCS_TOPO_DEVICE_CLASS_UNKNOWN,
+              ucs_topo_sys_device_get_class(UCS_SYS_DEVICE_ID_UNKNOWN));
+    EXPECT_EQ(UCS_TOPO_DEVICE_CLASS_UNKNOWN,
+              ucs_topo_sys_device_get_class(invalid_sys_dev));
+}
+
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     static const uintptr_t user_value1 = 17;
     static const uintptr_t user_value2 = 42;
@@ -509,6 +575,116 @@ UCS_TEST_F(test_topo, get_distance) {
     char buf[128];
     UCS_TEST_MESSAGE << "distance: "
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
+}
+
+UCS_TEST_F(test_topo, get_distance_invalid_sys_dev) {
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xf1a8;
+    bus_id.bus      = 0x03;
+    bus_id.slot     = 0x1d;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+
+    const unsigned num_devices = ucs_topo_num_devices();
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev, invalid_sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+
+    ASSERT_UCS_OK(ucs_topo_get_distance(invalid_sys_dev, sys_dev, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+}
+
+UCS_TEST_F(test_topo, get_distance_no_sysfs_entry) {
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_bus_id_t bus_id;
+
+    /* Fake bus ids have no sysfs entry, so the sysfs path lookup fails */
+    bus_id.domain   = 0xf1a7;
+    bus_id.bus      = 0x02;
+    bus_id.slot     = 0x1e;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev1));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev2));
+
+    const ucs::scoped_log_level enable_debug(UCS_LOG_LEVEL_DEBUG);
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
+}
+
+UCS_TEST_F(test_topo, get_distance_pci_devices) {
+    static constexpr int num_iters = 1000;
+    ucs_time_t distance_time       = 0;
+    ucs_time_t realpath_time       = 0;
+    ucs_sys_dev_distance_t distance, restored_distance;
+    ucs_time_t start_time;
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_global_state_t *state;
+    std::string bdf1, bdf2;
+    char path[PATH_MAX];
+
+    if (!find_pci_devices_on_different_roots(bdf1, bdf2)) {
+        UCS_TEST_SKIP_R("No PCI devices under different PCI roots");
+    }
+
+    sys_dev1 = register_device_checked("pci_dev1", bdf1);
+    sys_dev2 = register_device_checked("pci_dev2", bdf2);
+
+    /* Devices under different PCI roots are at node or system distance */
+    ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+    EXPECT_LT(distance.bandwidth, ucs_topo_default_distance.bandwidth);
+
+    state = ucs_topo_extract_state();
+    ASSERT_TRUE(state != NULL);
+    ucs_topo_restore_state(state);
+
+    ASSERT_UCS_OK(
+            ucs_topo_get_distance(sys_dev1, sys_dev2, &restored_distance));
+    EXPECT_EQ(distance.latency, restored_distance.latency);
+    EXPECT_EQ(distance.bandwidth, restored_distance.bandwidth);
+
+    const std::string link_path = "/sys/bus/pci/devices/" + bdf1;
+    for (int retry = 0; retry < (ucs::perf_retry_count + 1); ++retry) {
+        start_time = ucs_get_time();
+        for (int i = 0; i < num_iters; ++i) {
+            ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+        }
+        distance_time = ucs_get_time() - start_time;
+
+        start_time = ucs_get_time();
+        for (int i = 0; i < num_iters; ++i) {
+            ASSERT_TRUE(realpath(link_path.c_str(), path) != NULL);
+        }
+        realpath_time = ucs_get_time() - start_time;
+
+        UCS_TEST_MESSAGE << bdf1 << " <-> " << bdf2 << ": distance query "
+                         << ucs_time_to_nsec(distance_time) / num_iters
+                         << " nsec, realpath "
+                         << ucs_time_to_nsec(realpath_time) / num_iters
+                         << " nsec";
+
+        if (!ucs::perf_retry_count) {
+            UCS_TEST_MESSAGE << "not validating performance";
+            return; /* Success */
+        } else if (distance_time < realpath_time) {
+            return; /* Success */
+        } else {
+            ucs::safe_sleep(ucs::perf_retry_interval);
+        }
+    }
+
+    /* Protocol selection queries the distance of every lane it considers */
+    EXPECT_LT(distance_time, realpath_time)
+            << "distance query resolves sysfs paths";
 }
 
 UCS_TEST_F(test_topo, provider_push_pop) {

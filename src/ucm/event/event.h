@@ -33,7 +33,9 @@ typedef struct ucm_event_handler {
 
 typedef struct ucm_event_installer {
     ucs_status_t          (*install)(int events);
-    void                  (*get_existing_alloc)(ucm_event_handler_t *handler);
+    /* Prefix of the mapped device file path (as in /proc/self/maps) used to
+     * report existing allocations, or NULL if the module has none */
+    const char            *path_pattern;
     ucs_list_link_t       list;
 } ucm_event_installer_t;
 
@@ -75,6 +77,38 @@ ucm_dispatch_vm_munmap(void *addr, size_t length)
     event.vm_unmapped.address = addr;
     event.vm_unmapped.size    = length;
     ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_event_mem_type_init(ucm_event_t *event, void *addr, size_t length,
+                        ucs_memory_type_t mem_type, uint8_t mem_flags)
+{
+    event->mem_type.address   = addr;
+    event->mem_type.size      = length;
+    event->mem_type.mem_type  = mem_type;
+    event->mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event->mem_type.mem_flags = mem_flags;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_mem_type_alloc(void *addr, size_t length,
+                            ucs_memory_type_t mem_type, uint8_t mem_flags)
+{
+    ucm_event_t event;
+
+    ucm_event_mem_type_init(&event, addr, length, mem_type, mem_flags);
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_mem_type_free(void *addr, size_t length,
+                           ucs_memory_type_t mem_type)
+{
+    ucm_event_t event;
+
+    ucm_event_mem_type_init(&event, addr, length, mem_type,
+                            UCS_MEM_FLAG_REGISTRABLE);
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
 #endif
