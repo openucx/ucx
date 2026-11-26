@@ -1732,7 +1732,7 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
        Both limits are checked only between rounds, so the last round may
        exceed them. */
     if (params->max_warmup_time == 0.0) {
-        deadline = UINT64_MAX;
+        deadline = UCS_TIME_INFINITY;
     } else {
         deadline = ucs_get_time() + ucs_time_from_sec(params->max_warmup_time);
     }
