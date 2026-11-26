@@ -5,7 +5,7 @@
 job: ucx-test-namespace-gpu
 
 failFast: false
-timeout_minutes: 270
+timeout_minutes: 310
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
