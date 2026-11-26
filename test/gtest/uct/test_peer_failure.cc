@@ -1262,12 +1262,8 @@ protected:
         UCS_TEST_MESSAGE << "count " << count << " limit "
                          << (is_put ? attr.max_put_sgl_zcopy_count :
                                       attr.max_get_sgl_zcopy_count);
-        const size_t stride = 16 * UCS_KBYTE;
         const size_t failed = remote_error ? count / 2 : SIZE_MAX;
-        mapped_buffer local(count * stride, SEND_SEED, *m_sender);
-        mapped_buffer remote(count * stride, RECV_SEED, *m_receiver);
-        mapped_buffer local2(count * stride, SEND_SEED, *m_sender);
-        mapped_buffer remote2(count * stride, RECV_SEED, *m_receiver);
+        std::vector<mapped_buffer> local, remote;
         std::vector<void*> buffers(count);
         std::vector<size_t> lengths(count);
         std::vector<uct_mem_h> memhs(count);
@@ -1275,17 +1271,17 @@ protected:
         std::vector<uct_rkey_t> rkeys(count);
         std::vector<uct_iov_t> iov(count);
         for (size_t i = 0; i < count; ++i) {
-            auto &src     = (i % 2) ? local2 : local;
-            auto &dst     = (i % 2) ? remote2 : remote;
-            buffers[i]    = UCS_PTR_BYTE_OFFSET(src.ptr(), i * stride);
-            lengths[i]    = (is_put && (i == 1) && (i != failed)) ? 0 :
-                            (i + 1) * 2 * UCS_KBYTE;
-            memhs[i]      = src.memh();
-            addrs[i]      = (i == failed) ? 0 : dst.addr() + i * stride;
-            rkeys[i]      = dst.rkey();
-            iov[i].buffer = buffers[i];
+            const size_t length = (i + 1) * 2 * UCS_KBYTE;
+
+            local.emplace_back(length, SEND_SEED + i, *m_sender, i);
+            remote.emplace_back(length, RECV_SEED + i, *m_receiver, i);
+            buffers[i]    = local.back().ptr();
+            lengths[i]    = (is_put && (i == 1) && (i != failed)) ? 0 : length;
+            memhs[i]      = local.back().memh();
+            addrs[i]      = (i == failed) ? 0 : remote.back().addr();
+            rkeys[i]      = remote.back().rkey();
+            iov[i]        = *local.back().iov();
             iov[i].length = lengths[i];
-            iov[i].memh   = memhs[i];
         }
         purge_ctx ctx = {this, is_put ? UCT_EP_OP_PUT_SGL_ZCOPY :
                                        UCT_EP_OP_GET_SGL_ZCOPY,
@@ -1303,8 +1299,8 @@ protected:
                           (mode == NO_COMP) ? nullptr : comp);
         };
         /* Consume setup fencing before checking the original RMA keys. */
-        ASSERT_UCS_OK(uct_ep_put_short(m_sender->ep(0), local.ptr(), 1,
-                                       remote.addr(), remote.rkey()));
+        ASSERT_UCS_OK(uct_ep_put_short(m_sender->ep(0), local[0].ptr(), 1,
+                                       remote[0].addr(), remote[0].rkey()));
         uct_completion_t seed_comp = {[](uct_completion_t*) {}, 0, UCS_OK};
         post_flush(m_sender->ep(0), &seed_comp);
         wait_for_value(&seed_comp.count, 0, true);
@@ -1340,12 +1336,10 @@ protected:
         if (remote_error) {
             for (size_t i = 0; i < count; ++i) {
                 if (lengths[i] != 0) {
-                    auto &dst = (i % 2) ? remote2 : remote;
                     EXPECT_EQ(i < failed, mem_buffer::compare(
-                            buffers[i],
-                            UCS_PTR_BYTE_OFFSET(dst.ptr(), i * stride),
-                            lengths[i], UCS_MEMORY_TYPE_HOST,
-                            UCS_MEMORY_TYPE_HOST)) << "element " << i;
+                            local[i].ptr(), remote[i].ptr(), lengths[i],
+                            UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST))
+                            << "element " << i;
                 }
             }
         }
