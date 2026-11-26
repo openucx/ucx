@@ -36,6 +36,7 @@ The CI images, the ucxx ref, and the in-repo CI scripts move together.
 ## Prerequisites
 
 - Two builder hosts, one `x86_64` and one `aarch64`, each with Docker + `buildx`.
+- `jq` on the host you run on.
 - The host you run on must key-auth (non-interactive) ssh to the other host - the
   remote buildkit runs over that ssh context. One direction suffices: run the
   script from whichever host holds the key to the other.

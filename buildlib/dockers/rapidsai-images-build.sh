@@ -55,26 +55,17 @@ case "$(uname -m)" in
   *) echo "ERROR: unexpected host arch $(uname -m)" >&2; exit 1 ;;
 esac
 
-# The compose image: fields are the single source of the pushed tags; the
-# destination preflight and the final verify both iterate this list.
-images=()
-while read -r t; do
-  t="${t//\$\{RAPIDS_VER:\?\}/$RAPIDS_VER}"
-  t="${t//\$\{IMAGE_REV:\?\}/$IMAGE_REV}"
-  images+=("$REGISTRY/${t#*/}")
-done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
-# An empty list would skip the destination preflight and the final verify.
-[ ${#images[@]} -gt 0 ] \
-  || { echo "ERROR: no image: fields in $basedir/docker-compose-rapidsai.yml" >&2; exit 1; }
+# The compose is the single source of the pushed tags and of the base images.
+# bake resolves the compose variables itself, so both are read from its plan;
+# the destination preflight and the final verify iterate the tags.
+compose="$basedir/docker-compose-rapidsai.yml"
+plan=$(RAPIDS_VER="$RAPIDS_VER" docker buildx bake -f "$compose" --print)
+tags=$(jq -r '.target[].tags[]' <<< "$plan")
+mapfile -t images <<< "$tags"
 
-# 1. preflight - every BASE_IMAGE in the compose must exist. The compose is
-# the single source for the base tags; this parses them instead of keeping a
-# second copy that drifts when RAPIDS moves a cuda/py version.
-bases=$(sed -n 's/^[[:space:]]*BASE_IMAGE:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
-[ -n "$bases" ] \
-  || { echo "ERROR: no BASE_IMAGE: args in $basedir/docker-compose-rapidsai.yml" >&2; exit 1; }
+# 1. preflight - every BASE_IMAGE in the compose must exist.
+bases=$(jq -r '.target[].args.BASE_IMAGE' <<< "$plan")
 while read -r t; do
-  t="${t//\$\{RAPIDS_VER\}/$RAPIDS_VER}"
   echo ">> preflight: $t"
   docker manifest inspect "$t" >/dev/null \
     || { echo "ERROR: base image not found: $t (did RAPIDS move the cuda/py tag?)" >&2; exit 1; }
@@ -130,7 +121,7 @@ done
 # bake resolves the compose build context against the cwd, not the compose dir
 cd "$basedir"
 RAPIDS_VER="$RAPIDS_VER" docker buildx bake \
-  --builder "$BUILDER" -f "$basedir/docker-compose-rapidsai.yml" \
+  --builder "$BUILDER" -f "$compose" \
   --set '*.platform=linux/amd64,linux/arm64' --push
 
 # 4. verify the manifests really carry both arches - a single-arch manifest is
