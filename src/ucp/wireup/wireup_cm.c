@@ -143,26 +143,6 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
     return 1;
 }
 
-static ucp_rsc_index_t
-ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
-                             const ucp_tl_bitmap_t *tl_bitmap)
-{
-    ucp_rsc_index_t rsc_index = ucp_tl_bitmap_ffs(tl_bitmap, 0);
-    ucp_rsc_index_t dev_index;
-
-    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
-    ucs_assert(rsc_index < context->num_tls);
-
-    dev_index = context->tl_rscs[rsc_index].dev_index;
-
-    /* check that all TL resources in the TL bitmap have the same dev_index */
-    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
-        ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
-    }
-
-    return dev_index;
-}
-
 static ucs_status_t
 ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
                                     const ucp_tl_bitmap_t *tl_bitmap,
@@ -648,8 +628,6 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     const void *ucp_address;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
-    ucp_tl_bitmap_t tl_bitmap;
-    ucp_rsc_index_t dev_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -695,12 +673,12 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucp_ep_update_remote_id(ucp_ep, progress_arg->sa_data->ep_id);
 
-    ucp_ep_get_tl_bitmap(&ucp_ep_config(ucp_ep)->key, &tl_bitmap);
-    dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
-
-    ucp_context_dev_idx_tl_bitmap(context, dev_index, &tl_bitmap);
-    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &tl_bitmap,
-                                   &addr, addr_indices, &am_need_flush);
+    /* Reachability is not checked in CM phase, so select only resources of the
+     * device resolved by CM, like the server does. Other devices sharing its
+     * system device (e.g. VLAN and its parent) have different addresses. */
+    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
+                                   &wireup_ep->cm_resolve_tl_bitmap, &addr,
+                                   addr_indices, &am_need_flush);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to initialize lanes: %s", ucp_ep,
                   ucs_status_string(status));

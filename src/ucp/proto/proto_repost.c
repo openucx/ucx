@@ -51,6 +51,21 @@ static size_t ucp_proto_repost_pack(void *dest, void *arg)
     return pack->length;
 }
 
+/* The receiver gets the same data as from AM short: header, then payload */
+static size_t ucp_proto_repost_pack_am_short(void *dest, void *arg)
+{
+    const uct_ep_op_info_t *info = arg;
+    size_t length                = info->am.payload.data.length;
+
+    memcpy(dest, &info->am.header.value, sizeof(info->am.header.value));
+    if (length > 0) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dest, sizeof(info->am.header.value)),
+               info->am.payload.data.buffer, length);
+    }
+
+    return sizeof(info->am.header.value) + length;
+}
+
 static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
@@ -365,6 +380,33 @@ ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
     return UCS_OK;
 }
 
+/* The purged lane may take a longer AM short than the repost lane, for example
+ * with device memory. Send the same bytes as AM bcopy then. */
+static ucs_status_t ucp_proto_repost_am_short(ucp_request_t *req)
+{
+    const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_lane_index_t lane                = rpriv->lane;
+    uct_ep_h uct_ep                      = ucp_ep_get_lane(req->send.ep, lane);
+    uct_ep_op_info_t *info               = req->send.repost.info;
+    size_t length                        = sizeof(info->am.header.value) +
+                                           info->am.payload.data.length;
+    ssize_t packed;
+
+    if (length <= ucp_ep_get_iface_attr(req->send.ep, lane)->cap.am.max_short) {
+        return uct_ep_am_short(uct_ep, info->am.am_id, info->am.header.value,
+                               info->am.payload.data.buffer,
+                               info->am.payload.data.length);
+    }
+
+    if (length > ucp_ep_get_max_bcopy(req->send.ep, lane)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    packed = uct_ep_am_bcopy(uct_ep, info->am.am_id,
+                             ucp_proto_repost_pack_am_short, info, 0);
+    return ucp_proto_bcopy_send_func_status(packed);
+}
+
 
 static void ucp_proto_repost_completion(uct_completion_t *self)
 {
@@ -440,9 +482,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 
     switch (info->operation) {
     case UCT_EP_OP_AM_SHORT:
-        status = uct_ep_am_short(uct_ep, info->am.am_id, info->am.header.value,
-                                 info->am.payload.data.buffer,
-                                 info->am.payload.data.length);
+        status = ucp_proto_repost_am_short(req);
         break;
     case UCT_EP_OP_AM_BCOPY:
         pack.buffer = info->am.payload.data.buffer;
