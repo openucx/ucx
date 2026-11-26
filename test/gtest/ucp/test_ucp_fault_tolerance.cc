@@ -120,9 +120,14 @@ protected:
 
         ucp_ep_params_t ep_params = get_ep_params();
         sender().connect(&receiver(), ep_params, GOOD_EP_INDEX);
-        sender().connect(&receiver(), ep_params, INJECTED_EP_INDEX);
         receiver().connect(&sender(), ep_params, GOOD_EP_INDEX);
-        receiver().connect(&sender(), ep_params, INJECTED_EP_INDEX);
+
+        /* The injected endpoint is created by the test after the peer is
+         * destroyed */
+        if (!(get_variant_value() & TEST_OP_WIREUP)) {
+            sender().connect(&receiver(), ep_params, INJECTED_EP_INDEX);
+            receiver().connect(&sender(), ep_params, INJECTED_EP_INDEX);
+        }
 
         if (get_variant_value() & TEST_OP_AM) {
             set_am_handler();
@@ -651,26 +656,41 @@ protected:
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
-    /* Destroy the peer before any wait, so the handshake cannot finish. */
+    /* Destroy the peer before connecting to it, so the handshake cannot
+     * finish. */
     void test_target_wireup() {
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
         mem_buffer sbuf(am_msg_size(), UCS_MEMORY_TYPE_HOST);
+        ucp_address_t *address;
+        size_t address_length;
         ucs_status_t status;
         ucs_time_t deadline;
         uct_ep_h am_ep;
+        ucp_ep_h ep;
 
         sender().set_ib_ud_peer_timeout(3.);
-        sender().progress();
 
-        am_ep = ucp_ep_get_lane(ep, ucp_ep_config(ep)->key.am_lane);
-        ASSERT_NE((uct_ep_h)NULL, am_ep);
-        ASSERT_TRUE(ucp_wireup_ep_test(am_ep));
-        ASSERT_FALSE(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+        ASSERT_UCS_OK(ucp_worker_get_address(receiver().worker(), &address,
+                                             &address_length));
+        std::string address_copy(reinterpret_cast<const char*>(address),
+                                 address_length);
+        ucp_worker_release_address(receiver().worker(), address);
 
         {
             scoped_log_handler slh(hide_errors_logger);
 
             receiver().destroy_worker();
+            sender().connect_to_address(
+                    0, reinterpret_cast<const ucp_address_t*>(
+                               address_copy.data()),
+                    get_ep_params(), INJECTED_EP_INDEX);
+            sender().progress();
+
+            ep    = sender().ep(0, INJECTED_EP_INDEX);
+            am_ep = ucp_ep_get_lane(ep, ucp_ep_config(ep)->key.am_lane);
+            ASSERT_NE((uct_ep_h)NULL, am_ep);
+            ASSERT_TRUE(ucp_wireup_ep_test(am_ep));
+            ASSERT_FALSE(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+
             status = request_wait(ucp_am_send_nbx(ep, AM_ID, NULL, 0,
                                                   sbuf.ptr(), am_msg_size(),
                                                   &m_req_empty_param));
