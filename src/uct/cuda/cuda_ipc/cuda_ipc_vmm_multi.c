@@ -40,7 +40,7 @@ uct_cuda_ipc_vmm_multi_check_layout(const uct_cuda_ipc_vmm_multi_info_t *info,
     UCS_STATIC_ASSERT(ucs_offsetof(uct_cuda_ipc_md_handle_t, pool) ==
                       (ucs_offsetof(uct_cuda_ipc_md_handle_t, ptr) +
                        sizeof(CUmemPoolPtrExportData)));
-    UCS_STATIC_ASSERT(sizeof(uct_cuda_ipc_vmm_chunk_desc_t) == 80);
+    UCS_STATIC_ASSERT(sizeof(uct_cuda_ipc_vmm_chunk_desc_t) == 88);
 
     if (!uct_cuda_ipc_vmm_multi_is_supported(info)) {
         ucs_log(log_level,
@@ -203,6 +203,14 @@ uct_cuda_ipc_vmm_multi_export_chunk(uct_cuda_ipc_vmm_chunk_desc_t *desc)
 {
     CUmemGenericAllocationHandle handle;
     ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuPointerGetAttribute(&desc->buffer_id,
+                                  CU_POINTER_ATTRIBUTE_BUFFER_ID,
+                                  desc->d_bptr));
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemRetainAllocationHandle(&handle, (void*)desc->d_bptr));

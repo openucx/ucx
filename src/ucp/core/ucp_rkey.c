@@ -803,6 +803,31 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
     ucp_memh_buffer_release(rkey_buffer, &params);
 }
 
+void ucp_rkey_set_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
+                                 ucp_sys_dev_map_t sys_dev_map,
+                                 const ucs_sys_dev_distance_t *distance_by_dev,
+                                 ucs_sys_dev_distance_t *lanes_distance)
+{
+    ucs_sys_device_t sys_dev;
+    ucp_lane_index_t lane;
+    char buf[128];
+
+    for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
+        sys_dev = ep_config_key->lanes[lane].dst_sys_dev;
+        /* UCS_SYS_DEVICE_ID_UNKNOWN is out of the range of the map */
+        if ((sys_dev < UCP_MAX_SYS_DEVICES) &&
+            (sys_dev_map & UCS_BIT(sys_dev))) {
+            lanes_distance[lane] = distance_by_dev[sys_dev];
+        } else {
+            lanes_distance[lane] = ucs_topo_default_distance;
+        }
+
+        ucs_trace("lane[%d] dev %d distance %s", lane, sys_dev,
+                  ucs_topo_distance_str(&lanes_distance[lane], buf,
+                                        sizeof(buf)));
+    }
+}
+
 static void UCS_F_NOINLINE
 ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
                                ucs_sys_dev_distance_t *lanes_distance,
@@ -812,8 +837,6 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     ucp_sys_dev_map_t sys_dev_map = 0;
     ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_COUNT];
     ucs_sys_device_t sys_dev;
-    ucp_lane_index_t lane;
-    char buf[128];
 
     /* Unpack lane distances and update distance_by_dev lookup */
     while (p < buffer_end) {
@@ -829,16 +852,8 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
         sys_dev_map             |= UCS_BIT(sys_dev);
     }
 
-    /* Initialize lane distances according to distance_by_dev */
-    for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
-        sys_dev              = ep_config_key->lanes[lane].dst_sys_dev;
-        lanes_distance[lane] = (sys_dev_map & UCS_BIT(sys_dev)) ?
-                                       distance_by_dev[sys_dev] :
-                                       ucs_topo_default_distance;
-        ucs_trace("lane[%d] dev %d distance %s", lane, sys_dev,
-                  ucs_topo_distance_str(&lanes_distance[lane], buf,
-                                        sizeof(buf)));
-    }
+    ucp_rkey_set_lanes_distance(ep_config_key, sys_dev_map, distance_by_dev,
+                                lanes_distance);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -864,9 +879,11 @@ ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map,
+                  unreachable_flags),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 uint8_t unreachable_flags)
 {
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_worker_h worker              = ep->worker;
@@ -888,6 +905,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
     ucp_rkey_extract_sys_dev(ep_config, rkey, &p, buffer_end, &rkey_config_key);
+    rkey_config_key.flags |= unreachable_flags;
 
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,
@@ -926,6 +944,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     const void *p                    = buffer;
     ucp_md_map_t md_map, remote_md_map, unreachable_md_map;
     uct_rkey_unpack_params_t unpack_params;
+    uint8_t unreachable_flags;
     ucp_rsc_index_t cmpt_index;
     unsigned remote_md_index;
     const void *tl_rkey_buf;
@@ -950,6 +969,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     md_map             = remote_md_map & unpack_md_map;
     md_count           = ucs_popcount(md_map);
     unreachable_md_map = 0;
+    unreachable_flags  = 0;
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
      * allocations are done from a memory pool.
@@ -1023,11 +1043,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
                       remote_md_index, tl_rkey->rkey.rkey);
             ++rkey_index;
-        } else if (status == UCS_ERR_UNREACHABLE) {
+        } else if ((status == UCS_ERR_UNREACHABLE) ||
+                   (status == UCS_ERR_UNSUPPORTED)) {
+            /* UCS_ERR_UNREACHABLE: the remote device is not reachable;
+             * UCS_ERR_UNSUPPORTED: only this remote buffer is not accessible */
             rkey->md_map       &= ~UCS_BIT(remote_md_index);
             unreachable_md_map |= UCS_BIT(remote_md_index);
-            ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
-                      rkey_index, remote_md_index, tl_rkey->rkey.rkey);
+            if (status == UCS_ERR_UNREACHABLE) {
+                unreachable_flags |= UCP_RKEY_CONFIG_FLAG_PEER_UNREACHABLE;
+            }
+            ucs_trace("rkey[%d] for remote md %d is not reachable: %s",
+                      rkey_index, remote_md_index, ucs_status_string(status));
         } else {
             rkey->md_map &= UCS_MASK(remote_md_index);
             ucs_error("failed to unpack remote key from remote md[%d]: %s",
@@ -1039,7 +1065,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map, unreachable_flags);
         if (status != UCS_OK) {
             goto err_destroy;
         }

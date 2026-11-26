@@ -14,7 +14,7 @@
 # CI pulls these tags through the rdmz-harbor.rdmz.labs.mlnx mirror; keep the
 # image refs in buildlib/pr/main.yml in sync with the pushed tags.
 
-ARG BASE_IMAGE=rapidsai/ci-wheel:26.12-cuda13.3.0-rockylinux8-py3.12
+ARG BASE_IMAGE=rapidsai/ci-wheel:26.12-cuda13.4.3-rockylinux8-py3.12
 FROM ${BASE_IMAGE}
 
 RUN chmod -R o+rwX /pyenv \

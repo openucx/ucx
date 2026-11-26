@@ -1695,7 +1695,11 @@ uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
  *       If the remote key buffer cannot be unpacked with the given component,
  *       UCS_ERR_INVALID_PARAM will be returned.
  *
- * @return UCS_OK on success or error code in case of failure.
+ * @return UCS_OK on success, UCS_ERR_UNREACHABLE if the remote device is not
+ *         accessible from the local one (so local memory is not expected to be
+ *         accessible from the remote device either), UCS_ERR_UNSUPPORTED if
+ *         only the remote memory described by this key is not accessible, or
+ *         another error code in case of failure.
  */
 ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
                                 const void *rkey_buffer,

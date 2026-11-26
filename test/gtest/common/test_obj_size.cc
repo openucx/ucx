@@ -15,6 +15,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_types.h>
+#include <ucp/proto/proto_multi.h>
 #include <uct/api/tl.h>
 #include <uct/base/uct_iface.h>
 #include <uct/sm/self/self.h>
@@ -58,6 +59,7 @@ UCS_TEST_F(test_obj_size, size) {
 #endif
     /* TODO reduce request size to 240 or less after removing old protocols state */
     EXPECTED_SIZE(ucp_request_t, 280);
+    EXPECTED_SIZE(ucp_proto_multi_lane_priv_t, 64);
     EXPECTED_SIZE(ucp_recv_desc_t, 48);
     EXPECTED_SIZE(ucp_mem_t, 160);
     EXPECTED_SIZE(uct_ep_t, 8);

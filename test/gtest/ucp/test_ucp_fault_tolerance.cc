@@ -35,6 +35,13 @@ public:
         static constexpr unsigned rma_ops[]           = {
             TEST_OP_PUT, TEST_OP_GET
         };
+        static constexpr unsigned am_ops[]            = {
+            TEST_OP_AM, TEST_OP_AM | TEST_OP_ALL_LANES_FAILED,
+            TEST_OP_AM | TEST_OP_FLUSH
+        };
+        static constexpr unsigned am_msg_size_variants[] = {
+            TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM
+        };
 
         for (unsigned rma_op : rma_ops) {
             for (unsigned msg_size_variant : msg_size_variants) {
@@ -47,17 +54,21 @@ public:
                                    rma_op | TEST_OP_FLUSH,
                                    op_name(rma_op | TEST_OP_FLUSH));
         }
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
-                               op_name(TEST_OP_AM));
-        add_variant_with_value(variants, UCP_FEATURE_AM,
-                               TEST_OP_AM | TEST_OP_ALL_LANES_FAILED,
-                               op_name(TEST_OP_AM | TEST_OP_ALL_LANES_FAILED));
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
-                               op_name(TEST_OP_AM | TEST_OP_FLUSH));
+        for (unsigned am_op : am_ops) {
+            for (unsigned msg_size_variant : am_msg_size_variants) {
+                add_variant_with_value(variants, UCP_FEATURE_AM,
+                                       am_op | msg_size_variant,
+                                       op_name(am_op | msg_size_variant));
+            }
+        }
 
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
                                TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
+
+        add_variant_with_value(variants, UCP_FEATURE_AM,
+                               TEST_OP_WIREUP | TEST_OP_AM,
+                               op_name(TEST_OP_WIREUP | TEST_OP_AM));
     }
 
     test_ucp_fault_tolerance() {
@@ -87,7 +98,10 @@ protected:
         TEST_OP_ALL_LANES_FAILED = UCS_BIT(4),
         TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
         TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
-        TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
+        TEST_MSG_SIZE_LARGE      = UCS_BIT(7),
+        TEST_OP_WIREUP           = UCS_BIT(8),
+        TEST_MSG_SIZE_MASK       = TEST_MSG_SIZE_SMALL | TEST_MSG_SIZE_MEDIUM |
+                                   TEST_MSG_SIZE_LARGE
     };
 
     /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
@@ -142,14 +156,16 @@ protected:
         test_ucp_fault_tolerance *self =
             reinterpret_cast<test_ucp_fault_tolerance*>(arg);
 
-        if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
-            self->m_am_rbuf.resize(length);
-            memcpy(self->m_am_rbuf.data(), data, length);
-            self->m_am_received = true;
+        /* Rendezvous passes a descriptor, not the payload. Inline and
+         * persistent receives both point at the payload for this callback. */
+        if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
+            ADD_FAILURE() << "RNDV is not covered yet";
+            return UCS_OK;
         }
 
-        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) <<
-                "RNDV is not covered yet";
+        self->m_am_rbuf.resize(length);
+        memcpy(self->m_am_rbuf.data(), data, length);
+        self->m_am_received = true;
 
         return UCS_OK;
     }
@@ -634,8 +650,67 @@ protected:
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
+    /* Destroy the peer before any wait, so the handshake cannot finish. */
+    void test_target_wireup() {
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        mem_buffer sbuf(am_msg_size(), UCS_MEMORY_TYPE_HOST);
+        ucs_status_t status;
+        ucs_time_t deadline;
+        uct_ep_h am_ep;
+
+        sender().set_ib_ud_peer_timeout(3.);
+        sender().progress();
+
+        am_ep = ucp_ep_get_lane(ep, ucp_ep_config(ep)->key.am_lane);
+        ASSERT_NE((uct_ep_h)NULL, am_ep);
+        ASSERT_TRUE(ucp_wireup_ep_test(am_ep));
+        ASSERT_FALSE(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+
+        {
+            scoped_log_handler slh(hide_errors_logger);
+
+            receiver().destroy_worker();
+            status = request_wait(ucp_am_send_nbx(ep, AM_ID, NULL, 0,
+                                                  sbuf.ptr(), am_msg_size(),
+                                                  &m_req_empty_param));
+            EXPECT_NE(UCS_INPROGRESS, status) <<
+                    "operation timed out during wireup";
+
+            /* Both sender endpoints see the dead worker. Count only the
+             * injected one. */
+            deadline = ucs::get_deadline();
+            while ((m_initiator_err_count == 0) &&
+                   (ucs_get_time() < deadline)) {
+                short_progress_loop();
+            }
+
+            ASSERT_EQ(1, m_initiator_err_count)
+                    << "Error callback invoked " << m_initiator_err_count
+                    << " times";
+        }
+
+        /* Peer is gone, so cleanup must force-close instead of flushing. */
+        sender().add_err(UCS_ERR_ENDPOINT_TIMEOUT);
+    }
+
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
+
+        if (is_target_wireup(op_mask, failure_side)) {
+            if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5",
+                                    "rc_verbs"})) {
+                UCS_TEST_SKIP_R("initial wireup failure is RC-only for now");
+            }
+
+            test_target_wireup();
+            return;
+        }
+
+        if (op_mask & TEST_OP_WIREUP) {
+            /* The flush before injection completes the handshake. */
+            UCS_TEST_SKIP_R("initial wireup failure is covered by "
+                            "target_failure");
+        }
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
             test_put_am_flush_with_injected_failure(failure_side, op_mask);
@@ -650,7 +725,7 @@ protected:
         test_recovery(op_mask);
     }
 protected:
-    size_t rma_msg_size() const {
+    size_t msg_size_by_variant(size_t default_size) const {
         const unsigned op_mask = get_variant_value();
 
         if (op_mask & TEST_MSG_SIZE_SMALL) {
@@ -661,17 +736,36 @@ protected:
             return ucs::limit_buffer_size(MEDIUM_MSG_SIZE);
         }
 
-        return ucs::limit_buffer_size(LARGE_MSG_SIZE /
-                                      ucs::test_time_multiplier());
+        if (op_mask & TEST_MSG_SIZE_LARGE) {
+            return ucs::limit_buffer_size(LARGE_MSG_SIZE /
+                                          ucs::test_time_multiplier());
+        }
+
+        return ucs::limit_buffer_size(default_size);
     }
 
-    static size_t am_msg_size() {
-        return ucs::limit_buffer_size(UCS_KBYTE);
+    size_t rma_msg_size() const {
+        return msg_size_by_variant(LARGE_MSG_SIZE /
+                                   ucs::test_time_multiplier());
+    }
+
+    size_t am_msg_size() const {
+        return msg_size_by_variant(UCS_KBYTE);
+    }
+
+    static bool is_target_wireup(unsigned op_mask, failure_side_t failure_side)
+    {
+        return (op_mask & TEST_OP_WIREUP) &&
+               (failure_side == FAILURE_SIDE_TARGET);
     }
 
     static std::string op_name(unsigned op_mask)
     {
         std::string name;
+
+        if (op_mask & TEST_OP_WIREUP) {
+            name += "WIREUP|";
+        }
 
         if (op_mask & TEST_OP_PUT) {
             name += "PUT|";
@@ -798,9 +892,11 @@ protected:
     static constexpr uint64_t m_seed = 0x12345678;
 
     void skip_unless_rc_probe_gate() {
-        if (get_variant_value() != TEST_OP_AM) {
+        /* Size bits do not change which operation the variant runs. */
+        if ((get_variant_value() & ~TEST_MSG_SIZE_MASK) != TEST_OP_AM) {
             UCS_TEST_SKIP_R("pure AM variant only");
         }
+
         if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5", "rc_verbs", "ib"})) {
             UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
         }
@@ -1131,9 +1227,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush_lane_recovery, shm_ib, "shm,ib")
 
 void test_ucp_fault_tolerance::run_initiator_failure()
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
-        has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes "
+    if (has_any_transport({"ud_v", "ud_x"}) &&
+        (get_variant_value() & (TEST_OP_AM | TEST_OP_ALL_LANES_FAILED))) {
+        UCS_TEST_SKIP_R("UD transport BUG: local AM or all-lanes invalidation "
                         "leads to assertion failure in ud_ep_purge");
     }
 
@@ -1155,8 +1251,12 @@ void test_ucp_fault_tolerance::run_probe_gated_recovery()
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
 
     ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+
+    /* Target invalidate shows up on the sender later. Lanes that are not
+     * failed yet are not a finished recovery, so wait until the aux probe
+     * has been armed and the failed lanes are clear. */
     wait_for_cond([ep]() {
-        return ucp_ep_get_failed_lanes(ep) == 0;
+        return (m_probe_count != 0) && (ucp_ep_get_failed_lanes(ep) == 0);
     }, [this]() {
         short_progress_loop();
     });

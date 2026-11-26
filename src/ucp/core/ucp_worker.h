@@ -231,15 +231,22 @@ typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t
 #define UCP_EP_PATH_BW_INVALID (-1.0)
 
 
+/* Operations with separate path bandwidth samples */
+typedef enum {
+    UCP_EP_PATH_BW_OP_PUT,
+    UCP_EP_PATH_BW_OP_GET,
+    UCP_EP_PATH_BW_OP_LAST
+} ucp_ep_path_bw_op_t;
+
+
 /* Path samples of one configuration and set of lanes of an endpoint,
  * allocated for endpoints on interfaces which report path events. */
 typedef struct {
     ucp_worker_cfg_index_t cfg_index;       /* Configuration of the samples */
     uint32_t               lane_generation; /* Lanes of the samples */
-    double                 bandwidth[];     /* Lane bandwidth below the path
-                                               estimate, or
-                                               UCP_EP_PATH_BW_INVALID if the
-                                               path is not degraded */
+    /* Lane bandwidth of each operation below the path estimate, or
+     * UCP_EP_PATH_BW_INVALID if the path is not degraded */
+    double                 bandwidth[][UCP_EP_PATH_BW_OP_LAST];
 } ucp_ep_path_bw_t;
 
 
@@ -492,6 +499,24 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,
                            const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p);
+
+/**
+ * Get the configuration of the same remote key for another endpoint
+ * configuration, and add it with the lane distances of @a rkey_cfg_index if
+ * it does not exist yet. A lane to a remote device which no lane of
+ * @a rkey_cfg_index goes to gets the default distance.
+ *
+ * @param [in]  worker          UCP worker.
+ * @param [in]  rkey_cfg_index  Remote key configuration index.
+ * @param [in]  ep_cfg_index    Endpoint configuration index.
+ * @param [out] cfg_index_p     Filled with the remote key configuration index
+ *                              for @a ep_cfg_index, on success only.
+ */
+ucs_status_t
+ucp_worker_rkey_resolve_ep_config(ucp_worker_h worker,
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
+                                  ucp_worker_cfg_index_t ep_cfg_index,
+                                  ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface);

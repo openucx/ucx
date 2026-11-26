@@ -222,7 +222,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -258,7 +259,7 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_put_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -273,8 +274,15 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                          req->send.state.dt_iter.offset;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+    ucp_proto_multi_lane_priv_t adjusted;
     uct_iov_t iov;
     ucs_status_t status;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
@@ -412,6 +420,14 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                     ucp_datatype_iter_t *next_iter,
                                     ucp_lane_index_t *lane_shift)
 {
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
+
     return ucp_proto_rma_sgl_offload_send_func(
             req, lpriv, next_iter, ucp_proto_put_sgl_offload_post);
 }
@@ -491,6 +507,14 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_datatype_iter_t *next_iter,
                                        ucp_lane_index_t *lane_shift)
 {
+    ucp_proto_multi_lane_priv_t adjusted;
+
+    lpriv = ucp_proto_rma_lane_priv(req, req->send.proto_config->priv, lpriv,
+                                    UCP_EP_PATH_BW_OP_PUT, &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
+
     return ucp_proto_rma_sgl_offload_send_frags(
             req, lpriv, 1, next_iter, ucp_proto_put_sgl_offload_sw_post);
 }

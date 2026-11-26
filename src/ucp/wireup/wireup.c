@@ -1005,6 +1005,21 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
               msg->dst_ep_id, msg->conn_sn);
 
     ucp_ep_match_remove_ep(worker, ep);
+
+    /* The EP is already bound to another remote EP (set when a connection
+     * request from it was processed, whether accepted or ignored as a
+     * simultaneous connect). A reply from a different remote EP means the
+     * bound one was destroyed after sending its request (e.g. force closed)
+     * and the peer created a new EP to reply to us. */
+    if ((ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
+        (msg->src_ep_id != ucp_ep_remote_id(ep))) {
+        ucs_diag("ep %p: got wireup reply from remote ep 0x%" PRIx64
+                 " while bound to remote ep 0x%" PRIxPTR,
+                 ep, msg->src_ep_id, ucp_ep_remote_id(ep));
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+        return;
+    }
+
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
     /* Connect p2p addresses to remote endpoint */
@@ -1106,7 +1121,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address, addr_indices,
                                    &am_need_flush);
     if (status != UCS_OK) {
-        goto out_delete_ep;
+        goto out_cleanup_lanes;
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
@@ -1126,7 +1141,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
 out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
-out_delete_ep:
     ucp_ep_delete(reply_ep);
 }
 

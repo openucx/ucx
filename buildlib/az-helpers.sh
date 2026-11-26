@@ -287,6 +287,19 @@ check_release_build() {
     printf '##%s[task.setvariable variable=Launch;isOutput=true]%s\n' vso "${launch}"
 }
 
+# Fail if the release tag does not match the version in configure.ac
+check_release_version() {
+    tag=$1
+    tag_version=${tag#v}
+    tag_version=${tag_version%%-*}
+    version=$(sed -nE 's/^define\(\[ucx_ver_(major|minor|patch)\], *([0-9]+)\).*/\2/p' \
+              configure.ac | paste -sd. -)
+
+    if [ "${tag_version}" != "${version}" ]; then
+        error "Tag ${tag} does not match configure.ac version ${version}"
+    fi
+}
+
 check_main_pipeline_status() {
     status=$(az pipelines show \
         --name "UCX release" \

@@ -329,10 +329,24 @@ out:
     return status;
 }
 
+/* Allocation properties which determine the memory flags */
+typedef struct {
+    int is_async_managed;
+    int is_host_located;
+    /* VMM memory localized to a locality domain */
+    int is_localized;
+    int is_gdr_capable;
+    /* Allocated for GPUDirect RDMA over PCIe, which MPS MLOPart may localize */
+    int is_gdr_over_pcie;
+    /* Stream-ordered memory allocated from a memory pool */
+    int is_pool;
+} uct_cuda_copy_alloc_props_t;
+
+
 static int uct_cuda_copy_detect_vmm(const void *address,
                                     ucs_memory_type_t *vmm_mem_type,
                                     CUdevice *cuda_device,
-                                    int *is_host_located, int *is_gdr_capable)
+                                    uct_cuda_copy_alloc_props_t *props)
 {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
     CUmemGenericAllocationHandle alloc_handle;
@@ -347,10 +361,8 @@ static int uct_cuda_copy_detect_vmm(const void *address,
         return 0;
     }
 
-    *vmm_mem_type    = UCS_MEMORY_TYPE_UNKNOWN;
-    *cuda_device     = CU_DEVICE_INVALID;
-    *is_host_located = 0;
-    *is_gdr_capable  = 0;
+    *vmm_mem_type = UCS_MEMORY_TYPE_UNKNOWN;
+    *cuda_device  = CU_DEVICE_INVALID;
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle));
@@ -358,15 +370,20 @@ static int uct_cuda_copy_detect_vmm(const void *address,
         goto out;
     }
 
-    *cuda_device    = (CUdevice)prop.location.id;
-    *is_gdr_capable = prop.allocFlags.gpuDirectRDMACapable;
+    *cuda_device          = (CUdevice)prop.location.id;
+    props->is_gdr_capable = prop.allocFlags.gpuDirectRDMACapable;
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
+    props->is_gdr_over_pcie = props->is_gdr_capable &&
+                              (prop.allocFlags.usage &
+                               CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE);
+#endif
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_HOST
     if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
         /* TODO: Marking as CUDA to allow cuda_ipc access vmm for now */
-        *vmm_mem_type    = UCS_MEMORY_TYPE_CUDA;
-        *is_host_located = 1;
+        *vmm_mem_type          = UCS_MEMORY_TYPE_CUDA;
+        props->is_host_located = 1;
     } else
 #endif
     if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
@@ -374,8 +391,9 @@ static int uct_cuda_copy_detect_vmm(const void *address,
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
     } else if (prop.location.type ==
                CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
-        *cuda_device  = (CUdevice)prop.location.localized.deviceId;
-        *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
+        *cuda_device        = (CUdevice)prop.location.localized.deviceId;
+        props->is_localized = 1;
+        *vmm_mem_type       = UCS_MEMORY_TYPE_CUDA;
 #endif
     }
 
@@ -505,12 +523,34 @@ out_ctx_pop:
     }
 }
 
+static int uct_cuda_copy_md_is_localized_pool(const void *address)
+{
+#if HAVE_DECL_CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL
+    int locality_domain = -1;
+    ucs_status_t status;
+
+    /* Queried separately, as older drivers fail on the unknown attribute */
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuPointerGetAttribute(&locality_domain,
+                                  CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL,
+                                  (CUdeviceptr)address));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return locality_domain >= 0;
+#else
+    /* Locality is unknown without locality domain support in the CUDA
+     * headers, assume it is not localized */
+    return 0;
+#endif
+}
+
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
                                   ucs_memory_info_t *mem_info,
-                                  int *is_async_managed, int *is_host_located,
-                                  int *is_gdr_capable)
+                                  uct_cuda_copy_alloc_props_t *props)
 {
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 5
@@ -528,12 +568,15 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     CUresult cu_err;
     ucs_status_t status;
 
-    *is_async_managed = 0;
-    *is_host_located  = 0;
-    *is_gdr_capable   = 0;
+    props->is_async_managed = 0;
+    props->is_host_located  = 0;
+    props->is_localized     = 0;
+    props->is_gdr_capable   = 0;
+    props->is_gdr_over_pcie = 0;
+    props->is_pool          = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
-                                      is_host_located, is_gdr_capable);
+                                      props);
     if (is_vmm) {
         if (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) {
             return UCS_ERR_INVALID_ADDR;
@@ -549,9 +592,9 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
         attr_data[3] = &cuda_mem_ctx;
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
         attr_type[4] = CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE;
-        attr_data[4] = is_gdr_capable;
+        attr_data[4] = &props->is_gdr_capable;
 #else
-        *is_gdr_capable = 1;
+        props->is_gdr_capable = 1;
 #endif
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -605,10 +648,11 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
              * false in that case. Therefore, checking whether the allocation
              * was not allocated in a context should also allows us to
              * identify virtual/stream-ordered CUDA allocations. */
-            mem_info->type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
-            *is_async_managed = 1;
+            mem_info->type          = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            props->is_async_managed = 1;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
+            props->is_pool = (cuda_mem_ctx == NULL);
         }
     }
 
@@ -757,17 +801,60 @@ uct_cuda_copy_md_detect_memtype_copy_flags(const ucs_memory_info_t *mem_info)
 #endif
 }
 
+/* Whether the device is known not to be shared through MPS */
+static int uct_cuda_copy_md_is_mps_disabled(ucs_sys_device_t sys_dev)
+{
+#if CUDA_VERSION >= 12030
+    CUdevice cuda_device = uct_cuda_get_cuda_device(sys_dev);
+    int mps_enabled;
+
+    if ((cuda_device == CU_DEVICE_INVALID) ||
+        (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                 cuDeviceGetAttribute(&mps_enabled,
+                                      CU_DEVICE_ATTRIBUTE_MPS_ENABLED,
+                                      cuda_device)) != UCS_OK)) {
+        return 0;
+    }
+
+    return !mps_enabled;
+#else
+    return 0;
+#endif
+}
+
+/* Whether the default RDMA mapping of the device supports localized memory */
+static int
+uct_cuda_copy_md_is_localized_rdma_supported(ucs_sys_device_t sys_dev)
+{
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED
+    CUdevice_attribute attr =
+            CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_LOCALIZED_MEMORY_SUPPORTED;
+    CUdevice cuda_device    = uct_cuda_get_cuda_device(sys_dev);
+    int supported;
+
+    if ((cuda_device != CU_DEVICE_INVALID) &&
+        (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                 cuDeviceGetAttribute(&supported, attr, cuda_device)) ==
+         UCS_OK) &&
+        supported) {
+        return 1;
+    }
+#endif
+
+    return 0;
+}
+
 static int
 uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const ucs_memory_info_t *mem_info,
-                                int is_async_managed, int is_host_located,
-                                int is_gdr_capable,
+                                const uct_cuda_copy_alloc_props_t *props,
                                 const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
+    int is_localized;
     int dmabuf_fd;
 
-    if (is_async_managed) {
+    if (props->is_async_managed) {
         return 0;
     }
 
@@ -777,48 +864,71 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     }
 
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
-    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+    if (props->is_host_located ||
+        (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         return 1;
     }
 
     if (!md->config.dmabuf_supported) {
         /* Without dmabuf the NIC pins the pages behind the virtual address,
          * which the driver only allows for GPUDirect RDMA capable memory. */
-        return is_gdr_capable;
+        return props->is_gdr_capable;
     }
 
-    if (dmabuf == NULL) {
-        local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
-                                                   mem_info->alloc_length,
-                                                   mem_info->sys_dev);
-        dmabuf_fd    = local_dmabuf.fd;
-        ucs_close_fd(&local_dmabuf.fd);
-    } else {
-        dmabuf_fd = dmabuf->fd;
+    if (dmabuf != NULL) {
+        return dmabuf->fd != UCT_DMABUF_FD_INVALID;
     }
 
+    /* Avoid the costly dmabuf export when its outcome is known. The dmabuf of
+     * localized memory is mapped via PCIe for a Direct NIC, which VMM memory
+     * must be allocated for, and otherwise via the default RDMA mapping. */
+    is_localized = props->is_localized ||
+                   (props->is_pool &&
+                    uct_cuda_copy_md_is_localized_pool(mem_info->base_address));
+    if (is_localized && !ucs_topo_device_has_sibling(mem_info->sys_dev)) {
+        return uct_cuda_copy_md_is_localized_rdma_supported(mem_info->sys_dev);
+    }
+
+    if (is_localized && (props->is_pool || props->is_gdr_over_pcie)) {
+        return 1;
+    }
+
+    /* The driver exports GPUDirect RDMA capable memory, which MPS MLOPart does
+     * not localize unless allocated for PCIe, and other memory unless MPS
+     * localizes all of the device memory, e.g. MPS MLOPart, which the memory
+     * does not report */
+    if (!is_localized &&
+        ((props->is_gdr_capable && !props->is_gdr_over_pcie) ||
+         uct_cuda_copy_md_is_mps_disabled(mem_info->sys_dev))) {
+        return 1;
+    }
+
+    local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
+                                               mem_info->alloc_length,
+                                               mem_info->sys_dev);
+    dmabuf_fd    = local_dmabuf.fd;
+    ucs_close_fd(&local_dmabuf.fd);
     return dmabuf_fd != UCT_DMABUF_FD_INVALID;
 }
 
 static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
-                                  int is_async_managed, int is_host_located,
-                                  int is_gdr_capable,
+                                  const uct_cuda_copy_alloc_props_t *props,
                                   const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uint8_t mem_flags = 0;
 
-    if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
-                                        is_host_located, is_gdr_capable,
-                                        dmabuf)) {
+    if (uct_cuda_copy_md_is_registrable(md, mem_info, props, dmabuf)) {
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
     /* The driver only pins memory it allocated as GPUDirect RDMA capable,
-     * which excludes memory pools, localized and host-located VMM, and any
-     * memory allocated under an MPS MLOPart device */
-    if ((mem_info->type == UCS_MEMORY_TYPE_CUDA) && is_gdr_capable) {
+     * which excludes memory pools, host-located VMM, localized VMM not
+     * allocated for GPUDirect RDMA over PCIe, and any memory allocated under
+     * an MPS MLOPart device. Memory is assumed capable when the CUDA headers
+     * cannot report it. */
+    if ((mem_info->type == UCS_MEMORY_TYPE_CUDA) && props->is_gdr_capable) {
         mem_flags |= UCS_MEM_FLAG_GDR_CAPABLE;
     }
 
@@ -841,13 +951,11 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         .offset = 0
     };
     int dmabuf_queried         = 0;
-    int is_async_managed       = 0;
-    int is_host_located        = 0;
-    int is_gdr_capable         = 0;
     CUdevice cur_cuda_device   = CU_DEVICE_INVALID;
     CUdevice avail_cuda_device = CU_DEVICE_INVALID;
-    ucs_memory_info_t detected_mem_info = {};
-    ucs_memory_info_t addr_mem_info     = {};
+    uct_cuda_copy_alloc_props_t alloc_props = {};
+    ucs_memory_info_t detected_mem_info     = {};
+    ucs_memory_info_t addr_mem_info         = {};
     ucs_memory_info_t cached_mem_info;
     ucs_status_t cache_status;
     ucs_status_t status;
@@ -864,13 +972,10 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     }
 
     if (address != NULL) {
-        cache_status = ucs_memtype_cache_lookup(address, length,
-                                                &cached_mem_info);
+        cache_status = ucs_memtype_lookup(address, length, &cached_mem_info);
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
-                                                   &is_async_managed,
-                                                   &is_host_located,
-                                                   &is_gdr_capable);
+                                                   &alloc_props);
         if (status != UCS_OK) {
             return status;
         }
@@ -932,8 +1037,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
-                md, &detected_mem_info, is_async_managed, is_host_located,
-                is_gdr_capable, dmabuf_queried ? &dmabuf : NULL);
+                md, &detected_mem_info, &alloc_props,
+                dmabuf_queried ? &dmabuf : NULL);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
                                  addr_mem_info.sys_dev,

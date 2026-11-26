@@ -930,6 +930,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     return UCS_OK;
 
 err_delete:
+    ucp_ep_cleanup_lanes(ep);
     ucp_ep_delete(ep);
 err:
     return status;
@@ -1626,7 +1627,18 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
-static ucs_status_t
+int ucp_ep_failover_in_wireup(ucp_ep_h ucp_ep, ucp_lane_index_t lane)
+{
+    /* Sockaddr keeps its CM path. REMOTE_CONNECTED is the p2p handshake;
+     * CONNECT_TO_IFACE is one-sided and can recover without it. */
+    return ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+           !(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) &&
+           (ucp_ep_config(ucp_ep)->p2p_lanes != 0) &&
+           (ucp_ep_get_cm_lane(ucp_ep) == UCP_NULL_LANE) &&
+           (ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane)) != NULL);
+}
+
+ucs_status_t
 ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
@@ -2567,6 +2579,19 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
+    /* TODO: recovery in the middle of p2p wireup is not recoverable,
+     *       need to store address for that and implement re-try logic.
+     *       LOCAL_CONNECTED is set after connect_local; REMOTE_CONNECTED
+     *       is the completed p2p handshake. */
+    if ((ucp_ep_config(ep)->p2p_lanes != 0) &&
+        !(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ucs_diag("ep %p: recovery in the middle of p2p wireup is not "
+                 "recoverable, setting lanes failed", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        ret = 1;
+        goto done;
+    }
+
     arg = ucp_ep_recovery_arg(ep);
     if (arg == NULL) {
         goto done;
@@ -2788,8 +2813,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     ucp_worker_iface_t *wiface;
     size_t tx_len;
 
-    if ((ep->worker->context->config.ext.failover_mode ==
-         UCP_FAILOVER_MODE_SW) ||
+    if (!ucp_context_is_token_failover(ep->worker->context) ||
         (ep->flags & UCP_EP_FLAG_FAILED) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         ucp_ep_has_cm_lane(ep) ||
@@ -3115,6 +3139,81 @@ ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
     }
 }
 
+/* Nonzero if operations of a partly sent request are in flight. On a failover
+ * endpoint, the protocols of several fragments count them in the completion of
+ * the request, and the protocols of one fragment are never partly sent. */
+static int ucp_ep_tf_req_in_flight(const ucp_request_t *req)
+{
+    return ucs_test_all_flags(req->flags,
+                              UCP_REQUEST_FLAG_PROTO_SEND |
+                              UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+           !ucp_datatype_iter_is_begin(&req->send.state.dt_iter) &&
+           (req->send.state.uct_comp.count > 1);
+}
+
+/*
+ * Send the requests from the pending queues of held lanes once no held lane has
+ * outstanding operations left to purge, so they follow the operations which
+ * the purge reposted on the live lanes: the failed lanes can take long to
+ * recover, or never recover. A closed endpoint sends them too, since they were
+ * issued before the close, and a failed endpoint cancels them.
+ */
+static void ucp_ep_tf_resume(ucp_ep_h ep)
+{
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
+    ucs_queue_head_t replay_q;
+    uct_pending_req_t *self;
+    ucp_lane_index_t lane;
+    ucp_request_t *req;
+
+    if ((arg == NULL) || ucs_queue_is_empty(&arg->tf_pending_q)) {
+        return;
+    }
+
+    ucs_for_each_bit(lane, ucp_ep_tf_held_lanes(ep)) {
+        if (!arg->tf[lane].purged) {
+            return;
+        }
+    }
+
+    /* A request of several fragments counts its operations in flight in
+     * uct_comp, plus one reference until it sends all of its data. A restart
+     * would reset that count to 1 while operations are in flight, and their
+     * completions would complete the restarted request too early. Instead,
+     * the request drops its reference with an error: when its last operation
+     * completes, the error restarts the request, or completes it on a failed
+     * endpoint, as after a failed operation. */
+    ucs_queue_head_init(&replay_q);
+    ucs_queue_for_each_extract(self, &arg->tf_pending_q, priv, 1) {
+        req = ucs_container_of(self, ucp_request_t, send.uct);
+        if (ucp_ep_tf_req_in_flight(req)) {
+            ucp_trace_req(req, "restarts after its operations in flight");
+            ucp_invoke_uct_completion(&req->send.state.uct_comp,
+                                      UCS_ERR_CANCELED);
+        } else {
+            ucs_queue_push(&replay_q, (ucs_queue_elem_t*)self->priv);
+        }
+    }
+
+    if ((ep->flags & UCP_EP_FLAG_FAILED) ||
+        !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        ucp_ep_tf_abort_pending(&replay_q, UCS_ERR_CANCELED);
+    } else {
+        ucp_wireup_replay_pending_requests(ep, &replay_q);
+    }
+}
+
+static unsigned ucp_ep_tf_resume_progress(void *arg)
+{
+    ucp_ep_h ep         = arg;
+    ucp_worker_h worker = ep->worker;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucp_ep_tf_resume(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
 /* Complete an outstanding operation. Teardown must not allocate a repost. */
 static void
 ucp_ep_tf_outstanding_cancel_cb(const uct_ep_op_info_t *op_info, void *arg)
@@ -3200,6 +3299,7 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
                                        uint32_t request_id, int from_ack,
                                        ucp_lane_map_t release_lanes)
 {
+    ucp_ep_recovery_arg_t *arg;
     ucp_ep_lane_tf_t *tf;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -3261,6 +3361,15 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
         uct_ep_destroy(tf->uct_ep);
         ucp_ep_tf_lane_release(ep, tf);
     }
+
+    /* The wireup message handler can run on the async thread, which must not
+     * send the requests of the user */
+    arg = ucp_ep_recovery_arg(ep);
+    if ((arg != NULL) && !ucs_queue_is_empty(&arg->tf_pending_q)) {
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_tf_resume_progress, ep);
+        ucp_worker_signal_internal(ep->worker);
+    }
 }
 
 static void ucp_ep_tf_cleanup(ucp_ep_h ep)
@@ -3284,12 +3393,7 @@ static void ucp_ep_tf_cleanup(ucp_ep_h ep)
     }
 
     /* Every held lane is done, so pending requests can follow outstanding. */
-    if ((ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) ||
-        !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
-        ucp_ep_tf_abort_pending(&arg->tf_pending_q, UCS_ERR_CANCELED);
-    } else {
-        ucp_wireup_replay_pending_requests(ep, &arg->tf_pending_q);
-    }
+    ucp_ep_tf_resume(ep);
 }
 
 static ucs_status_t
@@ -3529,6 +3633,7 @@ static unsigned ucp_ep_tf_purge_held_progress(void *arg)
 
     uct_ep_destroy(tf->uct_ep);
     ucp_ep_tf_lane_release(ep, tf);
+    ucp_ep_tf_resume(ep);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -3539,6 +3644,10 @@ static int
 ucp_ep_tf_purge_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     ucp_ep_tf_purge_arg_t *purge_arg = elem->arg;
+
+    if (elem->cb == ucp_ep_tf_resume_progress) {
+        return elem->arg == arg;
+    }
 
     if ((elem->cb == ucp_ep_tf_purge_held_progress) && (purge_arg->ep == arg)) {
         ucs_free(purge_arg);
@@ -3577,6 +3686,10 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
+    }
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
@@ -5855,14 +5968,12 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
 
 static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
 {
-    ucp_worker_h worker                = ep->worker;
-    ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
-    ucp_rkey_config_key_t rkey_cfg_key = rkey_cfg->key;
+    ucp_worker_h worker = ep->worker;
+    ucp_rkey_config_t *rkey_cfg;
     ucs_status_t status;
 
-    rkey_cfg_key.ep_cfg_index = ep->cfg_index;
-    status = ucp_worker_rkey_config_get(worker, &rkey_cfg_key, NULL,
-                                        &rkey->cfg_index);
+    status = ucp_worker_rkey_resolve_ep_config(worker, rkey->cfg_index,
+                                               ep->cfg_index, &rkey->cfg_index);
     if (status != UCS_OK) {
         return status;
     }

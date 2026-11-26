@@ -41,6 +41,11 @@ typedef struct {
     ucs_sys_bus_id_t        bus_id;
     char                    *name;
     unsigned                name_priority;
+
+    /* Resolved sysfs path, or NULL if not found. Set once at registration,
+     * so distance queries do not resolve sysfs symlinks again. */
+    char                    *sysfs_path;
+
     ucs_numa_node_t         numa_node;
     ucs_sys_pci_id_t        pci_id;
     uintptr_t               user_value;

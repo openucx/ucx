@@ -118,10 +118,19 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucs_status_t status;
 
+    /* The request is already removed from the pending queue, and sending it
+     * may fail the endpoint and destroy wireup_ep */
+    ucs_atomic_sub32(&wireup_ep->pending_count, 1);
     status = req->func(req);
     if (status == UCS_OK) {
-        ucs_atomic_sub32(&wireup_ep->pending_count, 1);
         ucp_request_mem_free(proxy_req);
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        ucs_atomic_add32(&wireup_ep->pending_count, +1);
+    } else {
+        ucs_bug("wireup message request %p returned %s", req,
+                ucs_status_string(status));
+        ucp_request_mem_free(proxy_req);
+        status = UCS_OK;
     }
     return status;
 }

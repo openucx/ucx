@@ -85,6 +85,8 @@ typedef struct uct_cuda_ipc_md {
      *  different nodes can reach each other over multi-node NVLINK only if
      *  both are equal. */
     uint64_t                 nvlink_domain;
+    /** Identifies this host to cuda_ipc peers */
+    uint64_t                 system_uuid;
 } uct_cuda_ipc_md_t;
 
 
@@ -95,10 +97,26 @@ typedef struct {
 } uct_cuda_ipc_uuid_hash_key_t;
 
 
+/* Accessibility of a remote device from a local device, cached in
+ * uct_cuda_ipc_dev_cache_t */
+typedef enum {
+    /* Not checked yet */
+    UCT_CUDA_IPC_ACCESS_UNKNOWN = 0,
+    /* Remote memory handles can be mapped */
+    UCT_CUDA_IPC_ACCESS_OK,
+    /* NVML reports P2P access, but the remote buffer has no IPC handle, so
+     * other memory of the same peer may still be accessible, and vice versa */
+    UCT_CUDA_IPC_ACCESS_NO_HANDLE,
+    /* The remote device is not accessible: NVML reports no native P2P access,
+     * or mapping a remote memory handle failed */
+    UCT_CUDA_IPC_ACCESS_UNREACHABLE
+} uct_cuda_ipc_access_t;
+
+
 typedef struct {
     /* GPU Device number */
     int     dev_num;
-    /* Cache of accessible devices (ucs_ternary_auto_value_t) */
+    /* Cache of accessible devices (uct_cuda_ipc_access_t) */
     uint8_t accessible[0];
 } uct_cuda_ipc_dev_cache_t;
 
@@ -151,6 +169,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
+    /** Emulated NVLink domain and host, "<domain>[:<host>]" or "auto" */
+    char                     *nvlink_domain;
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
     /** Enable remote IPC memory handle mapping cache */

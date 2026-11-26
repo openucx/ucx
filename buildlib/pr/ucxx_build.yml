@@ -8,7 +8,6 @@ parameters:
   wheel_tests_ucxx_slices: []
   conda_tests_slices: []
   docs_slices: []
-  devcontainer_slices: []
 
 stages:
   # UCXX results are informational: every job is continueOnError, so failures
@@ -16,8 +15,10 @@ stages:
   - stage: UCXX_build
     dependsOn: ${{ parameters.dependsOn }}
     variables:
-      UCX_DIR: $(Agent.BuildDirectory)/ucx
-      UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+      # No UCX_ prefix on the variables here: they reach every step as
+      # environment, and UCX warns about UCX_* variables it does not know.
+      CI_UCX_DIR: $(Agent.BuildDirectory)/ucx
+      UCXX_DIR: $(Agent.BuildDirectory)/ucx/bindings/ucxx
       RAPIDS_BLD_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)
     jobs:
       - ${{ each slice in parameters.conda_cpp_slices }}:
@@ -39,11 +40,8 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_cpp
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh conda_cpp
               displayName: Build UCXX conda C++ package
             - task: PublishBuildArtifacts@1
               displayName: Publish conda-cpp artifact
@@ -71,9 +69,6 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch conda-cpp artifact
@@ -85,7 +80,7 @@ stages:
                 rm -rf "$(RAPIDS_BLD_OUTPUT_DIR)"
                 mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-conda-cpp-${{ slice.name }}" "$(RAPIDS_BLD_OUTPUT_DIR)"
               displayName: Stage conda-cpp artifact
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_python
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh conda_python
               displayName: Build UCXX conda Python package
             - task: PublishBuildArtifacts@1
               displayName: Publish conda-python artifact
@@ -112,11 +107,8 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_libucxx
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_libucxx
               displayName: Build libucxx wheel
             - task: PublishBuildArtifacts@1
               displayName: Publish libucxx wheel artifact
@@ -145,9 +137,6 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch libucxx wheel artifact
@@ -159,7 +148,7 @@ stages:
                 rm -rf "$(WHEEL_INPUT_DIR)"
                 mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-wheel-libucxx-${{ slice.libucxx_slice }}" "$(WHEEL_INPUT_DIR)"
               displayName: Stage libucxx wheel artifact
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_ucxx
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_ucxx
               displayName: Build ucxx wheel
             - task: PublishBuildArtifacts@1
               displayName: Publish ucxx wheel artifact
@@ -190,9 +179,6 @@ stages:
               path: ucx
               fetchDepth: 100
               retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch conda-cpp artifact
@@ -206,7 +192,7 @@ stages:
                 buildType: current
                 artifactName: ucxx-conda-python-${{ slice.python_slice }}
                 downloadPath: $(System.DefaultWorkingDirectory)/_dl_py
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh docs
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/build_ucxx.sh docs
               displayName: Build UCXX docs
               env:
                 CPP_CHANNEL_DIR: $(System.DefaultWorkingDirectory)/_dl_cpp/ucxx-conda-cpp-${{ slice.cpp_slice }}
@@ -235,15 +221,13 @@ stages:
           variables:
             RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
             RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+            RAPIDS_DEPENDENCIES: ${{ coalesce(slice.rapids_dependencies, 'latest') }}
             LIBUCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/libucxx_whl
             UCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/ucxx_whl
           steps:
             - checkout: self
               path: ucx
               fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
               retryCountOnTaskFailure: 5
             - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
@@ -263,36 +247,10 @@ stages:
                 mv "$(System.DefaultWorkingDirectory)/_dl_libucxx/ucxx-wheel-libucxx-${{ slice.libucxx_slice }}" "$(LIBUCXX_WHL_DIR)"
                 mv "$(System.DefaultWorkingDirectory)/_dl_ucxx/ucxx-wheel-ucxx-${{ slice.ucxx_slice }}" "$(UCXX_WHL_DIR)"
               displayName: Stage wheels
-            - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_wheel_ucxx
+            - bash: bash $(CI_UCX_DIR)/buildlib/tools/test_ucxx.sh test_wheel_ucxx
               displayName: Run UCXX wheel tests
 
       - template: ucxx_tests.yml
         parameters:
           cpu_container: ${{ parameters.conda_container }}
           slices: ${{ parameters.conda_tests_slices }}
-
-      - ${{ each slice in parameters.devcontainer_slices }}:
-        - job: ucxx_devcontainer_${{ slice.name }}
-          continueOnError: true
-          workspace:
-            clean: all
-          pool:
-            name: MLNX
-            demands: ${{ slice.demands }}
-          displayName: 'UCXX devcontainer (${{ slice.name }})'
-          container: ${{ parameters.conda_container }}
-          timeoutInMinutes: 15
-          dependsOn: []
-          variables:
-            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
-            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
-          steps:
-            - checkout: self
-              path: ucx
-              fetchDepth: 100
-              retryCountOnTaskFailure: 5
-            - checkout: ucxx
-              path: ucxx
-              retryCountOnTaskFailure: 5
-            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh devcontainer
-              displayName: Validate UCXX devcontainer configs
