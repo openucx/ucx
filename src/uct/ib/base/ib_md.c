@@ -1776,10 +1776,14 @@ static void uct_ib_log_mellanox_visible_devices()
     }
 }
 
+UCT_IB_VERBS_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_DEFINE)
+
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     ssize_t i;
+
+    UCT_IB_VERBS_OPTIONAL_FUNCS(UCT_IB_OPTIONAL_FUNC_LOAD, ibv_open_device)
 
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
     uct_component_register(&uct_ib_component);
