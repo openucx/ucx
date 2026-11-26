@@ -74,10 +74,9 @@ steps:
       # test_wire_compat.sh derives its ports from AZP_AGENT_ID.
       export AZP_AGENT_ID=$((${BUILD_NUMBER} % 20))
       # The latest six release branches older than this version
-      targets=$(buildlib/tools/wire_compat_matrix.sh 6)
+      targets=$(buildlib/tools/wire_compat_matrix.sh 6) || { echo "${targets}"; exit 1; }
       echo "${targets}"
       ucx_tags=$(echo "${targets}" | grep task.setvariable | grep -oE 'v[0-9]+[.][0-9]+[.]x')
-      [ -n "${ucx_tags}" ] || exit 1
       failed=""
       set +e
       for ucx_tag in ${ucx_tags}
