@@ -500,14 +500,15 @@ def screen(ucx_dir):
     else:
         log("V4 skipped: no RoCE v2 IPv4 GID outside %s" % CALICO_NET)
 
-    # A variant that cannot run at a small size is a setup problem, not data
+    # SANITY passed with the defaults at 64 MiB, so a variant that fails there
+    # fails because of its setting: report it and skip its full-size runs
     usable = []
     for name, env_extra in variants:
         status = run_variant(name, env_extra, reproducer, 64 * MIB)[0]["status"]
         if status == "PASS":
             usable.append((name, env_extra))
         else:
-            log("VARIANT SETUP", name, status, "at 64 MiB; not screened")
+            log("VARIANT FAILS", name, status, "at 64 MiB; not screened")
 
     for round_index in range(3):
         for name, env_extra in usable:
