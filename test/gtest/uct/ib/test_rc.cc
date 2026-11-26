@@ -1797,6 +1797,8 @@ protected:
     entity *m_e2;
     entity *m_entity_flush_rkey;
     int m_err_count;
+    /* Endpoint cleanup can complete an operation the test did not wait for */
+    uct_completion_t m_comp;
 
 public:
     int rc_iface_flush_rkey_enabled(entity *e)
@@ -1900,18 +1902,17 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 64, sendbuf.memh(),
                             1);
 
-    uct_completion_t comp;
-    comp.func   = [](uct_completion_t*) {};
-    comp.count  = 1;
-    comp.status = UCS_OK;
+    m_comp.func   = [](uct_completion_t*) {};
+    m_comp.count  = 1;
+    m_comp.status = UCS_OK;
 
     // Trigger the use of atomic key, PUT fails with invalid atomic_mr_offset
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     EXPECT_EQ(UCS_INPROGRESS,
               uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
-                               recvbuf.rkey(), &comp));
-    wait_for_value(&comp.count, 0, true);
-    EXPECT_EQ(0, comp.count);
+                               recvbuf.rkey(), &m_comp));
+    wait_for_value(&m_comp.count, 0, true);
+    EXPECT_EQ(0, m_comp.count);
     EXPECT_EQ(0, m_err_count);
 }
 
