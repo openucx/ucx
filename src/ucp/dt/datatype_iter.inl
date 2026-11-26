@@ -326,6 +326,7 @@ ucp_datatype_iter_iov_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
     }
 
     ucs_free(dt_iter->type.iov.memh);
+    dt_iter->type.iov.memh = NULL;
 }
 
 static UCS_F_ALWAYS_INLINE void

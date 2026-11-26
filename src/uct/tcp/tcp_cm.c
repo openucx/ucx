@@ -652,7 +652,7 @@ send_ack:
 
 out_destroy_ep:
     if (!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX)) {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
+        uct_tcp_ep_set_failed(ep, UCS_ERR_CONNECTION_RESET);
         *ep_p = NULL;
     }
     return progress_count;
@@ -676,7 +676,10 @@ static void uct_tcp_cm_handle_conn_fin(uct_tcp_ep_t **ep_p)
     uct_tcp_ep_t *ep = *ep_p;
 
     if ((ep->flags & UCT_TCP_EP_CTX_CAPS) == UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
+        /* Do not destroy the endpoint here: the same event batch may still run
+         * the TX progress for it, which would be a use-after-free. The endpoint
+         * has no TX, so the failure destroys it from the progress. */
+        uct_tcp_ep_set_failed(ep, UCS_ERR_CONNECTION_RESET);
         *ep_p = NULL;
     } else {
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);

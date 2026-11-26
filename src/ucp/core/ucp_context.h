@@ -27,6 +27,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo/base/topo_groups.h>
 #include <ucs/type/param.h>
 
 
@@ -81,6 +82,24 @@ ucp_reg_devices_count(unsigned long max_hca_per_gpu)
     return UCP_MAX_MDS;
 }
 
+
+/* Lane limits of a multi-lane operation */
+typedef struct {
+    /* Limit for buffers that the assigned limit doesn't cover */
+    unsigned max_lanes;
+    /* Limit for GPU buffers with NICs from the GPU-NIC assignment */
+    unsigned max_assigned_lanes;
+} ucp_max_rails_t;
+
+
+/* Same limit for buffers with and without assigned NICs */
+static UCS_F_ALWAYS_INLINE ucp_max_rails_t
+ucp_max_rails_make(unsigned max_lanes)
+{
+    ucp_max_rails_t max_rails = {max_lanes, max_lanes};
+
+    return max_rails;
+}
 
 
 typedef struct ucp_context_config {
@@ -156,10 +175,10 @@ typedef struct ucp_context_config {
     int                                    adaptive_progress;
     /** Eager-am multi-lane support */
     unsigned                               max_eager_lanes;
-    /** Rendezvous-get multi-lane support */
-    unsigned                               max_rndv_lanes;
-    /** RMA multi-lane support */
-    unsigned                               max_rma_lanes;
+    /** Rendezvous multi-lane limits */
+    ucp_max_rails_t                        max_rndv_rails;
+    /** RMA multi-lane limits */
+    ucp_max_rails_t                        max_rma_rails;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
@@ -263,6 +282,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** GPU-to-NIC assignment mode */
     ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
+    /** GPU-to-NIC assignment topology grouping criterion */
+    ucs_topo_group_by_t                    gpu_nic_assignment_group_by;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
@@ -735,7 +756,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    status = ucs_memtype_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
         if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
             ucs_trace_req("address %p length %zu: not found in memtype cache, "
@@ -800,6 +821,16 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
 }
 
+/* AUTO is rewritten to SW when indirect atomics are enabled. */
+static UCS_F_ALWAYS_INLINE int
+ucp_context_is_token_failover(ucp_context_h context)
+{
+    ucp_failover_mode_t failover_mode = context->config.ext.failover_mode;
+
+    return (failover_mode == UCP_FAILOVER_MODE_TOKEN) ||
+           (failover_mode == UCP_FAILOVER_MODE_AUTO);
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_context_print_transport_tables_enabled(ucp_context_h context)
 {
@@ -819,11 +850,6 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
 
 void ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
                                ucp_tl_bitmap_t *tl_bitmap);
-
-
-void
-ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
-                              ucp_tl_bitmap_t *tl_bitmap);
 
 
 void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,

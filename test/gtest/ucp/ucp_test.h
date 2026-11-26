@@ -68,6 +68,11 @@ public:
         MULTI_THREAD_WORKER   /* workers are multi-threaded, context is mt-single */
     };
 
+    virtual std::string init_skip_filter() const
+    {
+        return {};
+    }
+
     class entity {
         typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
@@ -91,6 +96,10 @@ public:
         virtual void connect(const entity *other,
                              const ucp_ep_params_t &ep_params, int ep_idx = 0,
                              int do_set_ep = 1);
+
+        void connect_to_address(int worker_index, const ucp_address_t *address,
+                                const ucp_ep_params_t &ep_params,
+                                int ep_idx = 0, int do_set_ep = 1);
 
         bool verify_client_address(struct sockaddr_storage *client_address);
 
@@ -192,6 +201,11 @@ public:
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
+        /* Find filtered init error since first_error matching the test's
+         * init_skip_filter() */
+        std::vector<std::string>::iterator
+        find_filtered_init_error(size_t first_error) const;
 
         static ucs_log_func_rc_t
         hide_config_warns_logger(const char *file, unsigned line,
@@ -365,9 +379,9 @@ protected:
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
-        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+        ucs_time_t loop_end_limit = ucs::get_deadline(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
-            short_progress_loop();
+            progress();
         }
     }
 
@@ -376,7 +390,7 @@ protected:
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
         test_base::wait_for_value(
-                var, value, [this]() { short_progress_loop(); }, timeout);
+                var, value, [this]() { progress(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;

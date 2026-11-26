@@ -704,6 +704,70 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
     ucp_request_release(request);
 }
 
+UCS_TEST_P(test_ucp_flush_failover, block_flush_resched_started_lane,
+           "MAX_EAGER_LANES=2", "PROTO_REQUEST_RESET=y")
+{
+    ucp_request_param_t param = {};
+    ucp_request_t *req        = NULL;
+    ucp_ep_h ep;
+    ucs_status_ptr_t request  = NULL;
+
+    flush_ep(sender());
+    ep = sender().ep();
+    if (ucp_ep_num_lanes(ep) < 2) {
+        UCS_TEST_SKIP_R("requires two endpoint lanes");
+    }
+
+    test_flush_call_count     = 0;
+    test_flush_comp           = NULL;
+    test_flush_no_resource_ep = ucp_ep_get_lane(ep, 1);
+    {
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
+        mock.setup(&test_flush_no_resource_ep->iface->ops.ep_pending_add,
+                   test_flush_pending_add);
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            request = ucp_ep_flush_lanes_internal(
+                    ep, 0, &param, NULL, test_flush_completion,
+                    "block_flush_resched_started_lane", UCT_FLUSH_FLAG_LOCAL,
+                    UCS_BIT(0) | UCS_BIT(1));
+            ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+            req = static_cast<ucp_request_t*>(request) - 1;
+            ASSERT_EQ(1, req->send.lane);
+            ASSERT_EQ(UCS_BIT(0), req->send.flush.started_lanes);
+
+            /* Replayed from lane 1 pending queue while lane 0 flush is
+             * in progress */
+            ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
+            ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
+            EXPECT_EQ(UCP_NULL_LANE, req->send.lane);
+            EXPECT_EQ(UCS_BIT(0), req->send.flush.started_lanes);
+        }
+
+        sender().progress();
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            EXPECT_EQ(1, req->send.lane);
+            test_flush_no_resource_ep = NULL;
+            ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1), req->send.flush.started_lanes);
+            ASSERT_TRUE(test_flush_comp != NULL);
+            uct_invoke_completion(test_flush_comp, UCS_OK);
+            uct_invoke_completion(test_flush_comp, UCS_OK);
+            ucp_ep_flush_remote_completed(req);
+        }
+    }
+
+    EXPECT_UCS_OK(ucp_request_check_status(request));
+    ucp_request_release(request);
+}
+
 UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
 {
     ucp_request_param_t param = {};

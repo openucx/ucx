@@ -431,7 +431,8 @@ uct_posix_mem_open(uct_mm_seg_id_t seg_id, const char *dir, int *fd_p,
 
 static ucs_status_t
 uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
-                            const char *dir, uct_mm_remote_seg_t *rseg)
+                            const char *dir, uct_mm_remote_seg_t *rseg,
+                            ucs_log_level_t err_level)
 {
     ucs_status_t status;
     int mmap_flags, fd;
@@ -439,7 +440,7 @@ uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
     ucs_assert(length > 0);
     rseg->cookie = (void*)length;
 
-    status = uct_posix_mem_open(seg_id, dir, &fd, UCS_LOG_LEVEL_ERROR);
+    status = uct_posix_mem_open(seg_id, dir, &fd, err_level);
     if (status != UCS_OK) {
         return status;
     }
@@ -451,7 +452,7 @@ uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
 #endif
     rseg->address = NULL;
     status = uct_posix_mmap(&rseg->address, &length, mmap_flags, fd,
-                            "posix_attach", UCS_LOG_LEVEL_ERROR);
+                            "posix_attach", err_level);
     close(fd);
     return status;
 }
@@ -716,7 +717,8 @@ static ucs_status_t uct_posix_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id
                                          size_t length, const void *iface_addr,
                                          uct_mm_remote_seg_t *remote_seg)
 {
-    return uct_posix_mem_attach_common(seg_id, length, iface_addr, remote_seg);
+    return uct_posix_mem_attach_common(seg_id, length, iface_addr, remote_seg,
+                                       UCS_LOG_LEVEL_ERROR);
 }
 
 static void uct_posix_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg)
@@ -742,10 +744,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_unpack,
 
     status = uct_posix_mem_attach_common(packed_rkey->seg_id,
                                          packed_rkey->length,
-                                         (const char*)(packed_rkey + 1), rseg);
+                                         (const char*)(packed_rkey + 1), rseg,
+                                         UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         ucs_free(rseg);
-        return status;
+        return (status == UCS_ERR_SHMEM_SEGMENT) ? UCS_ERR_UNREACHABLE : status;
     }
 
     uct_mm_md_make_rkey(rseg->address, packed_rkey->address, rkey_p);

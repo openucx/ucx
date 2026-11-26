@@ -126,6 +126,29 @@ static const char *ucp_gpu_nic_assignment_modes[] = {
     [UCP_GPU_NIC_ASSIGNMENT_MODE_LAST]        = NULL
 };
 
+enum {
+    UCP_RAILS_AUTO,
+    UCP_RAILS_LAST
+};
+
+static const char *ucp_rails_auto_names[] = {
+    [UCP_RAILS_AUTO] = "auto",
+    [UCP_RAILS_LAST] = NULL
+};
+
+#define UCP_CONFIG_TYPE_RAILS \
+    UCS_CONFIG_TYPE_KEY_VALUE( \
+            UCS_CONFIG_TYPE_UINT_ENUM(ucp_rails_auto_names), \
+            {"default", "limit for buffers that 'assigned' doesn't cover", \
+             ucs_offsetof(ucp_max_rails_t, max_lanes)}, \
+            {"assigned", \
+             "limit for GPU buffers whose GPU has NICs assigned by " \
+             "UCX_GPU_NIC_ASSIGNMENT_MODE; 'auto' lifts the limit, so these " \
+             "buffers use every lane left after the assignment removes the " \
+             "lanes on other NICs", \
+             ucs_offsetof(ucp_max_rails_t, max_assigned_lanes)}, \
+            {NULL})
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -245,19 +268,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Maximal number of devices on which an eager operation may be executed in parallel",
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
-  {"MAX_RNDV_LANES", NULL,"",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RNDV_LANES", NULL, "",
+   ucs_offsetof(ucp_context_config_t, max_rndv_rails), UCP_CONFIG_TYPE_RAILS},
 
-  {"MAX_RNDV_RAILS", "2",
+  {"MAX_RNDV_RAILS", "2,assigned:auto",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rndv_rails), UCP_CONFIG_TYPE_RAILS},
 
   {"MAX_RMA_LANES", NULL, "",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rma_rails), UCP_CONFIG_TYPE_RAILS},
 
-  {"MAX_RMA_RAILS", "1",
+  {"MAX_RMA_RAILS", "1,assigned:auto",
    "Maximal number of devices on which a RMA operation may be executed in parallel",
-   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(ucp_context_config_t, max_rma_rails), UCP_CONFIG_TYPE_RAILS},
 
   {"MIN_RNDV_CHUNK_SIZE", "16k",
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
@@ -695,6 +718,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " - shared      : assign all NICs of a group to every GPU of that group.",
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
+
+  {"GPU_NIC_ASSIGNMENT_GROUP_BY", "auto",
+   "Topology grouping criterion used by UCX_GPU_NIC_ASSIGNMENT_MODE.\n"
+   " - auto       : use 'pci_switch' on x86_64, otherwise 'numa'.\n"
+   " - numa       : one group per NUMA node.\n"
+   " - pci_switch : every GPU uses the deepest PCIe switch it shares with\n"
+   "                a NIC, and GPUs using the same PCIe switch share a group.\n"
+   "                A NIC joins the group of the deepest such PCIe switch\n"
+   "                above it. GPUs sharing no PCIe switch with a NIC, GPUs\n"
+   "                whose group got no NIC, and NICs below none of these\n"
+   "                PCIe switches, are grouped by NUMA node.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_group_by),
+   UCS_CONFIG_TYPE_ENUM(ucs_topo_group_by_names)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
@@ -2589,11 +2625,44 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
 static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
                                       unsigned max_rails)
 {
-    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+    UCS_STATIC_ASSERT(UCP_PROTO_MAX_LANES == UCP_MAX_LANES);
 
-    if (max_rails > max_lanes) {
-        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
-                  name, max_rails, max_lanes);
+    if (max_rails > UCP_MAX_LANES) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %d", env_prefix,
+                  name, max_rails, UCP_MAX_LANES);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int ucp_context_resolve_rails(const char *env_prefix, const char *name,
+                                     ucp_max_rails_t *rails)
+{
+    if (UCS_CONFIG_UINT_ENUM_INDEX(rails->max_lanes) == UCP_RAILS_AUTO) {
+        ucs_error("%s%s: 'auto' is supported only for 'assigned', set "
+                  "'<N>,assigned:auto'",
+                  env_prefix, name);
+        return 0;
+    }
+
+    /* Check the default limit first, so a plain number reports it */
+    if (!ucp_max_rails_config_valid(env_prefix, name, rails->max_lanes)) {
+        return 0;
+    }
+
+    if (UCS_CONFIG_UINT_ENUM_INDEX(rails->max_assigned_lanes) ==
+        UCP_RAILS_AUTO) {
+        rails->max_assigned_lanes = UCP_MAX_LANES;
+    } else if (!ucp_max_rails_config_valid(env_prefix, name,
+                                           rails->max_assigned_lanes)) {
+        return 0;
+    }
+
+    if ((rails->max_assigned_lanes == 0) != (rails->max_lanes == 0)) {
+        ucs_error("%s%s: 'default' and 'assigned' must both be 0 or both "
+                  "non-zero",
+                  env_prefix, name);
         return 0;
     }
 
@@ -2688,10 +2757,10 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
                                     context->config.ext.max_eager_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
-                                    context->config.ext.max_rndv_lanes) ||
-        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
-                                    context->config.ext.max_rma_lanes)) {
+        !ucp_context_resolve_rails(config->env_prefix, "MAX_RNDV_RAILS",
+                                   &context->config.ext.max_rndv_rails) ||
+        !ucp_context_resolve_rails(config->env_prefix, "MAX_RMA_RAILS",
+                                   &context->config.ext.max_rma_rails)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }
@@ -2845,7 +2914,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_am_mpool_sizes;
     } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
-        if ((context->config.ext.max_rma_lanes > 1) ||
+        if ((context->config.ext.max_rma_rails.max_lanes > 1) ||
             context->config.ext.proto_enable) {
             context->config.worker_fence_mode = UCP_FENCE_MODE_STRONG;
         } else {
@@ -3039,11 +3108,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_status_t status;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-            ucs_debug("gpu-nic assignment is not supported on %s "
-                      "architecture, skipping",
-                      ucs_cpu_model_name());
+        if (!ucp_gpu_nic_assignment_is_vera_rubin()) {
+            ucs_debug("gpu-nic assignment is supported only on vera rubin, "
+                      "skipping");
             return UCS_OK;
         }
 
@@ -3069,7 +3136,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
                 context, mode, "no assignable network devices");
     }
 
-    status = ucs_topo_build_groups(&net_device_filter, &groups);
+    status = ucs_topo_build_groups(
+            &net_device_filter, context->config.ext.gpu_nic_assignment_group_by,
+            &groups);
     if (status != UCS_OK) {
         return status;
     }
@@ -3451,20 +3520,6 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
         }
 
         UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
-    }
-}
-
-void
-ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
-                              ucp_tl_bitmap_t *tl_bitmap)
-{
-    ucp_rsc_index_t tl_idx;
-
-    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
-        if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
-            UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
-        }
     }
 }
 

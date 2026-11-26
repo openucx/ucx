@@ -51,6 +51,42 @@ protected:
         EXPECT_EQ(worker->context->num_tls, unpacked_address.address_count);
         ucs_free(unpacked_address.address_list);
     }
+
+    /* Remote device index of each unpacked address entry */
+    std::vector<ucp_rsc_index_t> unpacked_dev_indices(ucp_worker_h worker)
+    {
+        std::vector<ucp_rsc_index_t> dev_indices;
+        ucp_unpacked_address_t unpacked_address;
+        const ucp_address_entry_t *ae;
+        ucs_status_t status;
+        size_t size;
+        void *buffer;
+
+        const ucp_object_version_t addr_version =
+                worker->context->config.ext.worker_addr_version;
+        status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
+                                  UCP_ADDRESS_PACK_FLAGS_ALL, addr_version,
+                                  NULL, UINT_MAX, &size, &buffer);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            return dev_indices;
+        }
+
+        status = ucp_address_unpack(worker, buffer, UCP_ADDRESS_PACK_FLAGS_ALL,
+                                    &unpacked_address);
+        ucs_free(buffer);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            return dev_indices;
+        }
+
+        ucp_unpacked_address_for_each(ae, &unpacked_address) {
+            dev_indices.push_back(ae->dev_index);
+        }
+
+        ucs_free(unpacked_address.address_list);
+        return dev_indices;
+    }
 };
 
 UCS_TEST_P(test_ucp_tl, check_ucp_tl, "SELF_NUM_DEVICES?=50")
@@ -63,6 +99,37 @@ UCS_TEST_P(test_ucp_tl, check_ucp_tl_max)
     modify_config("SELF_NUM_DEVICES", ucs::to_string(UCP_MAX_RESOURCES),
                   SETENV_IF_NOT_EXIST);
     check_resources(UCP_MAX_RESOURCES);
+}
+
+/* Devices of the same MD sharing a dev_index, like TCP interfaces on the same
+ * NIC, must be packed as separate devices to keep their own device address */
+UCS_TEST_P(test_ucp_tl, pack_shared_dev_index, "SELF_NUM_DEVICES?=2")
+{
+    ucs_sys_bus_id_t bus_id = {0xffff, 0xab, 0, 0};
+    ucs_sys_device_t sys_dev;
+
+    create_entity();
+    ucp_context_h context = sender().ucph();
+    ASSERT_EQ(2u, context->num_tls);
+    ASSERT_EQ(context->tl_rscs[0].md_index, context->tl_rscs[1].md_index);
+    ASSERT_STRNE(context->tl_rscs[0].tl_rsc.dev_name,
+                 context->tl_rscs[1].tl_rsc.dev_name);
+
+    context->tl_rscs[1].dev_index = context->tl_rscs[0].dev_index;
+
+    std::vector<ucp_rsc_index_t> dev_indices =
+            unpacked_dev_indices(sender().worker());
+    ASSERT_EQ(2ul, dev_indices.size());
+    EXPECT_NE(dev_indices[0], dev_indices[1]);
+
+    /* The remote side still counts devices with the same sys_dev as one */
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+    context->tl_rscs[0].tl_rsc.sys_device = sys_dev;
+    context->tl_rscs[1].tl_rsc.sys_device = sys_dev;
+
+    dev_indices = unpacked_dev_indices(sender().worker());
+    ASSERT_EQ(2ul, dev_indices.size());
+    EXPECT_EQ(dev_indices[0], dev_indices[1]);
 }
 
 UCS_TEST_P(test_ucp_tl, check_ucp_tl_exceeds_limit)

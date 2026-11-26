@@ -13,21 +13,44 @@ withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariabl
   githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", VARIABLE_FROM_POST)
 }
 
-// Abort previous dispatcher runs for the same PR
+// Abort previous dispatcher runs for the same PR and their leaf jobs
 def currentPrNumber = githubHelper.getPRNumber()?.toString()
 if (currentPrNumber) {
-  def slurper = new groovy.json.JsonSlurper()
   try {
+    def stale = []
     Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
       it.isBuilding() && it.number < currentBuild.number
     }.each { b ->
       def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'VARIABLE_FROM_POST' }?.value
-      def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
+      def payload = gd ? new groovy.json.JsonSlurper().parseText(gd) : null
+      // issue.number: /build comment payload; number: PR push payload
+      def otherPr = (payload?.issue?.number ?: payload?.number)?.toString()
       if (otherPr == currentPrNumber) {
         echo "Aborting dispatcher #${b.number} for same PR #${currentPrNumber}"
+        // The stop also cancels the leaf jobs that are still in the queue
         b.doStop()
+        stale << b.number
       }
     }
+
+    // A leaf job can be killed only after its own Jenkinsfile checkout, hence the rounds
+    for (int round = 0; stale && round < 6; round++) {
+      sleep 5
+      stale.each { n ->
+        def dispatcher = Jenkins.instance.getItemByFullName(env.JOB_NAME).getBuildByNumber(n)
+        dispatcher?.doKill()
+        dispatcher?.getLog(1000)?.each { line ->
+          // A leaf job start is logged as "Starting building: <folder> <separator> <job> #<number>"
+          def m = (line =~ /^Starting building: (\S+) \S+ (\S+) #(\d+)$/)
+          if (m) {
+            Jenkins.instance.getItemByFullName(m[0][1] + '/' + m[0][2])?.getBuildByNumber(m[0][3] as int)?.doKill()
+          }
+        }
+      }
+    }
+  } catch(InterruptedException e) {
+    // This run was aborted while it waited
+    throw e
   } catch(Exception e) {
     echo "Could not abort previous dispatchers: ${e.message}"
   }
@@ -40,14 +63,11 @@ githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHu
 currentBuild.description = githubHelper.getBuildDescription()
 
 def jobs = [
-  'ucx-codestyle-oss',
   'ucx-static-checks-oss',
   'ucx-coverity-oss',
   'ucx-build-oss',
   'ucx-build-static-oss',
   'ucx-test-oss',
-  'ucx-test-gpu-oss',
-  'ucx-test-dl-gpu-oss',
 ]
 
 try {

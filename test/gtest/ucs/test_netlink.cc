@@ -7,8 +7,10 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/netlink.h>
+#include <ucs/sys/sock.h>
 }
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -37,10 +39,24 @@ protected:
         return basename(target);
     }
 
-    static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
-                             const void *hdr, size_t hdr_size)
+    static void append_rta(std::vector<uint8_t> &buf, unsigned short type,
+                           const void *data, size_t payload_len)
     {
-        size_t msg_len      = NLMSG_LENGTH(hdr_size);
+        size_t rta_len   = RTA_LENGTH(payload_len);
+        size_t offset    = buf.size();
+        struct rtattr rt = {static_cast<unsigned short>(rta_len), type};
+
+        buf.resize(offset + RTA_ALIGN(rta_len), 0);
+        memcpy(&buf[offset], &rt, sizeof(rt));
+        memcpy(&buf[offset + RTA_LENGTH(0)], data, payload_len);
+    }
+
+    static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
+                             const void *hdr, size_t hdr_size,
+                             const std::vector<uint8_t> &attrs = {})
+    {
+        size_t msg_len      = NLMSG_LENGTH(NLMSG_ALIGN(hdr_size) +
+                                           attrs.size());
         size_t offset       = stream.size();
         struct nlmsghdr nlh = {static_cast<uint32_t>(msg_len), type,
                                NLM_F_MULTI, 0, 0};
@@ -48,6 +64,28 @@ protected:
         stream.resize(offset + NLMSG_ALIGN(msg_len), 0);
         memcpy(&stream[offset], &nlh, sizeof(nlh));
         memcpy(&stream[offset + NLMSG_HDRLEN], hdr, hdr_size);
+        if (!attrs.empty()) {
+            memcpy(&stream[offset + NLMSG_HDRLEN + NLMSG_ALIGN(hdr_size)],
+                   attrs.data(), attrs.size());
+        }
+    }
+
+    static void append_route(std::vector<uint8_t> &dump, sa_family_t family,
+                             unsigned char type, int if_index,
+                             const struct in_addr *dst = nullptr)
+    {
+        struct rtmsg rtm = {};
+        std::vector<uint8_t> attrs;
+
+        rtm.rtm_family = family;
+        rtm.rtm_type   = type;
+        append_rta(attrs, RTA_OIF, &if_index, sizeof(if_index));
+        if (dst != nullptr) {
+            rtm.rtm_dst_len = 32;
+            append_rta(attrs, RTA_DST, dst, sizeof(*dst));
+        }
+
+        append_nlmsg(dump, RTM_NEWROUTE, &rtm, sizeof(rtm), attrs);
     }
 
     static ucs_status_t count_msg_cb(const struct nlmsghdr*, void *arg)
@@ -192,6 +230,150 @@ UCS_TEST_F(test_netlink, best_route_to_local_addr) {
     UCS_TEST_MESSAGE << num_checks << " routes from other domains checked";
 }
 
+UCS_TEST_F(test_netlink, route_get) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_addrs     = 0;
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+    ucs_netlink_route_t route;
+    int local_index, vrf_index;
+    ucs_status_t status;
+
+    ASSERT_NE(0u, lo_index);
+
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    status = ucs_netlink_route_get((struct sockaddr*)&sin, NULL, 0, &route);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(RTN_LOCAL, route.type);
+    ASSERT_EQ(1, route.num_oifs);
+    EXPECT_EQ(static_cast<int>(lo_index), route.oifs[0]);
+
+    ASSERT_UCS_OK(ucs_netlink_route_get((struct sockaddr*)&sin,
+                                        (struct sockaddr*)&sin, lo_index,
+                                        &route));
+    EXPECT_EQ(RTN_LOCAL, route.type);
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    for (int i = 0; i < 2; ++i) {
+        /* The second lookup returns the cached result */
+        EXPECT_EQ(UCS_ERR_UNREACHABLE,
+                  ucs_netlink_route_get((struct sockaddr*)&sin, NULL, lo_index,
+                                        &route));
+    }
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        /* A link-local address is ambiguous without an interface */
+        if ((ifa->ifa_addr->sa_family == AF_INET6) &&
+            IN6_IS_ADDR_LINKLOCAL(
+                    &((struct sockaddr_in6*)ifa->ifa_addr)->sin6_addr)) {
+            continue;
+        }
+
+        local_index = ucs_netlink_get_local_route_ndev_index(ifa->ifa_addr);
+        if (local_index < 0) {
+            continue;
+        }
+
+        /* The kernel selects the host route of a local address in the
+         * routing domain of the address */
+        vrf_index = ucs_netlink_get_vrf_master_index(local_index);
+        ASSERT_UCS_OK(ucs_netlink_route_get(ifa->ifa_addr, NULL,
+                                            std::max(vrf_index, 0), &route),
+                      << ifa->ifa_name);
+        EXPECT_EQ(RTN_LOCAL, route.type) << ifa->ifa_name;
+        EXPECT_EQ((ifa->ifa_addr->sa_family == AF_INET) ? 32 : 128,
+                  route.prefix_len)
+                << ifa->ifa_name;
+        ++num_addrs;
+    }
+
+    freeifaddrs(ifaddrs);
+    UCS_TEST_MESSAGE << num_addrs << " local addresses checked";
+}
+
+UCS_TEST_F(test_netlink, kernel_route_matches) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_defaults  = 0;
+    struct sockaddr_in sin = {};
+    struct if_nameindex *ifs, *ifp;
+    ucs_netlink_route_t route;
+    uint8_t best_prefix_len;
+    ucs_status_t status;
+
+    ASSERT_NE(0u, lo_index);
+
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    status = ucs_netlink_kernel_route_matches(lo_index, (struct sockaddr*)&sin,
+                                              NULL, &best_prefix_len);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+
+    /* No interface has a more specific route than the default to TEST-NET-2.
+     * A lookup through a VRF device selects a route through its slaves. */
+    ifs = if_nameindex();
+    ASSERT_NE(nullptr, ifs);
+    for (ifp = ifs; ifp->if_index != 0; ++ifp) {
+        if ((ucs_netlink_route_get((struct sockaddr*)&sin, NULL, ifp->if_index,
+                                   &route) == UCS_OK) &&
+            (route.prefix_len == 0) &&
+            (std::find(route.oifs, route.oifs + route.num_oifs,
+                       static_cast<int>(ifp->if_index)) !=
+             route.oifs + route.num_oifs)) {
+            EXPECT_EQ(UCS_OK, ucs_netlink_kernel_route_matches(
+                                      ifp->if_index, (struct sockaddr*)&sin,
+                                      NULL, &best_prefix_len))
+                    << ifp->if_name;
+            EXPECT_EQ(0, best_prefix_len) << ifp->if_name;
+            ++num_defaults;
+        }
+    }
+
+    if_freenameindex(ifs);
+    UCS_TEST_MESSAGE << num_defaults << " default routes checked";
+}
+
+UCS_TEST_F(test_netlink, is_host_addr) {
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr != NULL) &&
+            ((ifa->ifa_addr->sa_family == AF_INET) ||
+             (ifa->ifa_addr->sa_family == AF_INET6))) {
+            EXPECT_EQ(1, ucs_netlink_is_host_addr(ifa->ifa_addr))
+                    << ifa->ifa_name;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+
+    /* TEST-NET-2 address is not assigned to any host */
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    EXPECT_EQ(0, ucs_netlink_is_host_addr((struct sockaddr*)&sin));
+}
+
 UCS_TEST_F(test_netlink, parse_msg) {
     auto fail_cb = [](const struct nlmsghdr*, void *arg) -> ucs_status_t {
         ++(*static_cast<int*>(arg));
@@ -260,6 +442,14 @@ UCS_TEST_F(test_netlink, parse_msg) {
     EXPECT_EQ(0, msg_done);
     EXPECT_TRUE(m_errors.empty());
 
+    /* A route lookup fails when the kernel has no route */
+    reply.clear();
+    nlerr.error = -EHOSTUNREACH;
+    append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
+                                    &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
+
     /* A dump which failed in the kernel ends with an error in NLMSG_DONE */
     dump.resize(done_offset);
     append_nlmsg(dump, NLMSG_DONE, &done_error, sizeof(done_error));
@@ -291,4 +481,47 @@ UCS_TEST_F(test_netlink, send_request) {
                                        sizeof(ifi), count_msg_cb, &count,
                                        UCS_LOG_LEVEL_DEBUG));
     EXPECT_EQ(0, count);
+}
+
+UCS_TEST_F(test_netlink, non_unicast_default_route) {
+    /* Interface indexes which no network device uses */
+    const int dropped_index         = INT_MAX;
+    const int cached_index          = INT_MAX - 1;
+    const int done_ok               = 0;
+    struct sockaddr_storage sa_ipv4 = {}, sa_ipv6 = {}, sa_dst = {};
+    std::vector<uint8_t> dump;
+    int netmask_len, msg_done;
+    struct in_addr dst;
+
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.18.0.1", &dst));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("198.18.0.1", &sa_dst));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("198.51.100.1", &sa_ipv4));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("2001:db8::1", &sa_ipv6));
+
+    for (sa_family_t family : {AF_INET, AF_INET6}) {
+        append_route(dump, family, RTN_LOCAL, dropped_index);
+        append_route(dump, family, RTN_UNREACHABLE, dropped_index);
+    }
+
+    /* The cache cannot be reset, so do not leave a local address in it */
+    append_route(dump, AF_INET, RTN_UNREACHABLE, cached_index, &dst);
+    append_route(dump, AF_INET, RTN_UNICAST, cached_index);
+    append_nlmsg(dump, NLMSG_DONE, &done_ok, sizeof(done_ok));
+    ASSERT_UCS_OK(ucs_netlink_parse_msg(dump.data(), dump.size(),
+                                        ucs_netlink_parse_rt_entry_cb, NULL,
+                                        UCS_LOG_LEVEL_ERROR, &msg_done));
+
+    EXPECT_EQ(0, ucs_netlink_route_exists(dropped_index,
+                                          (struct sockaddr*)&sa_ipv4, NULL));
+    EXPECT_EQ(0, ucs_netlink_route_exists(dropped_index,
+                                          (struct sockaddr*)&sa_ipv6, NULL));
+
+    EXPECT_EQ(1, ucs_netlink_route_exists(cached_index,
+                                          (struct sockaddr*)&sa_ipv4,
+                                          &netmask_len));
+    EXPECT_EQ(0, netmask_len);
+    EXPECT_EQ(1, ucs_netlink_route_exists(cached_index,
+                                          (struct sockaddr*)&sa_dst,
+                                          &netmask_len));
+    EXPECT_EQ(32, netmask_len);
 }

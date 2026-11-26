@@ -110,7 +110,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
-        .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
+        .max_rails           = ucp_max_rails_make(
+                                       UCP_PROTO_RMA_MAX_BCOPY_LANES),
         .min_chunk           = context->config.ext.min_rma_chunk_size,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_BCOPY,
@@ -166,14 +167,21 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
                                               lpriv->super.rkey_index);
     size_t offset      = req->send.state.dt_iter.offset;
     const ucp_proto_multi_priv_t *mpriv;
+    ucp_proto_multi_lane_priv_t adjusted;
     uct_iov_t iov;
+
+    mpriv = req->send.proto_config->priv;
+    lpriv = ucp_proto_rma_lane_priv(req, mpriv, lpriv, UCP_EP_PATH_BW_OP_GET,
+                                    &adjusted);
+    if (ucs_unlikely(lpriv == NULL)) {
+        return ucp_proto_rma_skip_lane(req, next_iter);
+    }
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
 
-    mpriv = req->send.proto_config->priv;
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
@@ -225,7 +233,7 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
-        .max_lanes                  = context->config.ext.max_rma_lanes,
+        .max_rails                  = context->config.ext.max_rma_rails,
         .min_chunk                  = context->config.ext.min_rma_chunk_size,
         .use_single_lane_min_length = 1,
         .initial_reg_md_map         = 0,
@@ -253,7 +261,7 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name           = "get/zcopy",
     .desc           = UCP_PROTO_ZCOPY_DESC,
     .flags          = 0,
-    .fallback_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .fallback_class = UCP_PROTO_CLASS_RMA_FALLBACK,
     .dt_mask        = UCP_DT_MASK_CONTIG_IOV,
     .probe          = ucp_proto_get_offload_zcopy_probe,
     .query          = ucp_proto_multi_query,

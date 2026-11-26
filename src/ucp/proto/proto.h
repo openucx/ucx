@@ -93,8 +93,9 @@ enum {
  * operations can share the same class.
  */
 enum {
-    /* RMA by a rendezvous protocol rather than a direct data path */
-    UCP_PROTO_CLASS_RMA_RNDV = UCS_BIT(0)
+    /* RMA by an indirect path (rendezvous, per-element emulation), used only
+     * when a direct data path is not available */
+    UCP_PROTO_CLASS_RMA_FALLBACK = UCS_BIT(0)
 };
 
 

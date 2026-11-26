@@ -10,6 +10,7 @@
 #include "common/test.h"
 #include "common/test_helpers.h"
 #include "ucp/ucp_test.h"
+#include "test_ucp_wireup.h"
 
 #include <algorithm>
 #include <memory>
@@ -22,6 +23,7 @@ extern "C" {
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/math.h>
+#include <uct/base/uct_iface.h>
 }
 
 class test_ucp_wireup : public ucp_test {
@@ -986,7 +988,68 @@ public:
     }
 
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+
+    void force_close_simultaneous_connect(bool close_winner)
+    {
+        if (get_variant_value() & NO_EP_MATCH) {
+            UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
+        }
+
+        /* The connection request of the worker with the lower UUID is
+         * accepted by the peer and the other request is ignored. Either way
+         * the receiving EP is bound to the requesting EP, so force close the
+         * requesting EP before its request is handled */
+        bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
+        entity &winner   = sender_wins ? sender() : receiver();
+        entity &peer     = sender_wins ? receiver() : sender();
+        entity &closer   = close_winner ? winner : peer;
+        entity &other    = close_winner ? peer : winner;
+
+        winner.connect(&peer, get_ep_params());
+        peer.connect(&winner, get_ep_params());
+        disconnect(closer, true);
+
+        closer.connect(&other, get_ep_params());
+        if (get_variant_value() & TEST_TAG) {
+            send_recv(closer.ep(), other.worker(), NULL, 1, 1);
+        }
+        flush_worker(closer);
+        disconnect(other, true);
+    }
+
+    static ssize_t wireup_am_bcopy_conn_reset(uct_ep_h ep, uint8_t id,
+                                              uct_pack_callback_t pack_cb,
+                                              void *arg, unsigned flags)
+    {
+        if (id != UCP_AM_ID_WIREUP) {
+            return m_orig_am_bcopy(ep, id, pack_cb, arg, flags);
+        }
+
+        /* Report the error from the send call, as tcp does on a broken
+         * socket */
+        ++m_wireup_send_errors;
+        uct_iface_handle_ep_err(ep->iface, ep, UCS_ERR_CONNECTION_RESET);
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    }
+
+    static void mock_wireup_msg_am_bcopy(ucp_ep_h ep, ucs::mock &mock)
+    {
+        ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(
+                ucp_ep_get_lane(ep, ucp_ep_get_wireup_msg_lane(ep)));
+        uct_iface_h iface;
+
+        ASSERT_TRUE(wireup_ep != NULL);
+        iface           = ucp_wireup_ep_get_msg_ep(wireup_ep)->iface;
+        m_orig_am_bcopy = iface->ops.ep_am_bcopy;
+        mock.setup(&iface->ops.ep_am_bcopy, wireup_am_bcopy_conn_reset);
+    }
+
+    static uct_ep_am_bcopy_func_t m_orig_am_bcopy;
+    static volatile unsigned m_wireup_send_errors;
 };
+
+uct_ep_am_bcopy_func_t test_ucp_wireup_errh_peer::m_orig_am_bcopy = NULL;
+volatile unsigned test_ucp_wireup_errh_peer::m_wireup_send_errors = 0;
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
     receiver().connect(&sender(), get_ep_params());
@@ -1031,6 +1094,39 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
             disconnect(receiver(), true);
         }
     }
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_winner) {
+    force_close_simultaneous_connect(true);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_peer) {
+    force_close_simultaneous_connect(false);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, pending_wireup_msg_send_error,
+           "WIREUP_VIA_AM_LANE=y") {
+    if (!has_transport("tcp")) {
+        UCS_TEST_SKIP_R("wireup message is pending only on connecting tcp");
+    }
+
+    /* The wireup request stays pending on the wireup EP of the AM lane until
+     * the tcp connection is established, then it is sent from the tcp pending
+     * queue */
+    sender().connect(&receiver(), get_ep_params());
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        ucs::mock mock;
+
+        m_wireup_send_errors = 0;
+        ASSERT_NO_FATAL_FAILURE(mock_wireup_msg_am_bcopy(sender().ep(), mock));
+        wait_for_value(&m_wireup_send_errors, 1u);
+    }
+
+    EXPECT_EQ(1u, m_wireup_send_errors);
+    EXPECT_TRUE(sender().ep()->flags & UCP_EP_FLAG_FAILED);
+    disconnect(sender(), true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
@@ -1889,6 +1985,47 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
     EXPECT_NE(UCP_NULL_LANE, ep_config->key.keepalive_lane);
 }
 
+/* The lanes of a configuration stay unset after a failed wireup, until the
+ * scheduled endpoint failure runs */
+UCS_TEST_P(test_ucp_wireup_keepalive, lane_without_uct_ep,
+           "KEEPALIVE_INTERVAL=0.1s")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep         = sender().ep();
+    ucp_lane_index_t lane;
+    size_t round_count;
+    uct_ep_h uct_ep;
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+
+    lane = ucp_ep_config(ep)->key.keepalive_lane;
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no keepalive lane");
+    }
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ucp_ep_set_lane(ep, lane, NULL);
+    }
+
+    /* The round in progress may have already passed the endpoint */
+    round_count = worker->keepalive.round_count + 2;
+    wait_for_cond(
+            [&]() { return worker->keepalive.round_count >= round_count; },
+            [&]() { progress(); });
+    EXPECT_GE(worker->keepalive.round_count, round_count);
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_ep_set_lane(ep, lane, uct_ep);
+    }
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)
 
 class test_ucp_address_v2 : public test_ucp_wireup {
@@ -2009,49 +2146,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)
-
-
-class unpacked_address {
-public:
-    unpacked_address(ucp_worker_h remote_worker) :
-        address(), m_remote_worker(remote_worker), m_address(NULL)
-    {
-    }
-
-    ~unpacked_address()
-    {
-        if (m_address != NULL) {
-            ucp_worker_release_address(m_remote_worker, m_address);
-        }
-        ucs_free(address.address_list);
-    }
-
-    void unpack(ucp_worker_h local_worker)
-    {
-        size_t address_length;
-        ucs_status_t status;
-
-        status = ucp_worker_get_address(m_remote_worker, &m_address,
-                                        &address_length);
-        ASSERT_UCS_OK(status);
-        ASSERT_GT(address_length, 0ul);
-
-        status = ucp_address_unpack(
-                local_worker, m_address,
-                ucp_worker_default_address_pack_flags(m_remote_worker),
-                &address);
-        ASSERT_UCS_OK(status);
-    }
-
-    ucp_unpacked_address_t address;
-
-private:
-    unpacked_address(const unpacked_address&);
-    unpacked_address& operator=(const unpacked_address&);
-
-    ucp_worker_h m_remote_worker;
-    ucp_address_t *m_address;
-};
 
 
 static uint64_t wireup_aux_local_iface_flags(int has_cm, int err_mode_peer)
@@ -2544,6 +2638,193 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "^sm")
+
+/*
+ * Without the registration cache CMA outscores RC, which pays for memory
+ * registration, so it is selected first, although it is much slower than RC.
+ * The address of a wireup request has only the transports of the peer lanes,
+ * and the lanes selected from it must be the same as from the worker address,
+ * so CMA must not take a lane slot even when it is selected first.
+ */
+class test_ucp_wireup_bw_lanes : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_RMA);
+    }
+
+protected:
+    void init() override
+    {
+        /* Proto v1 selects at most MAX_RNDV_RAILS RMA BW lanes */
+        modify_config("PROTO_ENABLE", "n");
+        modify_config("RCACHE_ENABLE", "n");
+        modify_config("MAX_RNDV_RAILS", "2");
+        modify_config("IB_NUM_PATHS", "2", SETENV_IF_NOT_EXIST);
+        /* CMA outscores RC and is too slow for it on any device */
+        modify_config("IB_MEM_REG_OVERHEAD", "10ms", SETENV_IF_NOT_EXIST);
+        modify_config("CMA_BW", "50MBs", SETENV_IF_NOT_EXIST);
+        ucp_test::init();
+
+        if (!has_resource(sender(), "cma") ||
+            (!has_resource(sender(), "rc_mlx5") &&
+             !has_resource(sender(), "rc_verbs"))) {
+            UCS_TEST_SKIP_R("cma and rc are required");
+        }
+    }
+
+    static unsigned num_rma_bw_lanes(const ucp_ep_config_key_t &key)
+    {
+        unsigned num_lanes = 0;
+
+        while ((num_lanes < UCP_MAX_LANES) &&
+               (key.rma_bw_lanes[num_lanes] != UCP_NULL_LANE)) {
+            ++num_lanes;
+        }
+
+        return num_lanes;
+    }
+
+    /* The transport, device and path of a lane */
+    static std::string
+    lane_str(entity &e, const ucp_ep_config_key_t &key, ucp_lane_index_t lane)
+    {
+        const uct_tl_resource_desc_t &rsc =
+                e.ucph()->tl_rscs[key.lanes[lane].rsc_index].tl_rsc;
+        std::stringstream ss;
+
+        ss << rsc.tl_name << "/" << rsc.dev_name << "."
+           << static_cast<unsigned>(key.lanes[lane].path_index);
+        return ss.str();
+    }
+
+    /* The lanes of a key, for failure messages */
+    static std::string lanes_str(entity &e, const ucp_ep_config_key_t &key)
+    {
+        std::string result;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            result += " " + lane_str(e, key, lane);
+        }
+
+        return result;
+    }
+
+    /* The RMA BW lanes of a key, in any order */
+    static std::multiset<std::string>
+    rma_bw_lanes(entity &e, const ucp_ep_config_key_t &key)
+    {
+        std::multiset<std::string> result;
+
+        for (unsigned i = 0; i < num_rma_bw_lanes(key); ++i) {
+            result.insert(lane_str(e, key, key.rma_bw_lanes[i]));
+        }
+
+        return result;
+    }
+
+    /* A peer with the registration cache, so it prefers RC to CMA */
+    entity &create_rcache_peer()
+    {
+        modify_config("RCACHE_ENABLE", "try");
+        entity &peer = *create_entity();
+        if (peer.ucph()->rcache == NULL) {
+            UCS_TEST_SKIP_R("registration cache is not available");
+        }
+
+        return peer;
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_bw_lanes, request_address) {
+    unpacked_address sender_address(sender().worker());
+    unpacked_address receiver_address(receiver().worker());
+    unpacked_address request_address(receiver().worker());
+    ucp_ep_config_key_t receiver_key, full_key, request_key;
+    ucp_tl_bitmap_t tl_bitmap;
+
+    sender_address.unpack(receiver().worker());
+    receiver_address.unpack(sender().worker());
+    select_lanes(receiver(), sender_address.address, receiver_key);
+    select_lanes(sender(), receiver_address.address, full_key);
+
+    /* Pack the transports of the receiver lanes, as a wireup request does. The
+     * request also has the aux transport, which cannot be an RMA BW lane */
+    ucp_ep_get_tl_bitmap(&receiver_key, &tl_bitmap);
+    request_address.unpack(sender().worker(), tl_bitmap);
+    select_lanes(sender(), request_address.address, request_key);
+
+    /* CMA is too slow, so the lanes are selected again without it, and both
+     * RMA BW lanes are on RC */
+    const std::multiset<std::string> lanes = rma_bw_lanes(sender(), full_key);
+    EXPECT_EQ(2u, lanes.size()) << "lanes:" << lanes_str(sender(), full_key);
+    EXPECT_TRUE(std::none_of(lanes.begin(), lanes.end(),
+                             [](const std::string &lane) {
+                                 return lane.find("cma/") == 0;
+                             }))
+            << "lanes:" << lanes_str(sender(), full_key);
+    EXPECT_TRUE(ucp_ep_config_is_equal(&full_key, &request_key))
+            << "full address lanes:" << lanes_str(sender(), full_key)
+            << ", request address lanes:" << lanes_str(sender(), request_key);
+}
+
+/* With the registration cache the peer prefers RC to CMA, so it selects RC
+ * first, while the sender selects CMA first. Both must still select the same
+ * RMA BW lanes, from the worker address and from the wireup request address */
+UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer) {
+    entity &peer = create_rcache_peer();
+    unpacked_address sender_address(sender().worker());
+    unpacked_address peer_address(peer.worker());
+    unpacked_address request_address(sender().worker());
+    ucp_ep_config_key_t sender_key, peer_key, request_key;
+    ucp_tl_bitmap_t tl_bitmap;
+
+    sender_address.unpack(peer.worker());
+    peer_address.unpack(sender().worker());
+    select_lanes(sender(), peer_address.address, sender_key);
+    select_lanes(peer, sender_address.address, peer_key);
+
+    /* The peer selects its lanes again from the sender wireup request */
+    ucp_ep_get_tl_bitmap(&sender_key, &tl_bitmap);
+    request_address.unpack(peer.worker(), tl_bitmap);
+    select_lanes(peer, request_address.address, request_key);
+
+    EXPECT_EQ(rma_bw_lanes(sender(), sender_key), rma_bw_lanes(peer, peer_key));
+    EXPECT_EQ(rma_bw_lanes(sender(), sender_key),
+              rma_bw_lanes(peer, request_key));
+}
+
+/* The sender and the peer connect to each other, as ucx_perftest does with the
+ * registration cache only on the client, and must get the same RMA BW lanes */
+UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer_connect) {
+    entity &peer = create_rcache_peer();
+
+    sender().connect(&peer, get_ep_params());
+    peer.connect(&sender(), get_ep_params());
+    flush_workers();
+
+    EXPECT_EQ(rma_bw_lanes(sender(), ucp_ep_config(sender().ep())->key),
+              rma_bw_lanes(peer, ucp_ep_config(peer.ep())->key));
+}
+
+UCS_TEST_P(test_ucp_wireup_bw_lanes, older_peer) {
+    unpacked_address receiver_address(receiver().worker());
+    ucp_ep_config_key_t key;
+
+    receiver_address.unpack(sender().worker());
+    receiver_address.address.dst_version =
+            UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES - 1;
+    select_lanes(sender(), receiver_address.address, key);
+
+    /* With an older peer CMA still takes a lane slot and is dropped */
+    EXPECT_EQ(1u, num_rma_bw_lanes(key))
+            << "lanes:" << lanes_str(sender(), key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_bw_lanes, cma_rcx,
+                              "posix,sysv,cma,rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_bw_lanes, cma_rcv,
+                              "posix,sysv,cma,rc_v")
 
 class test_ucp_reconfig_connect_remote : public ucp_test {
 public:

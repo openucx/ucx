@@ -17,6 +17,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 }
 
+#include <algorithm>
 #include <queue>
 
 namespace ucp {
@@ -684,12 +685,27 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     ss << test_param.transports;
     ucp_test::set_tls(ucp_config, ss.str());
 
+    ucp_context_h ucph;
+    ucs_status_t status;
+    size_t num_errors_before = m_errors.size();
     {
         scoped_log_handler slh(hide_errors_logger);
-        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
-                                            ucp_init, &local_ctx_params,
-                                            ucp_config);
+        status = ucp_init(&local_ctx_params, ucp_config, &ucph);
     }
+
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("Unsupported operation: ucp_init");
+    }
+
+    if (status != UCS_OK) {
+        auto it = find_filtered_init_error(num_errors_before);
+        if (it != m_errors.end()) {
+            UCS_TEST_SKIP_R(*it);
+        }
+    }
+
+    ASSERT_UCS_OK(status);
+    m_ucph.reset(ucph, ucp_cleanup);
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
@@ -714,33 +730,46 @@ void ucp_test_base::entity::connect(const entity* other,
         ucs_status_t status;
         ucp_address_t *address;
         size_t address_length;
-        ucp_ep_h ep;
 
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
-        {
-            scoped_log_handler slh(hide_errors_logger);
-
-            ucp_ep_params_t local_ep_params = ep_params;
-            local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-            local_ep_params.address     = address;
-
-            status = ucp_ep_create(m_workers[i].first, &local_ep_params, &ep);
-        }
-
-        if (status == UCS_ERR_UNREACHABLE) {
-            ucp_worker_release_address(other->worker(i), address);
-            UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
-        }
-
-        ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
-
-        if (do_set_ep) {
-            set_ep(ep, i, ep_idx);
-        }
-
+        std::string address_copy(reinterpret_cast<const char*>(address),
+                                 address_length);
         ucp_worker_release_address(other->worker(i), address);
+
+        connect_to_address(i, reinterpret_cast<const ucp_address_t*>(
+                                      address_copy.data()),
+                           ep_params, ep_idx, do_set_ep);
+    }
+}
+
+void ucp_test_base::entity::connect_to_address(int worker_index,
+                                               const ucp_address_t *address,
+                                               const ucp_ep_params_t &ep_params,
+                                               int ep_idx, int do_set_ep) {
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+
+        ucp_ep_params_t local_ep_params = ep_params;
+        local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        local_ep_params.address     = address;
+
+        status = ucp_ep_create(m_workers[worker_index].first, &local_ep_params,
+                               &ep);
+    }
+
+    if (status == UCS_ERR_UNREACHABLE) {
+        UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
+    }
+
+    ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
+
+    if (do_set_ep) {
+        set_ep(ep, worker_index, ep_idx);
     }
 }
 
@@ -822,6 +851,20 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
         m_workers[worker_index].second.push_back(
                         ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
     }
+}
+
+std::vector<std::string>::iterator
+ucp_test_base::entity::find_filtered_init_error(size_t first_error) const
+{
+    const std::string filter = m_test->init_skip_filter();
+    if (filter.empty()) {
+        return m_errors.end();
+    }
+
+    return std::find_if(m_errors.begin() + first_error, m_errors.end(),
+                        [&filter](const std::string &error) {
+                            return error.find(filter) != std::string::npos;
+                        });
 }
 
 ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(

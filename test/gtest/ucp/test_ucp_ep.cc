@@ -214,5 +214,61 @@ UCS_TEST_P(test_ucp_ep_lane_storage,
     ucp_ep_delete(ep);
 }
 
+UCS_TEST_P(test_ucp_ep_lane_storage, cleanup_without_config)
+{
+    ucp_ep_h ep;
+    ucs::scoped_async_lock lock(sender().worker()->async);
+
+    ASSERT_UCS_OK(ucp_ep_create_base(sender().worker(), UCP_EP_INIT_FLAG_INTERNAL,
+                                     "cleanup", "unconfigured endpoint", &ep));
+    EXPECT_EQ(UCP_WORKER_CFG_INDEX_NULL, ep->cfg_index);
+    ucp_ep_cleanup_lanes(ep);
+    ucp_ep_delete(ep);
+}
+
+
+class test_ucp_ep_create_failure : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+UCS_TEST_P(test_ucp_ep_create_failure, no_aux_transport)
+{
+    ucp_ep_params_t params = get_ep_params();
+    ucp_worker_h worker    = sender().worker();
+    ucp_address_t *address;
+    size_t address_length;
+    ucp_ep_h ep;
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(ucp_worker_get_address(receiver().worker(), &address,
+                                         &address_length));
+    params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(worker, &params, &ep);
+    }
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_EQ(UCS_ERR_UNREACHABLE, status);
+
+    /* Auxiliary selection is reached after allocating a wireup endpoint. */
+    ASSERT_FALSE(m_errors.empty());
+    EXPECT_NE(std::string::npos,
+              m_errors.back().find("no auxiliary transport"));
+
+    /* Wireup and discarded UCT endpoints hold a flush operation until freed. */
+    wait_for_value(&worker->flush_ops_count, 0u);
+    EXPECT_EQ(0u, worker->flush_ops_count);
+}
+
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep);
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_lane_storage, self, "self")
+
+/* Omit UD to fail auxiliary selection after allocating a wireup endpoint. */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_create_failure, rc_mlx5, "rc_mlx5")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_create_failure, rc_verbs, "rc_verbs")

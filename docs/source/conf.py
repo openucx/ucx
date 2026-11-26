@@ -53,25 +53,32 @@ htmlhelp_basename  = 'OpenUCXdoc'
 # UCX custom configuration
 #
 
-# For the local testing set cached_version to the latest released version (e.g 'v1.10.1').
-# Otherwise, GitHub may block you for a frequent access to GitHub API (DDOS protection).
+# For local testing, set to a release tag (e.g. 'v1.10.1') to skip the GitHub lookup
 cached_version = ''
 
 def getLatestVersion():
     import re
-    import os
+    import http.client
 
     global cached_version
     if cached_version == '':
+        conn = http.client.HTTPSConnection('github.com', timeout=30)
         try:
-            with open(os.path.join(os.path.dirname(__file__), '../../configure.ac'), "r") as f:
-                content = f.read()
-                major = re.search(r'define\(\[ucx_ver_major\],\s*(\d+)\)', content).group(1)
-                minor = re.search(r'define\(\[ucx_ver_minor\],\s*(\d+)\)', content).group(1)
-                patch = re.search(r'define\(\[ucx_ver_patch\],\s*(\d+)\)', content).group(1)
-                cached_version = "v{}.{}.{}".format(major, minor, patch)
+            # The releases/latest web page redirects to the latest release tag
+            # and is not subject to the GitHub REST API rate limit
+            conn.request('HEAD', '/openucx/ucx/releases/latest')
+            response = conn.getresponse()
+            location = response.getheader('Location', '')
         except Exception as e:
-            raise RuntimeError("Failed to retrieve the version from configure.ac: " + str(e))
+            raise RuntimeError("Failed to query the latest release: " + str(e))
+        finally:
+            conn.close()
+
+        match = re.search(r'/releases/tag/(v\d+\.\d+\.\d+)$', location)
+        if match is None:
+            raise RuntimeError("Failed to get the latest release: HTTP %d, "
+                               "Location '%s'" % (response.status, location))
+        cached_version = match.group(1)
 
     return cached_version
 

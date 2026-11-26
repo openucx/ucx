@@ -82,6 +82,16 @@ uct_cuda_ipc_check_and_pop_ctx(int is_ctx_pushed)
     }
 }
 
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
+{
+    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    access_desc->location.id   = cu_dev;
+}
+#endif
+
 static UCS_F_ALWAYS_INLINE int
 uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 {
@@ -106,14 +116,28 @@ uct_cuda_ipc_rkey_get_local_addr(const uct_cuda_ipc_rkey_t *rkey,
     return UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_mapping_init(uct_cuda_ipc_mapping_t *mapping,
+                          const uct_cuda_ipc_extended_rkey_t *key,
+                          const void *mapped_addr,
+                          uct_cuda_ipc_cache_region_t *cache_region)
+{
+    mapping->pid          = key->super.pid;
+    mapping->pid_ns       = key->pid_ns;
+    mapping->d_bptr       = (uintptr_t)key->super.d_bptr;
+    mapping->mapped_addr  = mapped_addr;
+    mapping->cache_region = cache_region;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_map_remote_addr(
         uct_cuda_ipc_extended_rkey_t *rkey, uint64_t remote_addr,
-        CUdevice cu_dev, const void **mapped_addr_p, void **local_addr_p)
+        CUdevice cu_dev, const void **mapped_addr_p, void **local_addr_p,
+        uct_cuda_ipc_cache_region_t **region_p)
 {
     ucs_status_t status;
     void *mapped_addr;
 
-    status = uct_cuda_ipc_map_memhandle(rkey, cu_dev, &mapped_addr,
+    status = uct_cuda_ipc_map_memhandle(rkey, cu_dev, &mapped_addr, region_p,
                                         UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;

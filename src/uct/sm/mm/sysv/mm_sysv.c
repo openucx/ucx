@@ -52,13 +52,14 @@ static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
+static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p,
+                                               ucs_log_level_t err_level)
 {
     void *address;
 
     address = shmat(shmid, NULL, 0);
     if (address == MAP_FAILED) {
-        ucs_error("shmat(shmid=%d) failed: %m", shmid);
+        ucs_log(err_level, "shmat(shmid=%d) failed: %m", shmid);
         *address_p = NULL; /* GCC 8.3.1 reports error without it */
         return UCS_ERR_SHMEM_SEGMENT;
     }
@@ -162,7 +163,8 @@ static ucs_status_t uct_sysv_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
                                         size_t length, const void *iface_addr,
                                         uct_mm_remote_seg_t *rseg)
 {
-    return uct_sysv_mem_attach_common(seg_id, &rseg->address);
+    return uct_sysv_mem_attach_common(seg_id, &rseg->address,
+                                      UCS_LOG_LEVEL_ERROR);
 }
 
 static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg)
@@ -180,9 +182,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_sysv_rkey_unpack,
     ucs_status_t status;
     void *address;
 
-    status = uct_sysv_mem_attach_common(packed_rkey->shmid, &address);
+    status = uct_sysv_mem_attach_common(packed_rkey->shmid, &address,
+                                        UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
-        return status;
+        return UCS_ERR_UNREACHABLE;
     }
 
     *handle_p = address;
