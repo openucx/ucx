@@ -50,6 +50,6 @@ env:
 steps:
   - name: Test
     parallel: false
-    timeout: 360
+    timeout: 210
     run: |
       ./contrib/test_jenkins.sh
