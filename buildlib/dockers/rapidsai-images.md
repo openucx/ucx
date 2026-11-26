@@ -120,9 +120,6 @@ instead of a per-arch loop plus manual `imagetools create`.
 
 ## Troubleshooting
 
-- **only one architecture in the pushed manifest** - buildx 0.21 does not honor
-  the compose `build.platforms` key (0.38 does); the script forces both
-  platforms with `--set '*.platform=...'`. If you bake by hand, pass it too.
 - **`runc run failed ... can't mask dir /proc/acpi`** - the floating
   `moby/buildkit:buildx-stable-1` image ships a runc that fails on the builders'
   older kernels; the script pins the buildkit image (`BUILDKIT_IMAGE`).
@@ -134,9 +131,11 @@ instead of a per-arch loop plus manual `imagetools create`.
   build by hand, pin each node to one arch.
 - **`docker context create` / ssh fails** - the host you run on can't key-auth to the
   other node. Fix ssh keys first; the remote buildkit runs over that ssh context.
-- **manifest shows only one arch after a push** - a node's push didn't complete (seen
-  when a backgrounded ssh build was killed early). Re-push the missing arch image and
-  re-create the manifest (`docker buildx imagetools create`), or run the script
-  again with a new `<REV>`.
+- **manifest shows only one arch after a push** - two causes. A bake by hand
+  without `--set '*.platform=...'` builds only the local arch (the compose header
+  says why); the script always passes it. Or a node's push didn't complete (seen
+  when a backgrounded ssh build was killed early): re-push the missing arch image
+  and re-create the manifest (`docker buildx imagetools create`), or run the
+  script again with a new `<REV>`.
 - **`docker login` 401 on `ucx/` repos** - the cached login is for a different harbor
   project. Re-login with `HARBOR_UCX_USER`.
