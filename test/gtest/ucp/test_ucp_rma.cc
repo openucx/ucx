@@ -1974,12 +1974,38 @@ public:
     test_ucp_rma_sgl_data() {
         if (get_variant_value(4)) {
             modify_config("PROTOS", "^put/sgl/offload,get/sgl/offload");
+            if ((op() == SGL_OP_GET) && UCP_MEM_IS_HOST(src_mem_type()) &&
+                UCP_MEM_IS_HOST(dst_mem_type())) {
+                m_expected_proto = "get/sgl/offload_sw";
+            }
         }
     }
 
     virtual ucs_memory_type_t dst_mem_type() const override {
         return static_cast<ucs_memory_type_t>(get_variant_value(3));
     }
+
+protected:
+    void use_emulation() {
+        m_require_zcopy_lane = false;
+        m_expected_proto     = nullptr;
+    }
+
+    virtual void check_posted_request(ucs_status_ptr_t sptr) override {
+        if (m_expected_proto == nullptr) {
+            return;
+        }
+
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+            return;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        EXPECT_STREQ(m_expected_proto, req->send.proto_config->proto->name);
+    }
+
+    const char *m_expected_proto = nullptr;
 };
 
 UCS_TEST_P(test_ucp_rma_sgl_data, various_counts) {
@@ -2033,25 +2059,25 @@ UCS_TEST_P(test_ucp_rma_sgl_data, no_remote_count) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, emulation, UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_data, emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(4, 256 * UCS_KBYTE);
 }
 
