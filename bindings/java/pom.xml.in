@@ -332,6 +332,15 @@
       </plugin>
 
       <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <environmentVariables>
+            <UCX_MODULE_DIR>${ucx.build.dir}/modules</UCX_MODULE_DIR>
+          </environmentVariables>
+        </configuration>
+      </plugin>
+
+      <plugin>
         <artifactId>maven-clean-plugin</artifactId>
         <version>3.0.0</version>
         <configuration>
@@ -376,7 +385,8 @@
                 <resource>
                   <directory>${ucs.lib.path}</directory>
                   <includes>
-                    <include>**/*.so</include>
+                    <!-- Keep modules in the build tree with their SONAME symlinks. -->
+                    <include>*.so</include>
                   </includes>
                 </resource>
                 <resource>

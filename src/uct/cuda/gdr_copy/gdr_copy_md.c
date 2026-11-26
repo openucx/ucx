@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,10 +10,10 @@
 
 #include "gdr_copy_md.h"
 
-#include <dlfcn.h>
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
@@ -72,59 +73,24 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
 #if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
     typedef int (*uct_gdr_get_attribute_func_t)(gdr_t, gdr_attr_t, int*);
     uct_gdr_get_attribute_func_t get_attribute;
-    Dl_info lib_info, attr_info;
-    void *dl_handle;
-    const char *error;
     int using_dmabuf;
     int ret;
 
-    /* Resolve the optional query in the runtime which created this context. */
-    if (dladdr(gdr_open, &lib_info) == 0) {
-        ucs_debug("could not identify GDRCopy runtime providing gdr_open");
-        return 0;
-    }
-
-    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
-    if (dl_handle == NULL) {
-        error = dlerror();
-        ucs_debug("could not open loaded GDRCopy runtime: %s",
-                  (error != NULL) ? error : "unknown error");
-        return 0;
-    }
-
-    get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
-                                                        "gdr_get_attribute");
+    /* Resolve the optional query in the runtime which created this context.
+     * The runtime stays loaded as a dependency of this module. */
+    get_attribute = (uct_gdr_get_attribute_func_t)
+            ucs_sys_lib_dlsym(gdr_open, "gdr_get_attribute");
     if (get_attribute == NULL) {
-        ucs_debug("gdr_get_attribute is not available in loaded GDRCopy "
-                  "runtime");
-        goto err_dlclose;
-    }
-
-    if (dladdr(get_attribute, &attr_info) == 0) {
-        ucs_debug("could not identify GDRCopy runtime providing "
-                  "gdr_get_attribute");
-        goto err_dlclose;
-    }
-
-    if (attr_info.dli_fbase != lib_info.dli_fbase) {
-        ucs_debug("gdr_get_attribute library %p differs from gdr_open "
-                  "library %p",
-                  attr_info.dli_fbase, lib_info.dli_fbase);
-        goto err_dlclose;
+        return 0;
     }
 
     ret = get_attribute(gdr_ctx, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dmabuf);
-    dlclose(dl_handle);
     if (ret != 0) {
         ucs_debug("failed to query GDRCopy DMA-BUF backend: %d", ret);
         return 0;
     }
 
     return using_dmabuf;
-
-err_dlclose:
-    dlclose(dl_handle);
-    return 0;
 #else
     return 0;
 #endif
