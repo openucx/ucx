@@ -378,8 +378,8 @@ def raw():
     # (b) Raw DC and RC cases on the calico GID, the path UCX takes
     cases = [
         ("C0-DC-1G-n5-t2-o2", calico_gid, "DC", GIB, 5, 2, 2),
-        ("C1-DC-1G-n3-t3-o3", calico_gid, "DC", GIB, 3, 3, 3),
-        ("C2-DC-512M-n4-t4-o4", calico_gid, "DC", 512 * MIB, 4, 4, 4),
+        ("C1-DC-1G-n5-t3-o3", calico_gid, "DC", GIB, 5, 3, 3),
+        ("C2-DC-512M-n5-t4-o4", calico_gid, "DC", 512 * MIB, 5, 4, 4),
         ("C3-RC-1G-n5-t2-o2", calico_gid, "RC", GIB, 5, 2, 2),
     ]
     fast = [index for index, rate in rates.items()
