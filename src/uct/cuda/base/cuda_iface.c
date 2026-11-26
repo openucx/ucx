@@ -26,7 +26,7 @@ uct_cuda_base_query_devices_common(
     ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     CUdevice cuda_device;
     ucs_status_t status;
-    int num_devices;
+    int num_devices = 0;
 
     if (uct_cuda_ctx_is_active()) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
@@ -42,7 +42,8 @@ uct_cuda_base_query_devices_common(
         sys_device = uct_cuda_get_sys_dev(cuda_device);
     } else {
         ucs_debug("set cuda sys_device to `unknown` as no context is"
-                  " currently active");
+                  " currently active and %d devices are visible",
+                  num_devices);
     }
 
     return uct_single_device_resource(md, UCT_CUDA_DEV_NAME, dev_type,
