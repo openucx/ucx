@@ -670,7 +670,9 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
  * UCX_TOPO_PCI_P2P_PATH configuration, not on the devices which the process
  * uses, so all the processes on a node get the same result. A device with an
  * auxiliary device, such as a Direct NIC, accesses memory directly, so its
- * traffic does not go through the root complex.
+ * traffic does not go through the root complex. Otherwise,
+ * UCX_TOPO_PCI_P2P_PATH=root makes the result nonzero, also for a device
+ * without other devices under its root port.
  *
  * @param [in] sys_dev  System device to check.
  *
@@ -682,32 +684,20 @@ int ucs_topo_sys_device_is_p2p_redirected(ucs_sys_device_t sys_dev);
 
 /**
  * Check whether PCIe peer-to-peer traffic between a PCI device (e.g. NIC) and
- * the memory of another PCI device (e.g. GPU) goes through the root complex,
- * as @ref ucs_topo_sys_device_is_p2p_redirected describes for one device. This
- * requires both devices to be under the same PCIe root port.
+ * the memory of another PCI device (e.g. GPU) goes through the root complex:
+ * the memory is under the PCIe root port of the device, and
+ * @ref ucs_topo_sys_device_is_p2p_redirected is true for the device.
  *
  * @param [in] sys_dev      System device which accesses the memory.
- * @param [in] sys_dev_mem  System device of the memory.
+ * @param [in] sys_dev_mem  System device of the memory, or another device under
+ *                          the same root port, e.g. for the memory of a peer
+ *                          whose own system device is unknown.
  *
  * @return Nonzero if the peer-to-peer traffic goes through the root complex,
  *         0 otherwise.
  */
 int ucs_topo_is_p2p_redirected(ucs_sys_device_t sys_dev,
                                ucs_sys_device_t sys_dev_mem);
-
-
-/**
- * Check whether two system devices are the same device, or PCI devices under
- * the same PCIe root port. For example, a device under the root port of a
- * memory whose own system device is unknown, such as the memory of a peer.
- *
- * @param [in] sys_dev1  First system device.
- * @param [in] sys_dev2  Second system device.
- *
- * @return Nonzero if the devices are under the same root port, 0 otherwise.
- */
-int ucs_topo_is_same_root_port(ucs_sys_device_t sys_dev1,
-                               ucs_sys_device_t sys_dev2);
 
 
 /**

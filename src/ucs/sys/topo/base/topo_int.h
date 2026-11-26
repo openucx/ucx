@@ -18,21 +18,6 @@ BEGIN_C_DECLS
 #define UCS_TOPO_ROOT_PORT_NONE ((ucs_bus_id_bit_rep_t)-1)
 
 
-/* What decides whether the peer-to-peer traffic of a device goes through the
- * root complex, read from sysfs when the device is registered */
-typedef struct {
-    /* PCIe root port of the device as returned by
-     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
-    ucs_bus_id_bit_rep_t root_port;
-
-    /* IOMMU group of the device, or -1 if it has none */
-    long                 iommu_group;
-
-    /* Whether the IOMMU translates the DMA addresses of the device */
-    int                  iommu_translated;
-} ucs_topo_p2p_info_t;
-
-
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
@@ -82,7 +67,9 @@ typedef struct {
      * NIC), and several MEMs can sit behind it (e.g. MPS MLOPart aliases). */
     ucs_sys_device_bitmap_t siblings;
 
-    ucs_topo_p2p_info_t     p2p;
+    /* PCIe root port of the device as returned by
+     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
+    ucs_bus_id_bit_rep_t    root_port;
 
     /* Whether the peer-to-peer traffic with the other devices under the root
      * port goes through the root complex, UCS_AUTO until detected */
@@ -112,14 +99,28 @@ ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
- * Read the peer-to-peer information of a PCI device from sysfs, as the
- * registration of a system device does. For unit tests.
+ * Check whether two system devices are the same device, or PCI devices under
+ * the same PCIe root port.
  *
- * @param [in]  dev_path  Canonical sysfs path of the device.
- * @param [out] info      Filled with the information of the device.
+ * @param [in] sys_dev1  First system device.
+ * @param [in] sys_dev2  Second system device.
+ *
+ * @return Nonzero if the devices are under the same root port, 0 otherwise.
  */
-void ucs_topo_sysfs_read_p2p_info(const char *dev_path,
-                                  ucs_topo_p2p_info_t *info);
+int ucs_topo_is_same_root_port(ucs_sys_device_t sys_dev1,
+                               ucs_sys_device_t sys_dev2);
+
+
+/**
+ * Get the PCIe root port of a PCI device from sysfs, as the registration of a
+ * system device does. For unit tests.
+ *
+ * @param [in] dev_path  Canonical sysfs path of the device.
+ *
+ * @return The root port as returned by ucs_topo_get_bus_id_bit_repr(), or
+ *         UCS_TOPO_ROOT_PORT_NONE if the device is not behind a root port.
+ */
+ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *dev_path);
 
 
 /**

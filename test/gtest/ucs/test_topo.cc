@@ -1356,8 +1356,8 @@ UCS_TEST_F(test_topo, pci_p2p_path_config) {
     EXPECT_TRUE(ucs_topo_sys_device_is_p2p_redirected(sys_dev));
     EXPECT_FALSE(
             ucs_topo_sys_device_is_p2p_redirected(UCS_SYS_DEVICE_ID_UNKNOWN));
-    /* Without a root port, no memory is under the root port of the device */
-    EXPECT_FALSE(ucs_topo_is_p2p_redirected(sys_dev, sys_dev));
+    /* The device itself counts as under its root port */
+    EXPECT_TRUE(ucs_topo_is_p2p_redirected(sys_dev, sys_dev));
 
     /* The override does not change the detected value */
     modify_config("TOPO_PCI_P2P_PATH", "auto");
@@ -1386,7 +1386,6 @@ UCS_TEST_F(test_topo, same_root_port) {
 static void find_pci_device_behind_root_port(std::string &bdf,
                                              std::string &path)
 {
-    ucs_topo_p2p_info_t info;
     struct dirent *entry;
     DIR *dir;
 
@@ -1404,8 +1403,8 @@ static void find_pci_device_behind_root_port(std::string &bdf,
             continue;
         }
 
-        ucs_topo_sysfs_read_p2p_info(path.c_str(), &info);
-        if (info.root_port != UCS_TOPO_ROOT_PORT_NONE) {
+        if (ucs_topo_sysfs_get_root_port(path.c_str()) !=
+            UCS_TOPO_ROOT_PORT_NONE) {
             bdf = entry->d_name;
             break;
         }
@@ -1444,7 +1443,7 @@ protected:
 };
 
 UCS_TEST_F(test_topo_pci_device, p2p_redirect) {
-    ucs_topo_p2p_info_t info;
+    bool is_redirected;
 
     EXPECT_TRUE(ucs_topo_is_same_root_port(m_sys_dev, m_alias));
     EXPECT_FALSE(ucs_topo_is_same_root_port(m_sys_dev, m_fake));
@@ -1460,15 +1459,15 @@ UCS_TEST_F(test_topo_pci_device, p2p_redirect) {
     modify_config("TOPO_PCI_P2P_PATH", "direct");
     EXPECT_FALSE(ucs_topo_is_p2p_redirected(m_sys_dev, m_alias));
 
-    /* In the same IOMMU group, only translation redirects the traffic */
+    /* Under the same root port, the check of the device decides */
     modify_config("TOPO_PCI_P2P_PATH", "auto");
-    ucs_topo_sysfs_read_p2p_info(m_path.c_str(), &info);
-    EXPECT_EQ(info.iommu_translated != 0,
-              ucs_topo_is_p2p_redirected(m_sys_dev, m_alias) != 0)
-            << m_bdf;
-    EXPECT_EQ(ucs_topo_sysfs_is_p2p_redirected("/sys/bus/pci/devices",
-                                               m_path.c_str()) != 0,
+    is_redirected = ucs_topo_sysfs_is_p2p_redirected("/sys/bus/pci/devices",
+                                                     m_path.c_str());
+    EXPECT_EQ(is_redirected,
               ucs_topo_sys_device_is_p2p_redirected(m_sys_dev) != 0)
+            << m_bdf;
+    EXPECT_EQ(is_redirected,
+              ucs_topo_is_p2p_redirected(m_sys_dev, m_alias) != 0)
             << m_bdf;
 }
 
@@ -1726,32 +1725,19 @@ UCS_TEST_F(test_topo_p2p_redirect, not_peers) {
     EXPECT_FALSE(is_redirected(nic));
 }
 
-UCS_TEST_F(test_topo_p2p_redirect, p2p_info) {
-    ucs_topo_p2p_info_t info;
-
+UCS_TEST_F(test_topo_p2p_redirect, root_port) {
     add_topology(1, 2);
-    set_domain_type(2, "DMA-FQ");
 
-    /* Bus ID of the root port 0000:00:01.0 */
-    ucs_topo_sysfs_read_p2p_info(m_nic.c_str(), &info);
-    EXPECT_EQ(0x100, info.root_port);
-    EXPECT_EQ(2, info.iommu_group);
-    EXPECT_TRUE(info.iommu_translated);
-
-    ucs_topo_sysfs_read_p2p_info(m_peer.c_str(), &info);
-    EXPECT_EQ(0x100, info.root_port);
-    EXPECT_EQ(1, info.iommu_group);
-    EXPECT_FALSE(info.iommu_translated);
-
-    ucs_topo_sysfs_read_p2p_info(m_other_nic.c_str(), &info);
-    EXPECT_EQ(0x200, info.root_port);
-    EXPECT_EQ(-1, info.iommu_group);
-    EXPECT_FALSE(info.iommu_translated);
+    /* Bus IDs of the root ports 0000:00:01.0 and 0000:00:02.0 */
+    EXPECT_EQ(0x100, ucs_topo_sysfs_get_root_port(m_nic.c_str()));
+    EXPECT_EQ(0x100, ucs_topo_sysfs_get_root_port(m_peer.c_str()));
+    EXPECT_EQ(0x200, ucs_topo_sysfs_get_root_port(m_other_nic.c_str()));
 
     /* The host bridge and the root port itself are not behind a root port */
     for (const auto &path : {host_bridge(), m_root_port}) {
-        ucs_topo_sysfs_read_p2p_info(path.c_str(), &info);
-        EXPECT_EQ(UCS_TOPO_ROOT_PORT_NONE, info.root_port) << path;
+        EXPECT_EQ(UCS_TOPO_ROOT_PORT_NONE,
+                  ucs_topo_sysfs_get_root_port(path.c_str()))
+                << path;
     }
 }
 
