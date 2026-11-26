@@ -45,8 +45,8 @@ env:
   SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   TEST_TIMEOUT: 300
-  # Fail on funk only (no IMEX channel, host PID ns, 64 CPUs).
-  GTEST_FILTER: "*:-cuda_ipc/test_cuda_ipc_md.mkey_pack_mempool/*:cuda_ipc/test_uct_loopback_cuda.envelope/*:all/test_worker_cpu_mask.all_cpus/*"
+  # Fail on funk only (no IMEX channel, host PID ns).
+  GTEST_FILTER: "*:-cuda_ipc/test_cuda_ipc_md.mkey_pack_mempool/*:cuda_ipc/test_uct_loopback_cuda.envelope/*"
   STORAGE_DRIVER: overlay
   CI_IMAGE_TAG: "20260223-1"
 
