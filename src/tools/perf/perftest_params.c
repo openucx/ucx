@@ -691,7 +691,7 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'w':
         params->super.warmup_iter = atol(opt_arg);
         /* Explicit warm-up iterations count disables the time limit */
-        params->super.warmup_time = 0.0;
+        params->super.max_warmup_time = 0.0;
         return UCS_OK;
     case 'o':
         params->super.flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
