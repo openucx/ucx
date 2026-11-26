@@ -24,14 +24,8 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <link.h>
 #include <limits.h>
-
-#if HAVE_DECL_GETAUXVAL
-#include <sys/auxv.h>
-#endif
 
 
 /* Ensure this macro is defined (from <link.h>) - otherwise, cppcheck might
@@ -44,12 +38,6 @@
 
 typedef void * (*ucm_reloc_dlopen_func_t)(const char *, int);
 typedef int    (*ucm_reloc_dlclose_func_t)(void *);
-
-typedef struct ucm_auxv {
-    long               type;
-    long               value;
-} UCS_S_PACKED ucm_auxv_t;
-
 
 typedef struct ucm_reloc_dl_iter_context {
     ucm_reloc_patch_t  *patch;
@@ -103,99 +91,6 @@ ucm_reloc_get_pointer(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag
 #else
     return (void *)entry;
 #endif
-}
-
-static void ucm_reloc_file_lock(int fd, int l_type)
-{
-    struct flock fl = { l_type, SEEK_SET, 0, 0};
-    int ret;
-
-    ret = fcntl(fd, F_SETLKW, &fl);
-    if (ret < 0) {
-        ucm_warn("fcntl(fd=%d, F_SETLKW, l_type=%d) failed: %m", fd, l_type);
-    }
-}
-
-static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
-{
-#define UCM_RELOC_AUXV_BUF_LEN 16
-    static const char *proc_auxv_filename = "/proc/self/auxv";
-    static int phsize = 0;
-    ucm_auxv_t buffer[UCM_RELOC_AUXV_BUF_LEN];
-    ucm_auxv_t *auxv;
-    unsigned count;
-    ssize_t nread;
-    int found;
-    int fd;
-
-    /* Can avoid lock here - worst case we'll read the file more than once */
-    if (phsize != 0) {
-        *phsize_p = phsize;
-        return UCS_OK;
-    }
-
-#if HAVE_DECL_GETAUXVAL
-    phsize = getauxval(AT_PHENT);
-    if (phsize > 0) {
-        *phsize_p = phsize;
-        return UCS_OK;
-    }
-#endif
-
-    fd = open(proc_auxv_filename, O_RDONLY);
-    if (fd < 0) {
-        ucm_error("failed to open '%s' for reading: %m", proc_auxv_filename);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    if (RUNNING_ON_VALGRIND) {
-        /* Work around a bug caused by valgrind's fake /proc/self/auxv -
-         * every time this file is opened when running with valgrind, a
-         * a duplicate of the same fd is returned, so all share the same
-         * file offset.
-         */
-        ucm_reloc_file_lock(fd, F_WRLCK);
-        lseek(fd, 0, SEEK_SET);
-    }
-
-    /* Use small buffer on the stack, avoid using malloc() */
-    found = 0;
-    do {
-        nread = read(fd, buffer, sizeof(buffer));
-        if (nread < 0) {
-            ucm_error("failed to read %lu bytes from %s (ret=%ld): %m",
-                      sizeof(buffer), proc_auxv_filename, nread);
-            break;
-        }
-
-        count = nread / sizeof(buffer[0]);
-        for (auxv = buffer; (auxv < (buffer + count)) && (auxv->type != AT_NULL);
-             ++auxv)
-        {
-            if ((auxv->type == AT_PHENT) && (auxv->value > 0)) {
-                found  = 1;
-                phsize = auxv->value;
-                ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
-                if (phsize == 0) {
-                    ucm_error("phsize is 0");
-                }
-                break;
-            }
-        }
-    } while ((count > 0) && !found);
-
-    if (RUNNING_ON_VALGRIND) {
-        ucm_reloc_file_lock(fd, F_UNLCK);
-    }
-    close(fd);
-
-    if (!found) {
-        ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
-        return UCS_ERR_NO_ELEM;
-    }
-
-    *phsize_p = phsize;
-    return UCS_OK;
 }
 
 ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbol,
@@ -317,17 +212,10 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     void *jmprel, *rela, *strtab;
     size_t pltrelsz, relasz;
     ucm_dl_info_t *dl_info;
-    ucs_status_t status;
-    ElfW(Phdr) *phdr, *dphdr;
+    const ElfW(Phdr) *phdr, *dphdr;
     int i, ret, found_pt_load;
     ElfW(Sym) *symtab;
     khiter_t khiter;
-    int phsize;
-
-    status = ucm_reloc_get_aux_phsize(&phsize);
-    if (status != UCS_OK) {
-        return status;
-    }
 
     khiter = kh_put(ucm_dl_info_hash, &ucm_dl_info_hash, dlpi_addr, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
@@ -349,7 +237,7 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     dphdr         = NULL;
     found_pt_load = 0;
     for (i = 0; i < phdr_info->dlpi_phnum; ++i) {
-        phdr = UCS_PTR_BYTE_OFFSET(phdr_info->dlpi_phdr, phsize * i);
+        phdr = &phdr_info->dlpi_phdr[i];
         if (phdr->p_type == PT_LOAD) {
             /* Found loadable section - update address range */
             dl_info->start = ucs_min(dl_info->start, dlpi_addr + phdr->p_vaddr);
