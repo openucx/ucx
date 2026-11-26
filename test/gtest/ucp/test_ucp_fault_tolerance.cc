@@ -1627,7 +1627,10 @@ public:
     {
         modify_config("MAX_EAGER_LANES", "8");
         modify_config("RECOVERY_RETRIES", "1000");
-        m_self = this;
+        m_self                       = this;
+        m_live_transport_comp.func   = live_transport_completion;
+        m_live_transport_comp.count  = 1;
+        m_live_transport_comp.status = UCS_OK;
     }
 
 protected:
