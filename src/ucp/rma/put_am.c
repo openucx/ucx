@@ -191,7 +191,7 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
-        .max_lanes           = 1,
+        .max_rails           = ucp_max_rails_make(1),
         .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
