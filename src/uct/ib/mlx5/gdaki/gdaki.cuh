@@ -200,6 +200,24 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
     doca_gpu_dev_verbs_store_wqe_seg(dseg_ptr, (uint64_t*)&(dseg));
 }
 
+UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_nop(
+        uct_rc_gdaki_dev_ep_t *ep, void *wqe_ptr, uint16_t wqe_idx,
+        unsigned ctrl_flags, unsigned cid)
+{
+    const uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    doca_gpunetio_ib_mlx5_wqe_ctrl_seg cseg;
+
+    cseg.opmod_idx_opcode = doca_gpu_dev_verbs_bswap32(
+            ((uint32_t)wqe_idx << DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT) |
+            DOCA_GPUNETIO_IB_MLX5_OPCODE_NOP);
+    cseg.qpn_ds   = doca_gpu_dev_verbs_bswap32((qp->sq_num << 8) | 1);
+    cseg.fm_ce_se = ctrl_flags;
+
+    doca_gpu_dev_verbs_store_wqe_seg(
+            static_cast<uint64_t*>(wqe_ptr),
+            reinterpret_cast<uint64_t*>(&cseg));
+}
+
 UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t wqe_base, unsigned count,
                                      uint64_t flags)
@@ -233,6 +251,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
 }
 
+UCS_F_DEVICE bool
+uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
+{
+    return !(wqe_idx & ep->sq_fc_mask);
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_elem_t *tl_mem_elem,
@@ -242,7 +266,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uint64_t add)
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cflag                = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
+    unsigned cflag                = 0;
     uint64_t wqe_base;
     unsigned lane_id;
     unsigned num_lanes;
@@ -255,9 +279,12 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
     if (lane_id == 0) {
         uint16_t wqe_idx = (uint16_t)wqe_base;
-        if (comp != nullptr) {
-            comp->wqe_idx    = wqe_base;
-            comp->channel_id = cid;
+        if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
+            if (comp != nullptr) {
+                comp->wqe_idx    = wqe_base;
+                comp->channel_id = cid;
+            }
         }
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
@@ -375,18 +402,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
     return uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx);
 }
 
-UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
-                                          unsigned cid, uint64_t wqe_next)
-{
-    auto qp           = uct_rc_mlx5_gda_get_qp(ep, cid);
-    uint32_t qpn_ds   = uct_rc_mlx5_load_const(&qp->qpn_ds);
-    auto *db_ptr   = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
-    auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
-
-    doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
-    doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
-}
-
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
                                                    unsigned channel_id,
@@ -394,25 +409,40 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
 {
     auto ep  = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto cid = channel_id & ep->channel_mask;
-    auto qp  = uct_rc_mlx5_gda_get_qp(ep, cid);
     ucs_status_t status = UCS_INPROGRESS;
-    uint64_t wqe_next;
+    uint64_t wqe_base;
     unsigned lane_id;
     unsigned num_lanes;
 
     uct_dev_exec_init<level>(lane_id, num_lanes);
 
     if (lane_id == 0) {
-        wqe_next = READ_ONCE(qp->sq_ready_index);
+        do {
+            wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, 1);
+        } while (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE);
 
-        if (flags & UCT_DEVICE_FLAG_PUSH) {
-            uct_rc_mlx5_gda_push_db(ep, cid, wqe_next);
-        }
+        uct_rc_mlx5_gda_wqe_prepare_nop(
+                ep,
+                uct_rc_mlx5_gda_get_wqe_ptr(
+                        ep, cid, static_cast<uint16_t>(wqe_base)),
+                static_cast<uint16_t>(wqe_base),
+                DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE |
+                        DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_FENCE,
+                cid);
+    }
+
+    uct_dev_sync<level>();
+
+    if (lane_id == 0) {
+        uct_rc_mlx5_gda_db(ep, cid, wqe_base, 1,
+                           flags | UCT_DEVICE_FLAG_NODELAY);
 
         do {
-            status = uct_rc_mlx5_gda_check_cqe(ep, cid, wqe_next - 1);
+            status = uct_rc_mlx5_gda_check_cqe(ep, cid, wqe_base);
         } while (status == UCS_INPROGRESS);
     }
+
+    uct_dev_sync<level>();
 
     return static_cast<ucs_status_t>(
             uct_dev_bcast<level>(static_cast<int>(status), lane_id));
