@@ -32,9 +32,10 @@ typedef struct {
 
     uint32_t                     atomic_lkey;
     uint16_t                     sq_wqe_num;
+    uint16_t                     sq_fc_mask;
     uint8_t                      channel_mask;
 
-    uint8_t                      pad[33];
+    uint8_t                      pad[31];
 
     uct_rc_gdaki_dev_qp_t        qps[0];
 } uct_rc_gdaki_dev_ep_t;

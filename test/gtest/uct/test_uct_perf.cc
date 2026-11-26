@@ -269,6 +269,16 @@ UCS_TEST_P(test_uct_loopback, envelope)
 UCT_INSTANTIATE_NO_GPU_TEST_CASE(test_uct_loopback);
 
 class test_uct_loopback_cuda : public test_uct_perf {
+protected:
+    void init() override
+    {
+        /* uct_test::modify_config() updates only the test's iface config;
+         * libperf opens a separate iface and needs the environment export. */
+        ucs::test_base::modify_config("CUDA_IPC_ENABLE_SAME_PROCESS", "y",
+                                      SETENV_IF_NOT_EXIST);
+        test_uct_perf::init();
+    }
+
 public:
     const std::vector<std::vector<ucs_memory_type_t>> mem_type_pairs() {
         std::vector<std::vector<ucs_memory_type_t>> result;
