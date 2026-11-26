@@ -103,6 +103,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);
+    printf("                    when set, run all of them with no warm-up time limit\n");
     printf("     -c <cpulist>   set affinity to this CPU list (separated by comma) (off)\n");
     printf("     -O <count>     maximal number of uncompleted outstanding sends (%u)\n",
                                 ctx->params.super.max_outstanding);
@@ -689,7 +690,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return UCS_OK;
     case 'w':
         params->super.warmup_iter = atol(opt_arg);
-        params->super.warmup_time = 0;
+        /* Explicit warm-up iterations count disables the time limit */
+        params->super.warmup_time = 0.0;
         return UCS_OK;
     case 'o':
         params->super.flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
