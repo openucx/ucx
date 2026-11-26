@@ -834,11 +834,6 @@ void ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
                                ucp_tl_bitmap_t *tl_bitmap);
 
 
-void
-ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
-                              ucp_tl_bitmap_t *tl_bitmap);
-
-
 void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
                             const ucp_tl_bitmap_t *tl_bitmap_super);
 

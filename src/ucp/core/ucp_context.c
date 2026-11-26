@@ -3467,20 +3467,6 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
     }
 }
 
-void
-ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
-                              ucp_tl_bitmap_t *tl_bitmap)
-{
-    ucp_rsc_index_t tl_idx;
-
-    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
-        if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
-            UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
-        }
-    }
-}
-
 void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
                             const ucp_tl_bitmap_t *tl_bitmap_super)
 {
