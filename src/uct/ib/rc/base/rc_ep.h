@@ -281,6 +281,17 @@ void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_short_dm_desc_handler(uct_rc_iface_send_op_t *op,
                                      const void *resp);
 
+void uct_rc_ep_put_short_dm_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp);
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_put_short_dm_release(uct_rc_iface_send_op_t *op)
+{
+    op->user_comp = NULL;
+    op->handler   = uct_rc_ep_short_dm_desc_handler;
+    ucs_mpool_put_inline(op);
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
 

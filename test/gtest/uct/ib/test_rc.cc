@@ -150,6 +150,47 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
+UCS_TEST_SKIP_COND_P(test_rc, put_short_v2,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    uct_iface_attr_v2_t attr = {};
+    attr.field_mask          = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+
+    const size_t lengths[] = {sizeof(uint64_t),
+                              m_e1->iface_attr().cap.put.max_short};
+    for (size_t length : lengths) {
+        mapped_buffer sendbuf(length, 1ul, *m_e1);
+        mapped_buffer recvbuf(length, 0ul, *m_e2);
+        uct_completion_t comp = {};
+        comp.func = [](uct_completion_t *self) {
+            EXPECT_UCS_OK(self->status);
+        };
+        comp.count = 1;
+
+        ASSERT_UCS_OK(uct_ep_put_short_v2(m_e1->ep(0), sendbuf.ptr(), length,
+                                           recvbuf.addr(), recvbuf.rkey(),
+                                           NULL));
+        flush();
+        recvbuf.pattern_check(1ul);
+
+        sendbuf.pattern_fill(2ul);
+        ucs_status_t status = uct_ep_put_short_v2(
+                m_e1->ep(0), sendbuf.ptr(), length, recvbuf.addr(),
+                recvbuf.rkey(), &comp);
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SHORT_COMP)) {
+            EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+            EXPECT_EQ(1u, comp.count);
+            continue;
+        }
+
+        ASSERT_EQ(UCS_INPROGRESS, status);
+        flush();
+        EXPECT_EQ(0u, comp.count);
+        recvbuf.pattern_check(2ul);
+    }
+}
+
 void test_rc::test_sgl_reserve(bool add_pending)
 {
     uct_iface_attr_v2_t attr = {};

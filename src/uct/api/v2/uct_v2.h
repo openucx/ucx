@@ -1294,6 +1294,7 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
+#define UCT_IFACE_FLAG_V2_PUT_SHORT_COMP      UCS_BIT(3)  /**< @ref uct_ep_put_short_v2 with completion */
         /* GET capabilities */
 #define UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY       UCS_BIT(1)  /**< Zero-copy SGL get */
         /* Interface capabilities */
@@ -1566,6 +1567,35 @@ int uct_ep_is_connected(uct_ep_h ep,
  *         Other            Error codes as defined by @ref ucs_status_t.
  */
 ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Write a short buffer to remote memory, optionally tracking completion.
+ *
+ * With @a comp set to NULL, the operation is equivalent to
+ * @ref uct_ep_put_short. Passing a completion requires
+ * @ref UCT_IFACE_FLAG_V2_PUT_SHORT_COMP.
+ *
+ * @param [in] ep          Destination endpoint handle.
+ * @param [in] buffer      Local buffer to copy.
+ * @param [in] length      Transfer size in bytes, up to the interface's
+ *                        @c cap.put.max_short.
+ * @param [in] remote_addr Destination address in remote memory.
+ * @param [in] rkey        Remote key obtained from @ref uct_rkey_unpack.
+ * @param [in] comp        Completion handle, or NULL.
+ *
+ * @return UCS_OK          The short write was posted with no pending
+ *                         completion.
+ * @return UCS_INPROGRESS  The short write was posted and @a comp will be
+ *                         updated when the operation completes.
+ * @return UCS_ERR_UNSUPPORTED The interface cannot track short PUT completion.
+ * @return Other           Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_ep_put_short_v2(uct_ep_h ep, const void *buffer, unsigned length,
+                    uint64_t remote_addr, uct_rkey_t rkey,
+                    uct_completion_t *comp);
 
 
 /**
