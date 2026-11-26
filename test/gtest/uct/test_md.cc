@@ -1177,9 +1177,9 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     if (pid == 0) {
         char buf[REG_SIZE];
         memset(buf, 42, REG_SIZE);
-        /* child touch the page */
-        EXPECT_EQ(0, memcmp(page, buf, REG_SIZE));
-        exit(0);
+       /* Touch the page in the child and exit without running leak checks,
+        * which report false leaks for parent threads missing in the child */
+        _exit((memcmp(page, buf, REG_SIZE) == 0) ? 0 : 1);
     }
 
     EXPECT_NE(-1, pid);
@@ -1197,15 +1197,13 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
     EXPECT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
 
-#ifndef __SANITIZE_ADDRESS__
     if (!RUNNING_ON_VALGRIND) {
-        /* Under valgrind or ASAN, leaks are possible due to early exit,
+        /* Under valgrind, leaks are possible due to early exit,
          * so don't expect an exit status of 0
          */
         EXPECT_EQ(0, WEXITSTATUS(child_status)) <<
                 ucs::exit_status_info(child_status);
     }
-#endif
 
     free(page);
 }
