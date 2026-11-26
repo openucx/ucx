@@ -399,6 +399,7 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
  * @param [in]  channel_id  Channel ID to flush.
  * @param [in]  flags       Flags to modify the function behavior, see
  *                          @ref ucp_device_flags_t.
+ * @param [out] req         Request populated with the flush status.
  *
  * @return UCS_OK           - All outstanding operations completed.
  * @return Error code as defined by @ref ucs_status_t
@@ -406,15 +407,22 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_flush(const ucp_device_remote_mem_list_h mem_list_h,
-                 unsigned channel_id, uint64_t flags)
+                 unsigned channel_id, uint64_t flags,
+                 ucp_device_request_t *req)
 {
     unsigned uct_channel_id, index, lane;
     ucs_status_t status;
+
+    if (req == nullptr) {
+        ucs_device_error("Device flush request must not be null\n");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     UCP_DEVICE_GET_LANE(mem_list_h, channel_id, lane, uct_channel_id);
 
     status = ucp_device_check_params(mem_list_h, 0);
     if (status != UCS_OK) {
+        req->status = status;
         return status;
     }
 
@@ -428,10 +436,12 @@ ucp_device_flush(const ucp_device_remote_mem_list_h mem_list_h,
 
         status = uct_device_ep_flush<level>(device_ep, uct_channel_id, flags);
         if (status != UCS_OK) {
+            req->status = status;
             return status;
         }
     }
 
+    req->status = UCS_OK;
     return UCS_OK;
 }
 
