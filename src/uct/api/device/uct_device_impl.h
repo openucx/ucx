@@ -137,8 +137,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
  * This device routine reads a single memory block from the remote address
  * @a remote_address into the local address @a address using the device
  * endpoint @a device_ep. The local memory element @a dst_mem_elem and remote
- * memory element @a mem_elem must be valid and contain the local and remote
- * memory regions to be transferred.
+ * memory element @a src_mem_elem must be valid and contain the local and
+ * remote memory regions to be transferred.
  *
  * User can pass @a comp to track execution and completion status. The data is
  * available at @a address only after the operation completes.
@@ -147,7 +147,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
  * @param [in]  device_ep       Device endpoint to be used for the operation.
  * @param [in]  dst_mem_elem    Local memory element representing the memory
  *                              to receive the data.
- * @param [in]  mem_elem        Remote memory element representing the memory
+ * @param [in]  src_mem_elem    Remote memory element representing the memory
  *                              to read from.
  * @param [in]  address         Local virtual address to receive data to.
  * @param [in]  remote_address  Remote virtual address to read data from.
@@ -167,20 +167,21 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_get(
         uct_device_ep_h device_ep, const uct_device_mem_elem_t *dst_mem_elem,
-        const uct_device_mem_elem_t *mem_elem, void *address,
+        const uct_device_mem_elem_t *src_mem_elem, void *address,
         uint64_t remote_address, size_t length, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
-        return uct_rc_mlx5_gda_ep_get<level>(device_ep, dst_mem_elem, mem_elem,
-                                             address, remote_address, length,
-                                             channel_id, flags, comp);
+        return uct_rc_mlx5_gda_ep_get<level>(device_ep, dst_mem_elem,
+                                             src_mem_elem, address,
+                                             remote_address, length, channel_id,
+                                             flags, comp);
     }
 #endif
 #if UCT_CUDA_IPC_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
-        return uct_cuda_ipc_ep_get<level>(device_ep, mem_elem, address,
+        return uct_cuda_ipc_ep_get<level>(device_ep, src_mem_elem, address,
                                           remote_address, length, flags, comp);
     }
 #endif
