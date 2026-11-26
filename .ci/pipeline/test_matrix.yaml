@@ -88,8 +88,8 @@ env:
   VALGRIND_CHECK: "no"
   nworkers: "4"
   STEP_TIMEOUT_MINUTES: "210"
-  # VF limits: BAR too small for peer_failure_multiple, PCI link speed unknown.
-  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*:*test_pci_bw.get_pci_bw*"
+  # VF limit: BAR too small for peer_failure_multiple.
+  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*"
 
 steps:
   - name: Test
