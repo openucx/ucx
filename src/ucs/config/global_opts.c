@@ -50,7 +50,7 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
     .topo_prio             = { NULL, 0 },
-    .topo_p2p_redirect     = UCS_CONFIG_AUTO,
+    .topo_pci_p2p_path     = UCS_TOPO_PCI_P2P_PATH_AUTO,
     .vfs_enable            = 1,
     .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
@@ -222,22 +222,24 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
- {"TOPO_P2P_REDIRECT", "auto",
-  "Whether PCIe peer-to-peer traffic between a PCI device (e.g. NIC) and a\n"
-  "device with memory (e.g. GPU) under the same PCIe root port goes through\n"
-  "the root complex, because of ACS redirect or IOMMU address translation.\n"
-  "Then the root port link carries that traffic together with the host memory\n"
-  "traffic of the devices.\n"
-  " - auto : detect from the IOMMU groups of the devices and their domain\n"
-  "          type, as the kernel set them up. ACS changes at run time (e.g.\n"
-  "          by setpci), ACS redirect without an IOMMU (e.g. set by the BIOS)\n"
-  "          and peer-to-peer traffic of address-translated (ATS) requests\n"
-  "          are not detected; set it to on or off for them.\n"
-  " - on   : assume it for every device.\n"
-  " - off  : assume it for no device.\n"
+ {"TOPO_PCI_P2P_PATH", "auto",
+  "Assumed path of PCIe peer-to-peer traffic between a PCI device (e.g. NIC)\n"
+  "and another PCI device (e.g. GPU) under the same PCIe root port. It is\n"
+  "used only to select lanes, and does not change the PCI configuration.\n"
+  " - auto   : detect it from the IOMMU groups of the devices and their\n"
+  "            domain type, as the kernel set them up. ACS changes at run\n"
+  "            time (e.g. by setpci), ACS redirect without an IOMMU (e.g. set\n"
+  "            by the BIOS) and peer-to-peer traffic of address-translated\n"
+  "            (ATS) requests are not detected; set it to root or direct for\n"
+  "            them.\n"
+  " - root   : the traffic goes through the root complex, because ACS\n"
+  "            redirects it or the IOMMU translates its addresses, so the\n"
+  "            link of the root port carries it together with the host memory\n"
+  "            traffic of the devices.\n"
+  " - direct : the traffic stays under the root port, e.g. in a PCIe switch.\n"
   "Must be the same in all processes on a node.",
-  ucs_offsetof(ucs_global_opts_t, topo_p2p_redirect),
-  UCS_CONFIG_TYPE_ON_OFF_AUTO},
+  ucs_offsetof(ucs_global_opts_t, topo_pci_p2p_path),
+  UCS_CONFIG_TYPE_ENUM(ucs_topo_pci_p2p_path_names)},
 
  {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
   "Estimated latency between system devices", 0,

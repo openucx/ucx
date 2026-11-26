@@ -17,6 +17,22 @@ BEGIN_C_DECLS
 /* Root port of a device which is not behind a PCIe root port */
 #define UCS_TOPO_ROOT_PORT_NONE ((ucs_bus_id_bit_rep_t)-1)
 
+
+/* What decides whether the peer-to-peer traffic of a device goes through the
+ * root complex, read from sysfs when the device is registered */
+typedef struct {
+    /* PCIe root port of the device as returned by
+     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
+    ucs_bus_id_bit_rep_t root_port;
+
+    /* IOMMU group of the device, or -1 if it has none */
+    long                 iommu_group;
+
+    /* Whether the IOMMU translates the DMA addresses of the device */
+    int                  iommu_translated;
+} ucs_topo_p2p_info_t;
+
+
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
@@ -66,13 +82,11 @@ typedef struct {
      * NIC), and several MEMs can sit behind it (e.g. MPS MLOPart aliases). */
     ucs_sys_device_bitmap_t siblings;
 
-    /* Whether peer-to-peer traffic between PCI devices under the same root
+    ucs_topo_p2p_info_t     p2p;
+
+    /* Whether the peer-to-peer traffic with the other devices under the root
      * port goes through the root complex, UCS_AUTO until detected */
     ucs_ternary_auto_value_t p2p_redirect;
-
-    /* PCIe root port of the device as returned by
-     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
-    ucs_bus_id_bit_rep_t     root_port;
 } ucs_topo_sys_device_info_t;
 
 
@@ -98,29 +112,27 @@ ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
- * Check in sysfs whether peer-to-peer traffic between a PCI device and the
- * devices with memory (e.g. GPU) under its PCIe root port goes through the root
- * complex. The peers are the display controllers and processing accelerators
- * under the root port, except the functions of the device itself.
+ * Read the peer-to-peer information of a PCI device from sysfs, as the
+ * registration of a system device does. For unit tests.
  *
- * @param [in] dev_path  Canonical sysfs path of the device.
- *
- * @return Nonzero if the traffic between the device and a peer under its root
- *         port goes through the root complex, 0 otherwise.
+ * @param [in]  dev_path  Canonical sysfs path of the device.
+ * @param [out] info      Filled with the information of the device.
  */
-int ucs_topo_sysfs_is_p2p_redirected(const char *dev_path);
+void ucs_topo_sysfs_read_p2p_info(const char *dev_path,
+                                  ucs_topo_p2p_info_t *info);
 
 
 /**
- * Get the PCIe root port of a PCI device.
+ * The sysfs variant of @ref ucs_topo_sys_device_is_p2p_redirected in the auto
+ * mode, for unit tests.
  *
- * @param [in] path  Canonical sysfs path of the device.
+ * @param [in] pci_dir   Directory of the PCI devices, /sys/bus/pci/devices.
+ * @param [in] dev_path  Canonical sysfs path of the device.
  *
- * @return Bus ID of the root port as returned by
- *         ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE if the
- *         device is not behind a root port.
+ * @return Nonzero if the peer-to-peer traffic goes through the root complex,
+ *         0 otherwise.
  */
-ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *path);
+int ucs_topo_sysfs_is_p2p_redirected(const char *pci_dir, const char *dev_path);
 
 
 END_C_DECLS

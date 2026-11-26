@@ -119,6 +119,21 @@ typedef enum {
 
 
 /**
+ * Assumed path of PCIe peer-to-peer traffic between PCI devices under the same
+ * PCIe root port, see @ref ucs_topo_sys_device_is_p2p_redirected.
+ */
+typedef enum {
+    UCS_TOPO_PCI_P2P_PATH_AUTO,   /**< Detect it */
+    UCS_TOPO_PCI_P2P_PATH_ROOT,   /**< Through the root complex */
+    UCS_TOPO_PCI_P2P_PATH_DIRECT, /**< Under the root port */
+    UCS_TOPO_PCI_P2P_PATH_LAST
+} ucs_topo_pci_p2p_path_t;
+
+
+extern const char *ucs_topo_pci_p2p_path_names[];
+
+
+/**
  * @ingroup UCS_RESOURCE
  * Global state of the topology subsystem.
  */
@@ -644,13 +659,17 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
 
 
 /**
- * Check whether PCIe peer-to-peer traffic between PCI devices (e.g. NIC and
- * GPU) under the same PCIe root port goes through the root complex, because
- * of ACS redirect or IOMMU address translation. In this case, the peer-to-peer
- * traffic shares the link of the root port with the host memory traffic of
- * these devices.
+ * Check whether PCIe peer-to-peer traffic between a PCI device (e.g. NIC) and
+ * the other PCI devices under its PCIe root port goes through the root
+ * complex, because ACS redirects it or the IOMMU translates its addresses. In
+ * this case, the peer-to-peer traffic shares the link of the root port with
+ * the host memory traffic of these devices.
  *
- * The UCX_TOPO_P2P_REDIRECT configuration can override the detection.
+ * The result depends only on the PCI devices of the node and the
+ * UCX_TOPO_PCI_P2P_PATH configuration, not on the devices which the process
+ * uses, so all the processes on a node get the same result. A device with an
+ * auxiliary device, such as a Direct NIC, accesses memory directly, so its
+ * traffic does not go through the root complex.
  *
  * @param [in] sys_dev  System device to check.
  *
@@ -661,9 +680,25 @@ int ucs_topo_sys_device_is_p2p_redirected(ucs_sys_device_t sys_dev);
 
 
 /**
+ * Check whether PCIe peer-to-peer traffic between a PCI device (e.g. NIC) and
+ * the memory of another PCI device (e.g. GPU) goes through the root complex,
+ * as @ref ucs_topo_sys_device_is_p2p_redirected describes for one device. This
+ * requires both devices to be under the same PCIe root port.
+ *
+ * @param [in] sys_dev      System device which accesses the memory.
+ * @param [in] sys_dev_mem  System device of the memory.
+ *
+ * @return Nonzero if the peer-to-peer traffic goes through the root complex,
+ *         0 otherwise.
+ */
+int ucs_topo_is_p2p_redirected(ucs_sys_device_t sys_dev,
+                               ucs_sys_device_t sys_dev_mem);
+
+
+/**
  * Check whether two system devices are the same device, or PCI devices under
- * the same PCIe root port. The traffic between such devices and host memory
- * shares the link of the root port.
+ * the same PCIe root port. For example, a device under the root port of a
+ * memory whose own system device is unknown, such as the memory of a peer.
  *
  * @param [in] sys_dev1  First system device.
  * @param [in] sys_dev2  Second system device.
