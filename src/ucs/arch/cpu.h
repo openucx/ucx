@@ -3,7 +3,7 @@
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Fujitsu Limited. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -66,7 +66,8 @@ typedef enum ucs_cpu_flag {
     UCS_CPU_FLAG_SSE42      = UCS_BIT(8),
     UCS_CPU_FLAG_AVX        = UCS_BIT(9),
     UCS_CPU_FLAG_AVX2       = UCS_BIT(10),
-    UCS_CPU_FLAG_LS64       = UCS_BIT(11)
+    UCS_CPU_FLAG_LS64       = UCS_BIT(11),
+    UCS_CPU_FLAG_AVX512BW   = UCS_BIT(12)
 } ucs_cpu_flag_t;
 
 

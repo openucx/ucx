@@ -1508,7 +1508,27 @@ run_release_mode_tests() {
 #
 run_nt_buffer_transfer_tests() {
     build release --enable-gtest --enable-optimizations
+    if ./src/tools/info/ucx_info -b | grep -qw HAVE_NT_AVX512BW
+    then
+        azure_log_error "HAVE_NT_AVX512BW is set without --with-avx512bw"
+        exit 1
+    fi
     echo "==== Running test_arch tests with optimizations ===="
+    ./test/gtest/gtest --gtest_filter="test_arch.*"
+
+    if ! grep -qw avx512bw /proc/cpuinfo
+    then
+        echo "==== Skipping --with-avx512bw test_arch tests: no AVX512BW CPU ===="
+        return
+    fi
+
+    build release --enable-gtest --enable-optimizations --with-avx512bw
+    if ! ./src/tools/info/ucx_info -b | grep -qP 'HAVE_NT_AVX512BW *1$'
+    then
+        azure_log_error "HAVE_NT_AVX512BW is not set with --with-avx512bw"
+        exit 1
+    fi
+    echo "==== Running test_arch tests with --with-avx512bw ===="
     ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
