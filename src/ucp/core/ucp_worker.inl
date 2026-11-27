@@ -21,6 +21,19 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
            ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
            ucp_rkey_config_is_equal);
 
+#define ucp_worker_ep_path_bw_hash(_ep) kh_int64_hash_func((uintptr_t)(_ep))
+
+KHASH_IMPL(ucp_worker_ep_path_bw, ucp_ep_h, ucp_ep_path_bw_t*, 1,
+           ucp_worker_ep_path_bw_hash, kh_int_hash_equal);
+
+/* Whether the samples are of the current endpoint configuration and lanes */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_ep_path_bw_is_current(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
+{
+    return (state->cfg_index == ep->cfg_index) &&
+           (state->lane_generation == ep->ext->lane_generation);
+}
+
 #define UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT 32
 
 /**

@@ -730,33 +730,46 @@ void ucp_test_base::entity::connect(const entity* other,
         ucs_status_t status;
         ucp_address_t *address;
         size_t address_length;
-        ucp_ep_h ep;
 
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
-        {
-            scoped_log_handler slh(hide_errors_logger);
-
-            ucp_ep_params_t local_ep_params = ep_params;
-            local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-            local_ep_params.address     = address;
-
-            status = ucp_ep_create(m_workers[i].first, &local_ep_params, &ep);
-        }
-
-        if (status == UCS_ERR_UNREACHABLE) {
-            ucp_worker_release_address(other->worker(i), address);
-            UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
-        }
-
-        ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
-
-        if (do_set_ep) {
-            set_ep(ep, i, ep_idx);
-        }
-
+        std::string address_copy(reinterpret_cast<const char*>(address),
+                                 address_length);
         ucp_worker_release_address(other->worker(i), address);
+
+        connect_to_address(i, reinterpret_cast<const ucp_address_t*>(
+                                      address_copy.data()),
+                           ep_params, ep_idx, do_set_ep);
+    }
+}
+
+void ucp_test_base::entity::connect_to_address(int worker_index,
+                                               const ucp_address_t *address,
+                                               const ucp_ep_params_t &ep_params,
+                                               int ep_idx, int do_set_ep) {
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+
+        ucp_ep_params_t local_ep_params = ep_params;
+        local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        local_ep_params.address     = address;
+
+        status = ucp_ep_create(m_workers[worker_index].first, &local_ep_params,
+                               &ep);
+    }
+
+    if (status == UCS_ERR_UNREACHABLE) {
+        UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
+    }
+
+    ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
+
+    if (do_set_ep) {
+        set_ep(ep, worker_index, ep_idx);
     }
 }
 

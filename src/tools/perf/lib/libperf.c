@@ -305,6 +305,21 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 }
 
+static int ucx_perf_buffer_rotation_supported(const ucx_perf_params_t *params)
+{
+    return (params->api == UCX_PERF_API_UCP) &&
+           ((params->command == UCX_PERF_CMD_PUT) ||
+            (params->command == UCX_PERF_CMD_GET) ||
+            (params->command == UCX_PERF_CMD_TAG) ||
+            (params->command == UCX_PERF_CMD_TAG_SYNC) ||
+            (params->command == UCX_PERF_CMD_AM)) &&
+           (params->test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) &&
+           !(params->flags & UCX_PERF_TEST_FLAG_DEVICE) &&
+           !params->ucp.is_daemon_mode && (params->iov_stride == 0) &&
+           (params->ucp.send_datatype == UCP_PERF_DATATYPE_CONTIG) &&
+           (params->ucp.recv_datatype == UCP_PERF_DATATYPE_CONTIG);
+}
+
 static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 {
     size_t it;
@@ -372,6 +387,15 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
                 return UCS_ERR_INVALID_PARAM;
             }
         }
+    }
+
+    if ((ucx_perf_get_buffer_count(params) > 1) &&
+        !ucx_perf_buffer_rotation_supported(params)) {
+        ucs_error("multiple message buffers are only supported by the "
+                  "ucp_put_bw, ucp_get, tag_bw, tag_sync_bw and ucp_am_bw "
+                  "tests with contiguous datatype, and not with device API, "
+                  "daemon mode or IOV stride");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
@@ -684,10 +708,17 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
-    uct_md_mkey_pack_params_t mkey_params = {
+    const size_t buffer_size                         = ADDR_BUF_SIZE;
+    uct_md_mkey_pack_params_t mkey_params            = {
         .field_mask = 0
     };
-    const size_t buffer_size = ADDR_BUF_SIZE;
+    uct_iface_is_reachable_params_t reachable_params = {
+        .field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH |
+                      UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                      UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH
+    };
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
     uct_device_addr_t *dev_addr;
@@ -702,6 +733,10 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     struct iovec vec[5];
     void *buffer;
     void *req;
+    char reachability_info[256];
+
+    reachable_params.info_string        = reachability_info;
+    reachable_params.info_string_length = sizeof(reachability_info);
 
     buffer = malloc(buffer_size);
     if (buffer == NULL) {
@@ -823,10 +858,19 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         ep_addr     = UCS_PTR_BYTE_OFFSET(iface_addr, remote_info->uct.iface_addr_len);
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
 
-        if (!uct_iface_is_reachable(perf->uct.iface, dev_addr,
-                                    remote_info->uct.iface_addr_len ?
-                                    iface_addr : NULL)) {
-            ucs_error("Destination is unreachable");
+        reachable_params.device_addr        = dev_addr;
+        reachable_params.device_addr_length = remote_info->uct.dev_addr_len;
+        reachable_params.iface_addr         = iface_addr;
+        reachable_params.iface_addr_length  = remote_info->uct.iface_addr_len;
+        reachable_params.field_mask        &=
+                ~UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR;
+        if (remote_info->uct.iface_addr_len != 0) {
+            reachable_params.field_mask |=
+                    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR;
+        }
+
+        if (!uct_iface_is_reachable_v2(perf->uct.iface, &reachable_params)) {
+            ucs_error("Destination is unreachable: %s", reachability_info);
             status = UCS_ERR_UNREACHABLE;
             goto err_destroy_eps;
         }
@@ -2369,7 +2413,38 @@ size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params)
         return params->msg_size_cnt * params->iov_stride;
     }
 
-    return ucx_perf_get_message_size(params);
+    return ucx_perf_get_message_size(params) *
+           ucx_perf_get_buffer_count(params);
+}
+
+size_t ucx_perf_get_buffer_count(const ucx_perf_params_t *params)
+{
+    size_t length;
+
+    if (params->ucp.buffer_count != UCP_PERF_BUFFER_COUNT_AUTO) {
+        return ucs_max(params->ucp.buffer_count, 1ul);
+    }
+
+    if (!ucx_perf_buffer_rotation_supported(params)) {
+        return 1;
+    }
+
+    /* With a single buffer, all the operations in flight read the same source.
+     * Reading it with multi-rail zero-copy while it is cached in the GPU L2
+     * could be slower than reading it from device memory (HBM). Rotating the
+     * buffers makes it possible to measure the bandwidth from HBM:
+     * - small messages (< 1 MB) are limited by the per-message overhead, keep
+     *   one buffer
+     * - mid-size messages fit in the L2, rotate over 256 MB (more than the L2)
+     *   so that the source is read from HBM
+     * - big messages (>= 256 MB) exceed the L2 by themselves, the count drops
+     *   to one buffer */
+    length = ucx_perf_get_message_size(params);
+    if (length < UCP_PERF_BUFFER_COUNT_AUTO_MIN_SIZE) {
+        return 1;
+    }
+
+    return ucs_div_round_up(UCP_PERF_BUFFER_COUNT_AUTO_SPAN_SIZE, length);
 }
 
 unsigned rte_peer_index(unsigned group_size, unsigned group_index)

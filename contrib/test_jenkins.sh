@@ -632,6 +632,8 @@ run_ucx_perftest() {
 			"$ucx_perftest" -t tag_lat -m host:0 -l
 		expect_failure "device API is not supported for host" \
 			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+		expect_failure "option requires an argument" \
+			"$ucx_perftest" -t tag_lat -l -e
 	fi
 
 	# IP ifaces
@@ -746,6 +748,19 @@ run_ucx_perftest() {
 				unset UCX_MEMTYPE_CACHE
 				unset UCX_IB_GPU_DIRECT_RDMA
 			done
+		done
+
+		# Memory type cache which tracks only explicitly registered memory,
+		# since UCM events are disabled
+		for gdr in $gdr_options
+		do
+			export UCX_MEM_EVENTS=n
+			export UCX_MEMTYPE_CACHE=y
+			export UCX_IB_GPU_DIRECT_RDMA=$gdr
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+			unset UCX_MEM_EVENTS
+			unset UCX_MEMTYPE_CACHE
+			unset UCX_IB_GPU_DIRECT_RDMA
 		done
 
 		export UCX_TLS=self,shm,cma,cuda_copy
@@ -934,6 +949,16 @@ run_ucx_perftest_config() {
 #
 run_ucx_perftest_sgl() {
 	run_ucx_perftest_config test_types_ucp_sgl test_types_sgl_ucp SGL
+}
+
+#
+# Run UCX bandwidth performance test rotating several message buffers
+#
+run_ucx_perftest_buffers() {
+	expect_failure "multiple message buffers are only supported" \
+		"$ucx_inst/bin/ucx_perftest" -t ucp_put_lat -u 2 -l
+	run_ucx_perftest_config test_types_ucp_buffers test_types_buffers_ucp \
+		"buffer rotation"
 }
 
 #
@@ -1306,10 +1331,13 @@ run_rc_verbs_nosrq_gtest() {
 	gtest_filter+=':-*test_rc_no_srq*:*test_rc_srq_select*'
 
 	echo "==== Running rc_verbs gtest with SRQ disabled ===="
+	# Use finite RNR retries so that persistent RNR fails with an explicit
+	# retry-exceeded error instead of hanging until the watchdog aborts.
 	$TIMEOUT env \
 		UCX_RC_VERBS_SRQ_ENABLE=n \
 		UCX_RC_VERBS_RX_CQ_LEN=262144 \
 		UCX_RC_VERBS_RX_MAX_WR=64 \
+		UCX_RC_VERBS_RNR_RETRY_COUNT=6 \
 		GTEST_FILTER="$gtest_filter" \
 		make -C test/gtest test
 }
@@ -1566,6 +1594,7 @@ run_tests() {
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
 	do_distributed_task 2 4 run_ucx_perftest_sgl
 	do_distributed_task 3 4 run_ucx_perftest_rma_iov
+	do_distributed_task 0 4 run_ucx_perftest_buffers
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

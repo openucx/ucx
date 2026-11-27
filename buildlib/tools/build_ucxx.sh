@@ -1,0 +1,165 @@
+#!/bin/bash -eE
+#
+# Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|
+#                       docs|checks>
+# Env: ucx_pr needs RAPIDS_CUDA_VERSION and UCX_PR_TARBALL; checks needs
+#   UCXX_DIR, RAPIDS_CUDA_VERSION and RAPIDS_PY_VERSION; every other phase
+#   needs UCXX_DIR, RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
+# wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
+# Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
+#
+# All packages build against the UCX built from this checkout (the PR under
+# test) - see ucxx_ucx_pr.sh. The ucx_pr phase builds it once and tars it for
+# the other jobs, which fetch the artifact instead of rebuilding.
+
+# The pipeline runs this as `bash <path>`, which ignores the shebang options,
+# so the shell flags have to be set here for the fail-loud guards to bite.
+set -eE -o pipefail
+
+phase=${1:?phase required}
+
+if [ "$phase" = "ucx_pr" ]; then
+  : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
+  export RAPIDS_CUDA_VERSION
+  ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
+  export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
+  source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+  build_ucx_pr_conda
+  echo "== UCX under test =="
+  # sed, not head: head closes the pipe early, which under pipefail can turn a
+  # healthy ucx_info into a SIGPIPE failure.
+  "$UCX_PR_PREFIX/bin/ucx_info" -v | sed -n '1,3p'
+  # The tarball must land on an agent-mapped path (UCX_PR_TARBALL) - the
+  # artifact upload runs on the host, which cannot see the container's /tmp.
+  tar -C /tmp -czf "${UCX_PR_TARBALL:?UCX_PR_TARBALL required}" ucx-pr
+  exit 0
+fi
+
+: "${UCXX_DIR:?UCXX_DIR required}"
+
+: "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
+: "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
+
+if [ "$phase" = "checks" ]; then
+  export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
+  # The ucxx pre-commit checks, including the ones that keep the files
+  # generated from dependencies.yaml in sync. pre-commit works from the root
+  # of a git repository, and the ucxx hooks address their files from the ucxx
+  # root (dependencies.yaml, RAPIDS_VERSION, ^conda/environments/). So the
+  # hooks run in a throwaway repository made of the tracked UCXX files: there
+  # the UCXX tree is the root, and --all-files covers UCXX only. That
+  # repository has one commit, so verify-copyright, which looks at the files
+  # changed against the target branch, finds nothing to check.
+  checks_dir=$(mktemp -d)
+  (cd "$UCXX_DIR" && git ls-files -z | tar --null -T - -cf -) \
+    | tar -xf - -C "$checks_dir"
+  cd "$checks_dir"
+  git init -q
+  git add -A
+  git -c user.name=ucxx-checks -c user.email=ucxx-checks@localhost \
+    -c commit.gpgsign=false commit -q -m "UCXX tree"
+  # CI=true keeps rapids-github-fetch from prompting for an interactive
+  # GitHub login; it downloads anonymously.
+  CI=true bash ci/check_style.sh
+  exit 0
+fi
+
+: "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
+
+UCX_PR_PREFIX=/tmp/ucx-pr
+
+export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
+# the ucxx test-env matrices select the dependency set via this key
+export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
+# persistent pip cache (host volume); pip disables caching itself if unwritable
+[ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
+mkdir -p "$RAPIDS_BLD_OUTPUT_DIR"
+
+case "$phase" in
+  conda_*) export RAPIDS_CONDA_BLD_OUTPUT_DIR="$RAPIDS_BLD_OUTPUT_DIR" ;;
+  wheel_*) export RAPIDS_WHEEL_BLD_OUTPUT_DIR="$RAPIDS_BLD_OUTPUT_DIR" ;;
+  docs)
+    : "${CPP_CHANNEL_DIR:?CPP_CHANNEL_DIR required for docs phase}"
+    : "${PYTHON_CHANNEL_DIR:?PYTHON_CHANNEL_DIR required for docs phase}"
+    : "${RAPIDS_DOCS_DIR:?RAPIDS_DOCS_DIR required for docs phase}"
+    mkdir -p "$RAPIDS_DOCS_DIR" ;;
+esac
+
+# The ucxx CI scripts fetch artifacts of previous jobs through
+# rapids-download-from-github; shim it to the locally staged output so the
+# jobs resolve this pipeline's artifacts instead of GitHub's.
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/bash\necho "%s"\n' "$RAPIDS_BLD_OUTPUT_DIR" \
+  > "$HOME/.local/bin/rapids-download-from-github"
+chmod +x "$HOME/.local/bin/rapids-download-from-github"
+# Docs phase: build_docs.sh fetches both channels via rapids-download-from-github
+# with per-package artifact names - dispatch on the name to the staged channel.
+if [ "$phase" = "docs" ]; then
+  cat > "$HOME/.local/bin/rapids-download-from-github" <<EOF
+#!/bin/bash
+case "\$1" in
+  *cpp*) echo "$CPP_CHANNEL_DIR" ;;
+  *)     echo "$PYTHON_CHANNEL_DIR" ;;
+esac
+EOF
+  chmod +x "$HOME/.local/bin/rapids-download-from-github"
+fi
+
+# Point the download helper at the staged libucxx wheelhouse so the
+# wheel_ucxx build resolves it.
+if [ -n "${WHEEL_INPUT_DIR:-}" ]; then
+  printf '#!/bin/bash\necho "%s"\n' "$WHEEL_INPUT_DIR" \
+    > "$HOME/.local/bin/rapids-download-from-github"
+  chmod +x "$HOME/.local/bin/rapids-download-from-github"
+fi
+
+# The UCX repository has no ucxx tags for rapids-generate-version to derive
+# the package version from; take it from the ucxx VERSION file instead.
+cat > "$HOME/.local/bin/rapids-generate-version" <<EOF
+#!/bin/bash
+echo -n "$(head -n 1 "$UCXX_DIR/VERSION")\${RAPIDS_VERSION_SUFFIX:-}"
+EOF
+chmod +x "$HOME/.local/bin/rapids-generate-version"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+cd "$UCXX_DIR"
+
+# Point every ucxx build at the PR's UCX instead of released ucx, through
+# the ucxx UCXX_NO_LIBUCX switch.
+export UCXX_NO_LIBUCX=true ucx_ROOT="$UCX_PR_PREFIX"
+
+# No sccache-dist here: the ucxx recipes default the dist auth type to
+# "token", and sccache refuses to start with that type and no token. Set but
+# empty overrides the recipe default and leaves dist unconfigured.
+export SCCACHE_DIST_AUTH_TYPE=
+
+# Wheel builds otherwise pick system gcc 8.5 (too old for libucxx's C++20);
+# point CC/CXX at gcc-toolset-14.
+if [[ "$phase" == wheel_* ]]; then
+  toolset=/opt/rh/gcc-toolset-14/root/usr/bin
+  [ -x "$toolset/gcc" ] \
+    || { echo "ERROR: gcc-toolset-14 not found at $toolset (needed for libucxx C++20)" >&2; exit 1; }
+  export CC="$toolset/gcc" CXX="$toolset/g++"
+fi
+
+# The PR's UCX was built once by the UCXX_ucx stage and staged at
+# UCX_PR_PREFIX by the fetch step; the package builds link against it.
+[ -x "$UCX_PR_PREFIX/bin/ucx_info" ] \
+  || { echo "ERROR: UCX (PR) not staged at $UCX_PR_PREFIX - UCXX_ucx artifact missing?" >&2; exit 1; }
+
+case "$phase" in
+  conda_cpp)              bash ci/build_cpp.sh ;;
+  conda_python)           bash ci/build_python.sh ;;
+  wheel_libucxx)          bash ci/build_wheel_libucxx.sh ;;
+  wheel_ucxx)
+    : "${WHEEL_INPUT_DIR:?WHEEL_INPUT_DIR required for wheel_ucxx (libucxx wheel dir)}"
+    bash ci/build_wheel_ucxx.sh ;;
+  docs)
+    bash ci/build_docs.sh ;;
+  *) echo "Unknown phase: $phase" >&2; exit 1 ;;
+esac

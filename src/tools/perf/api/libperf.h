@@ -178,6 +178,12 @@ typedef enum {
 
 #define UCP_PERF_FC_WINDOW_DEFAULT 4
 
+#define UCP_PERF_BUFFER_COUNT_AUTO           SIZE_MAX
+/* Smallest message size that rotates buffers in auto mode */
+#define UCP_PERF_BUFFER_COUNT_AUTO_MIN_SIZE  UCS_MBYTE
+/* Total size of the buffers that auto mode rotates through */
+#define UCP_PERF_BUFFER_COUNT_AUTO_SPAN_SIZE (256 * UCS_MBYTE)
+
 /**
  * Performance counter type.
  */
@@ -325,6 +331,12 @@ typedef struct ucx_perf_params {
         ucp_perf_datatype_t     recv_datatype;
         size_t                  am_hdr_size; /* UCP Active Message header size
                                                 (not included in message size) */
+        size_t                  buffer_count; /* Number of message buffers that
+                                                 consecutive operations of a
+                                                 bandwidth test rotate through,
+                                                 0 or 1 - a single buffer,
+                                                 UCP_PERF_BUFFER_COUNT_AUTO -
+                                                 derived from the message size */
         ucp_err_handling_mode_t err_mode;    /* UCP endpoint error handling mode */
         int                     is_daemon_mode;  /* Whether DPU offloading daemon
                                                     is configured */

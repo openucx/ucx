@@ -316,6 +316,13 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
  */
 size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params);
 
+/**
+ * Get the number of message buffers that consecutive operations rotate
+ * through: the requested count, or one derived from the message size if no
+ * count is requested
+ */
+size_t ucx_perf_get_buffer_count(const ucx_perf_params_t *params);
+
 void ucx_perf_report(ucx_perf_context_t *perf);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);

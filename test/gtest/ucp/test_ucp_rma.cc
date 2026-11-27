@@ -15,6 +15,8 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
+#include <ucp/proto/proto_select.h>
+#include <ucp/wireup/wireup.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -999,6 +1001,108 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_emulation_enable, ib,
                                         "ib")
 
 
+/* Restart a partially sent PUT, as an endpoint reconfiguration does */
+class test_ucp_rma_restart : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "contig");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, IOV, "iov");
+    }
+
+    test_ucp_rma_restart()
+    {
+        modify_config("PROTO_REQUEST_RESET", "y");
+    }
+
+protected:
+    void test_restart()
+    {
+        /* Larger than the send queue, so it is sent partially */
+        static const size_t size  = 8 * UCS_MBYTE;
+        bool is_iov               = get_variant_value() & IOV;
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size, receiver());
+        ucp_dt_iov_t iov[]        = {{sbuf.ptr(), size / 2},
+                                     {UCS_PTR_BYTE_OFFSET(sbuf.ptr(), size / 2),
+                                      size / 2}};
+        ucp_request_param_t param = {};
+        ucs::handle<ucp_rkey_h> rkey;
+        ucs_queue_head_t pending_q;
+        ucs_status_ptr_t sptr;
+        ucp_request_t *req;
+
+        mem_buffer::pattern_fill(sbuf.ptr(), size, ucs::rand());
+        rbuf.rkey(sender(), rkey);
+
+        /* Complete the wireup, which would hold the request without sending */
+        ASSERT_UCS_OK(request_wait(ucp_put_nbx(sender().ep(), sbuf.ptr(), 1,
+                                               (uint64_t)rbuf.ptr(), rkey,
+                                               &param)));
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = is_iov ? ucp_dt_make_iov() : ucp_dt_make_contig(1);
+        sptr = ucp_put_nbx(sender().ep(), is_iov ? (void*)iov : sbuf.ptr(),
+                           is_iov ? ucs_static_array_size(iov) : size,
+                           (uint64_t)rbuf.ptr(), rkey, &param);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        req = (ucp_request_t*)sptr - 1;
+        UCS_ASYNC_BLOCK(&sender().worker()->async);
+        if (req->send.state.dt_iter.offset == 0) {
+            UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+            ASSERT_UCS_OK(request_wait(sptr));
+            UCS_TEST_SKIP_R("request was not partially sent");
+        }
+
+        ucs_queue_head_init(&pending_q);
+        uct_ep_pending_purge(ucp_ep_get_lane(sender().ep(), req->send.lane),
+                             ucp_request_purge_enqueue_cb, &pending_q);
+        EXPECT_EQ(1, ucs_queue_length(&pending_q));
+        ucp_wireup_replay_pending_requests(sender().ep(), &pending_q);
+
+        /* A contig request skips the sent data, an IOV request resumes */
+        EXPECT_EQ(is_iov,
+                  !!(req->send.proto_config->select_param.op_id_flags &
+                     UCP_PROTO_SELECT_OP_FLAG_RESUME));
+        UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+
+        ASSERT_UCS_OK(request_wait(sptr));
+        flush_ep(sender());
+        EXPECT_TRUE(mem_buffer::compare(sbuf.ptr(), rbuf.ptr(), size,
+                                        UCS_MEMORY_TYPE_HOST));
+    }
+
+private:
+    enum {
+        IOV = UCS_BIT(2)
+    };
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_restart, put_offload_bcopy,
+                     !is_proto_enabled(), "PROTOS=put/offload/bcopy,reconfig")
+{
+    ucp_lane_index_t lane = ucp_ep_config(sender().ep())->key.rma_bw_lanes[0];
+
+    if ((lane == UCP_NULL_LANE) ||
+        !(ucp_ep_get_iface_attr(sender().ep(), lane)->cap.flags &
+          UCT_IFACE_FLAG_PUT_BCOPY)) {
+        UCS_TEST_SKIP_R("put bcopy is not supported");
+    }
+
+    test_restart();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_restart, put_am_bcopy, !is_proto_enabled(),
+                     "PROTOS=put/am/bcopy,reconfig")
+{
+    test_restart();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, shm, "shm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, tcp, "tcp")
+
+
 class test_ucp_rma_reg : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -1415,7 +1519,8 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
-#define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+#define UCP_SGL_EMULATION_PROTOS \
+    "PROTOS=put/sgl/am/*,get/sgl/contig,get/am/*,reconfig"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
@@ -1433,9 +1538,7 @@ public:
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         static const char *op_names[] = {"put", "get"};
-        /* TODO: Enable the get variant (UCS_MASK(2)) once get SGL is
-         * supported */
-        add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_PUT),
+        add_variant_values(variants, get_memtype_variants, UCS_MASK(2),
                            op_names);
     }
 
@@ -1496,9 +1599,11 @@ protected:
         ctx.src.reserve(num);
         ctx.dst.reserve(num);
 
+        /* A zero-length element still needs a buffer, to have a valid rkey */
         for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_mem_type());
-            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_mem_type());
+            size_t alloc_size = std::max<size_t>(elem_sizes[i], 1);
+            ctx.src.emplace_back(alloc_size, sender(), 0, src_mem_type());
+            ctx.dst.emplace_back(alloc_size, receiver(), 0, dst_mem_type());
         }
 
         for (size_t i = 0; i < num; i++) {
@@ -1853,17 +1958,54 @@ protected:
 };
 
 /* Tests which verify the transferred data run for every combination of source
- * and destination memory types */
+ * and destination memory types, with and without the offload protocols */
 class test_ucp_rma_sgl_data : public test_ucp_rma_sgl {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_dst_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_memtypes(variants, test_ucp_rma_sgl::get_test_variants,
                              SGL_MEM_TYPES_MASK);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_values(variants, get_dst_variants, 0);
+        add_variant_values(variants, get_dst_variants, 1, "no_offload");
+    }
+
+    test_ucp_rma_sgl_data() {
+        if (get_variant_value(4)) {
+            modify_config("PROTOS", "^put/sgl/offload,get/sgl/offload");
+            if ((op() == SGL_OP_GET) && UCP_MEM_IS_HOST(src_mem_type()) &&
+                UCP_MEM_IS_HOST(dst_mem_type())) {
+                m_expected_proto = "get/sgl/offload_sw";
+            }
+        }
     }
 
     virtual ucs_memory_type_t dst_mem_type() const override {
         return static_cast<ucs_memory_type_t>(get_variant_value(3));
     }
+
+protected:
+    void use_emulation() {
+        m_require_zcopy_lane = false;
+        m_expected_proto     = nullptr;
+    }
+
+    virtual void check_posted_request(ucs_status_ptr_t sptr) override {
+        if (m_expected_proto == nullptr) {
+            return;
+        }
+
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+            return;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        EXPECT_STREQ(m_expected_proto, req->send.proto_config->proto->name);
+    }
+
+    const char *m_expected_proto = nullptr;
 };
 
 UCS_TEST_P(test_ucp_rma_sgl_data, various_counts) {
@@ -1897,6 +2039,13 @@ UCS_TEST_P(test_ucp_rma_sgl_data, various_lengths) {
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
+UCS_TEST_P(test_ucp_rma_sgl_data, various_lengths_no_inline_resp) {
+    cleanup();
+    modify_config("IB_TX_INLINE_RESP", "0", SETENV_IF_NOT_EXIST);
+    test_ucp_rma::init();
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
 UCS_TEST_P(test_ucp_rma_sgl_data, with_callback) {
     test_sgl(10, UCS_KBYTE, true, true);
 }
@@ -1909,26 +2058,26 @@ UCS_TEST_P(test_ucp_rma_sgl_data, no_remote_count) {
     test_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation, UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation, UCP_SGL_EMULATION_PROTOS) {
+    use_emulation();
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_with_callback,
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_no_memhs,
+UCS_TEST_P(test_ucp_rma_sgl_data, emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_emulation_fragmented,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
-    m_require_zcopy_lane = false;
+    use_emulation();
     test_sgl(4, 256 * UCS_KBYTE);
 }
 
@@ -1978,6 +2127,30 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, fragmented_elements,
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
     test_ucp_rma::init();
     test_sgl({255, 256, 257, 1024, 64});
+}
+
+/* Elements which are shorter than the minimal fragment of a lane */
+UCS_TEST_P(test_ucp_rma_sgl_data, short_elements) {
+    test_sgl({1, 2, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 3, 8 * UCS_KBYTE, 100, 7,
+              4 * UCS_KBYTE, 4 * UCS_KBYTE, 1});
+    test_sgl({1, 2, 3, 4});
+    test_sgl({4 * UCS_KBYTE, 5, 4 * UCS_KBYTE});
+    test_sgl({4 * UCS_KBYTE, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 9});
+    test_sgl({0, 7, 0, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 0});
+    test_sgl({64, 65, 4 * UCS_KBYTE, 64}, false);
+    test_sgl({1, 4 * UCS_KBYTE, 4 * UCS_KBYTE, 2}, true, true);
+}
+
+/* Fragments of long elements which are shorter than the minimal fragment of a
+   lane */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, short_fragments,
+                     RUNNING_ON_VALGRIND) {
+    cleanup();
+    modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
+    test_ucp_rma::init();
+    test_sgl({1, 300, 4096, 64, 700, 2, 257, 66, 513, 4096});
+    test_sgl({300, 300, 300, 300});
+    test_sgl({65, 66, 67, 68, 69, 70});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
@@ -2213,9 +2386,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
 class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
 public:
     test_ucp_rma_sgl_contig() {
-        modify_config("PROTOS", UCP_MEM_IS_HOST(src_mem_type()) ?
-                                "put/sgl/contig,put/offload/*" :
-                                "put/sgl/contig,put/rndv,rndv/*");
+        const bool host = UCP_MEM_IS_HOST(src_mem_type());
+
+        if (op() == SGL_OP_PUT) {
+            modify_config("PROTOS", host ? "put/sgl/contig,put/offload/*" :
+                                           "put/sgl/contig,put/rndv,rndv/*");
+        } else {
+            modify_config("PROTOS", host ?
+                                    "get/sgl/contig,get/bcopy,get/zcopy" :
+                                    "get/sgl/contig,get/rndv,rndv/*");
+        }
     }
 
     virtual void init() override {
@@ -2237,15 +2417,17 @@ protected:
         }
 
         const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-        EXPECT_STREQ("put/sgl/contig", req->send.proto_config->proto->name);
+        EXPECT_STREQ((op() == SGL_OP_PUT) ? "put/sgl/contig" :
+                                            "get/sgl/contig",
+                     req->send.proto_config->proto->name);
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl_contig, put) {
+UCS_TEST_P(test_ucp_rma_sgl_contig, various_sizes) {
     test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl_contig, put_with_callback) {
+UCS_TEST_P(test_ucp_rma_sgl_contig, with_callback) {
     test_sgl(10, UCS_KBYTE, true, true);
 }
 

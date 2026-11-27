@@ -8,6 +8,7 @@
 #define UCP_RMA_H_
 
 #include <ucp/core/ucp_types.h>
+#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.h>
 #include <uct/api/uct.h>
 
@@ -86,6 +87,25 @@ extern ucp_amo_proto_t ucp_amo_sw_proto;
 extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
 
+/**
+ * Common implementation of the SGL protocols which send each element as a
+ * contiguous operation of the same type
+ */
+ucs_status_t ucp_proto_rma_sgl_contig_progress(uct_pending_req_t *self);
+
+/**
+ * Send the SGL elements as internal requests. A run of elements which are at
+ * least @a min_batch_length long is sent as one SGL request, any other element
+ * as a contiguous request.
+ */
+ucs_status_t
+ucp_proto_rma_sgl_split_progress(ucp_request_t *req, size_t min_batch_length);
+
+void ucp_proto_rma_sgl_contig_probe(const ucp_proto_init_params_t *init_params,
+                                    ucp_operation_id_t op_id,
+                                    const ucp_proto_t *emulation_proto);
+
+
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 
 void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
@@ -93,5 +113,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
+
+ucs_status_t ucp_proto_put_bcopy_reset(ucp_request_t *req);
 
 #endif

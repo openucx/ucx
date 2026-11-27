@@ -89,3 +89,6 @@ Tag and push release images:
 ./buildlib/push-release-images.sh
 ```
 
+# UCXX RAPIDS wrapper images
+The UCXX jobs run in wrapper images of the RAPIDS CI images. The procedure to
+rebuild and push them is in [dockers/rapidsai-images.md](dockers/rapidsai-images.md).

@@ -326,6 +326,7 @@ ucp_datatype_iter_iov_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
     }
 
     ucs_free(dt_iter->type.iov.memh);
+    dt_iter->type.iov.memh = NULL;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -636,11 +637,41 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
     }
 }
 
+/* Return the length of the next descriptor cut from the rest of the element,
+ * so that neither the descriptor nor the rest of the element is shorter than
+ * min_frag */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_sgl_next_frag_length(size_t remaining, size_t max_length,
+                                       size_t min_frag)
+{
+    /* The descriptor is never shorter than min_frag, even if it exceeds the
+     * remaining batch length */
+    size_t length = ucs_max(max_length, min_frag);
+
+    if (remaining <= length) {
+        return remaining;
+    }
+
+    if ((remaining - length) >= min_frag) {
+        return length;
+    }
+
+    /* The rest after the descriptor would be too short: shorten the descriptor
+     * to leave exactly min_frag, or take the whole rest if it cannot be cut
+     * into two descriptors of at least min_frag */
+    return (remaining >= (2 * min_frag)) ? (remaining - min_frag) : remaining;
+}
+
+/* Fill a batch of up to max_frag_count descriptors from the SGL element list,
+ * starting at the current iterator position. Each descriptor covers a
+ * contiguous part of a single element, so an element is posted as one or more
+ * descriptors, depending on the remaining batch length max_total_length.
+ * Zero-length elements are skipped. */
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
                                  const uint64_t *remote_addrs,
                                  size_t max_frag_count,
-                                 size_t max_total_length,
+                                 size_t max_total_length, size_t min_frag,
                                  ucp_datatype_iter_t *next_iter,
                                  void **out_buffers, size_t *out_lengths,
                                  uint64_t *out_remote_addrs,
@@ -662,8 +693,9 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
             ucs_assert(elem_length > frag_offset);
-            frag_length = ucs_min(elem_length - frag_offset,
-                                  max_total_length - total_length);
+            frag_length = ucp_datatype_iter_sgl_next_frag_length(
+                    elem_length - frag_offset, max_total_length - total_length,
+                    min_frag);
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
                     dt_iter->type.sgl.buffers[elem_index], frag_offset);

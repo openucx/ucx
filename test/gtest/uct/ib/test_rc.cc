@@ -150,20 +150,42 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
-void test_rc::test_sgl_reserve(bool add_pending)
+void test_rc::test_sgl_reserve(unsigned flags)
 {
+    const bool get           = flags & SGL_GET;
+    const bool cq_limited    = flags & SGL_CQ_LIMITED;
+    const bool add_pending   = flags & SGL_ADD_PENDING;
     uct_iface_attr_v2_t attr = {};
-    const size_t length      = 64;
     const size_t count       = 2;
+    uct_rc_iface_t *iface    = rc_iface(m_e1);
+    uct_rc_ep_t *ep          = rc_ep(m_e1);
+    int cq_hidden            = 0;
     ucs_status_t status;
     uct_pending_req_t pend_req;
+    size_t length;
+
+    /* Without a WQE in flight, no completion releases a CQ reserve, only the
+     * purge of the pending request does */
+    ASSERT_TRUE(!cq_limited || add_pending);
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                      UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
     ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
-    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
-        (attr.max_put_sgl_zcopy_count < count)) {
-        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    if (get) {
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) ||
+            (attr.max_get_sgl_zcopy_count < count)) {
+            UCS_TEST_SKIP_R("get_sgl_zcopy is not supported");
+        }
+
+        length = ucs_max((size_t)64, m_e1->iface_attr().cap.get.min_zcopy);
+    } else {
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+            (attr.max_put_sgl_zcopy_count < count)) {
+            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+        }
+
+        length = 64;
     }
 
     mapped_buffer s0(length, 0ul, *m_e1), s1(length, 0ul, *m_e1);
@@ -173,33 +195,47 @@ void test_rc::test_sgl_reserve(bool add_pending)
     uct_mem_h memhs[]  = {s0.memh(), s1.memh()};
     uint64_t raddrs[]  = {r0.addr(), r1.addr()};
     uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
+    auto sgl_zcopy     = [&]() {
+        return get ? uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers, lengths,
+                                          memhs, raddrs, rkeys, NULL, NULL,
+                                          count, NULL) :
+                     uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths,
+                                          memhs, raddrs, rkeys, NULL, NULL,
+                                          count, NULL);
+    };
 
-    /* A single PUT SHORT consumes exactly one TXQP credit */
-    const int16_t initial = uct_rc_txqp_available(&rc_ep(m_e1)->txqp);
-    for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
-        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
-                                       r0.rkey()));
+    if (cq_limited) {
+        /* Leave CQ credits for one WQE less than the operation needs */
+        cq_hidden               = iface->tx.cq_available - (int)(count - 1);
+        iface->tx.cq_available -= cq_hidden;
+    } else {
+        /* A single PUT SHORT consumes exactly one TXQP credit */
+        const int16_t initial = uct_rc_txqp_available(&ep->txqp);
+        for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
+            ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8,
+                                           r0.addr(), r0.rkey()));
+        }
+
+        ASSERT_EQ(uct_rc_txqp_available(&ep->txqp), (int16_t)(count - 1));
+        ASSERT_GT(iface->tx.cq_available, (int16_t)(count - 1));
     }
 
-    ASSERT_EQ(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)(count - 1));
-    ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
-
-    status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
-                                  rkeys, NULL, NULL, count, NULL);
+    status = sgl_zcopy();
     ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
-    EXPECT_GT(rc_ep(m_e1)->txqp_reserve, 0);
+    EXPECT_EQ((uint16_t)(cq_limited ? 0 : count - 1), ep->txqp_reserve);
+    EXPECT_EQ((uint16_t)(cq_limited ? count - 1 : 0), ep->cq_reserve);
 
     if (add_pending) {
         pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
             return UCS_ERR_NO_RESOURCE;
         };
 
-        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+        /* The reserve makes pending_add queue the refused operation rather
+         * than return BUSY, while a send of one WQE would still fit */
+        EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
     }
 
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
-                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, sgl_zcopy());
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
@@ -209,11 +245,13 @@ void test_rc::test_sgl_reserve(bool add_pending)
         uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
     }
 
+    iface->tx.cq_available += cq_hidden;
+
     /* Without pending requests, the reserve is dropped on TX completion */
     flush();
 
-    EXPECT_EQ(0, rc_ep(m_e1)->txqp_reserve);
-    EXPECT_EQ(0, rc_ep(m_e1)->cq_reserve);
+    EXPECT_EQ(0, ep->txqp_reserve);
+    EXPECT_EQ(0, ep->cq_reserve);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
@@ -221,14 +259,85 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
                                  UCT_IFACE_FLAG_PENDING  |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(true);
+    test_sgl_reserve(SGL_ADD_PENDING);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_PUT_SHORT))
 {
-    test_sgl_reserve(false);
+    test_sgl_reserve(0);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_get_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(SGL_GET | SGL_ADD_PENDING);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_get_reserve_released_on_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(SGL_GET);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_cq_reserve_pending,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
+{
+    test_sgl_reserve(SGL_CQ_LIMITED | SGL_ADD_PENDING);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_get_cq_reserve_pending,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
+{
+    test_sgl_reserve(SGL_GET | SGL_CQ_LIMITED | SGL_ADD_PENDING);
+}
+
+/* The resource check of an operation of value + 1 WQEs, as the SGL one */
+static ucs_status_t
+check_tx_resources(uct_rc_iface_t *iface, uct_rc_ep_t *ep, uint16_t value)
+{
+    UCT_RC_CHECK_CQE_VALUE_RET(iface, ep, UCS_ERR_NO_RESOURCE, value);
+    UCT_RC_CHECK_TXQP_VALUE_RET(iface, ep, UCS_ERR_NO_RESOURCE, value);
+    return UCS_OK;
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, tx_resource_check_no_reserve,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    mapped_buffer sendbuf(8, 0ul, *m_e1), recvbuf(8, 0ul, *m_e2);
+    uct_rc_iface_t *iface = rc_iface(m_e1);
+    uct_rc_ep_t *ep       = rc_ep(m_e1);
+    int cq_hidden;
+
+    /* With one CQ credit, an operation of two WQEs does not fit, and a check
+     * which refuses it must leave room for a send of one WQE */
+    cq_hidden               = iface->tx.cq_available - 1;
+    iface->tx.cq_available -= cq_hidden;
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, check_tx_resources(iface, ep, 1));
+    EXPECT_EQ(0, ep->cq_reserve);
+    EXPECT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sendbuf.ptr(), 8,
+                                   recvbuf.addr(), recvbuf.rkey()));
+    iface->tx.cq_available += cq_hidden;
+
+    /* The same with one free WQE in the send queue */
+    for (int16_t i = uct_rc_txqp_available(&ep->txqp); i > 1; --i) {
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sendbuf.ptr(), 8,
+                                       recvbuf.addr(), recvbuf.rkey()));
+    }
+
+    ASSERT_EQ(1, uct_rc_txqp_available(&ep->txqp));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, check_tx_resources(iface, ep, 1));
+    EXPECT_EQ(0, ep->txqp_reserve);
+    EXPECT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sendbuf.ptr(), 8,
+                                   recvbuf.addr(), recvbuf.rkey()));
+
+    flush();
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
@@ -1797,6 +1906,8 @@ protected:
     entity *m_e2;
     entity *m_entity_flush_rkey;
     int m_err_count;
+    /* Endpoint cleanup can complete an operation the test did not wait for */
+    uct_completion_t m_comp;
 
 public:
     int rc_iface_flush_rkey_enabled(entity *e)
@@ -1900,18 +2011,17 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 64, sendbuf.memh(),
                             1);
 
-    uct_completion_t comp;
-    comp.func   = [](uct_completion_t*) {};
-    comp.count  = 1;
-    comp.status = UCS_OK;
+    m_comp.func   = [](uct_completion_t*) {};
+    m_comp.count  = 1;
+    m_comp.status = UCS_OK;
 
     // Trigger the use of atomic key, PUT fails with invalid atomic_mr_offset
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     EXPECT_EQ(UCS_INPROGRESS,
               uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
-                               recvbuf.rkey(), &comp));
-    wait_for_value(&comp.count, 0, true);
-    EXPECT_EQ(0, comp.count);
+                               recvbuf.rkey(), &m_comp));
+    wait_for_value(&m_comp.count, 0, true);
+    EXPECT_EQ(0, m_comp.count);
     EXPECT_EQ(0, m_err_count);
 }
 
@@ -3113,6 +3223,66 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 
 #ifdef HAVE_MLX5_DV
+
+class test_rc_mlx5 : public test_rc {
+};
+
+UCS_TEST_P(test_rc_mlx5, bandwidth_fallback)
+{
+    auto *iface = ucs_derived_of(m_e1->iface(),
+                                 uct_rc_mlx5_iface_common_t);
+    uct_perf_attr_t perf_attr = {};
+    uct_ep_attr_t attr        = {};
+    ucs::handle<uct_rc_mlx5_iface_common_t*, const uct_rc_mlx5_ext_ops_t*>
+            restore(iface, [](uct_rc_mlx5_iface_common_t *iface,
+                              const uct_rc_mlx5_ext_ops_t *ops) {
+                iface->ext_ops = ops;
+            }, iface->ext_ops);
+
+    iface->ext_ops       = NULL;
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    attr.field_mask      = UCT_EP_ATTR_FIELD_BANDWIDTH;
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+    ASSERT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
+    EXPECT_DOUBLE_EQ(perf_attr.path_bandwidth.dedicated,
+                     attr.bandwidth.dedicated);
+    EXPECT_DOUBLE_EQ(perf_attr.path_bandwidth.shared, attr.bandwidth.shared);
+}
+
+UCS_TEST_P(test_rc_mlx5, ep_event_handler)
+{
+    auto *iface = ucs_derived_of(m_e1->iface(), uct_base_iface_t);
+    uct_iface_set_ep_event_params_t params = {};
+    uct_ep_h notified_ep                   = NULL;
+    ucs::handle<uct_iface_h> handler(m_e1->iface(), [](uct_iface_h iface) {
+        uct_iface_set_ep_event_params_t params = {};
+
+        params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+        EXPECT_UCS_OK(uct_iface_set_ep_event_handler(iface, &params));
+    });
+
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB |
+                        UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG;
+    params.cb = [](void *arg, uct_ep_h ep, unsigned events) {
+        EXPECT_EQ(UCT_EP_EVENT_PATH_SPEED_CHANGE, events);
+        *static_cast<uct_ep_h*>(arg) = ep;
+    };
+    params.arg = &notified_ep;
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(m_e1->iface(), &params));
+    ASSERT_EQ(params.cb, iface->ep_event_cb);
+    iface->ep_event_cb(iface->ep_event_arg, m_e1->ep(0),
+                       UCT_EP_EVENT_PATH_SPEED_CHANGE);
+    EXPECT_EQ(m_e1->ep(0), notified_ep);
+
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+    params.cb         = NULL;
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(m_e1->iface(), &params));
+    EXPECT_EQ(nullptr, iface->ep_event_cb);
+    EXPECT_EQ(nullptr, iface->ep_event_arg);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5, rc_mlx5)
+
 
 class test_rc_mlx5_token_query : public test_rc {
 protected:

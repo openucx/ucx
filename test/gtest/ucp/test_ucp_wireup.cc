@@ -23,6 +23,7 @@ extern "C" {
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/math.h>
+#include <uct/base/uct_iface.h>
 }
 
 class test_ucp_wireup : public ucp_test {
@@ -987,7 +988,68 @@ public:
     }
 
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+
+    void force_close_simultaneous_connect(bool close_winner)
+    {
+        if (get_variant_value() & NO_EP_MATCH) {
+            UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
+        }
+
+        /* The connection request of the worker with the lower UUID is
+         * accepted by the peer and the other request is ignored. Either way
+         * the receiving EP is bound to the requesting EP, so force close the
+         * requesting EP before its request is handled */
+        bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
+        entity &winner   = sender_wins ? sender() : receiver();
+        entity &peer     = sender_wins ? receiver() : sender();
+        entity &closer   = close_winner ? winner : peer;
+        entity &other    = close_winner ? peer : winner;
+
+        winner.connect(&peer, get_ep_params());
+        peer.connect(&winner, get_ep_params());
+        disconnect(closer, true);
+
+        closer.connect(&other, get_ep_params());
+        if (get_variant_value() & TEST_TAG) {
+            send_recv(closer.ep(), other.worker(), NULL, 1, 1);
+        }
+        flush_worker(closer);
+        disconnect(other, true);
+    }
+
+    static ssize_t wireup_am_bcopy_conn_reset(uct_ep_h ep, uint8_t id,
+                                              uct_pack_callback_t pack_cb,
+                                              void *arg, unsigned flags)
+    {
+        if (id != UCP_AM_ID_WIREUP) {
+            return m_orig_am_bcopy(ep, id, pack_cb, arg, flags);
+        }
+
+        /* Report the error from the send call, as tcp does on a broken
+         * socket */
+        ++m_wireup_send_errors;
+        uct_iface_handle_ep_err(ep->iface, ep, UCS_ERR_CONNECTION_RESET);
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    }
+
+    static void mock_wireup_msg_am_bcopy(ucp_ep_h ep, ucs::mock &mock)
+    {
+        ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(
+                ucp_ep_get_lane(ep, ucp_ep_get_wireup_msg_lane(ep)));
+        uct_iface_h iface;
+
+        ASSERT_TRUE(wireup_ep != NULL);
+        iface           = ucp_wireup_ep_get_msg_ep(wireup_ep)->iface;
+        m_orig_am_bcopy = iface->ops.ep_am_bcopy;
+        mock.setup(&iface->ops.ep_am_bcopy, wireup_am_bcopy_conn_reset);
+    }
+
+    static uct_ep_am_bcopy_func_t m_orig_am_bcopy;
+    static volatile unsigned m_wireup_send_errors;
 };
+
+uct_ep_am_bcopy_func_t test_ucp_wireup_errh_peer::m_orig_am_bcopy = NULL;
+volatile unsigned test_ucp_wireup_errh_peer::m_wireup_send_errors = 0;
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
     receiver().connect(&sender(), get_ep_params());
@@ -1032,6 +1094,39 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
             disconnect(receiver(), true);
         }
     }
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_winner) {
+    force_close_simultaneous_connect(true);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect_peer) {
+    force_close_simultaneous_connect(false);
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, pending_wireup_msg_send_error,
+           "WIREUP_VIA_AM_LANE=y") {
+    if (!has_transport("tcp")) {
+        UCS_TEST_SKIP_R("wireup message is pending only on connecting tcp");
+    }
+
+    /* The wireup request stays pending on the wireup EP of the AM lane until
+     * the tcp connection is established, then it is sent from the tcp pending
+     * queue */
+    sender().connect(&receiver(), get_ep_params());
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        ucs::mock mock;
+
+        m_wireup_send_errors = 0;
+        ASSERT_NO_FATAL_FAILURE(mock_wireup_msg_am_bcopy(sender().ep(), mock));
+        wait_for_value(&m_wireup_send_errors, 1u);
+    }
+
+    EXPECT_EQ(1u, m_wireup_send_errors);
+    EXPECT_TRUE(sender().ep()->flags & UCP_EP_FLAG_FAILED);
+    disconnect(sender(), true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
@@ -1888,6 +1983,47 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
 
     ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
     EXPECT_NE(UCP_NULL_LANE, ep_config->key.keepalive_lane);
+}
+
+/* The lanes of a configuration stay unset after a failed wireup, until the
+ * scheduled endpoint failure runs */
+UCS_TEST_P(test_ucp_wireup_keepalive, lane_without_uct_ep,
+           "KEEPALIVE_INTERVAL=0.1s")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep         = sender().ep();
+    ucp_lane_index_t lane;
+    size_t round_count;
+    uct_ep_h uct_ep;
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+
+    lane = ucp_ep_config(ep)->key.keepalive_lane;
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no keepalive lane");
+    }
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ucp_ep_set_lane(ep, lane, NULL);
+    }
+
+    /* The round in progress may have already passed the endpoint */
+    round_count = worker->keepalive.round_count + 2;
+    wait_for_cond(
+            [&]() { return worker->keepalive.round_count >= round_count; },
+            [&]() { progress(); });
+    EXPECT_GE(worker->keepalive.round_count, round_count);
+
+    {
+        ucs::scoped_async_lock lock(worker->async);
+        ucp_ep_set_lane(ep, lane, uct_ep);
+    }
+
+    send_recv(ep, receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)

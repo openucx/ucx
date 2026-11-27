@@ -11,7 +11,8 @@ kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
   limits: "{memory: 8Gi, cpu: 4000m}"
-  requests: "{memory: 8Gi, cpu: 4000m}"
+  # The CPU request follows the measured use; memory peaks close to its limit
+  requests: "{memory: 8Gi, cpu: 3000m}"
 
 runs_on_dockers:
   - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
