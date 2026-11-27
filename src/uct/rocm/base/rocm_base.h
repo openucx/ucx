@@ -27,6 +27,17 @@ ucs_status_t uct_rocm_base_query_md_resources(uct_component_h component,
 ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                          uct_tl_device_resource_t **tl_devices_p,
                                          unsigned *num_tl_devices_p);
+/* Memory allocated from an HSA memory pool (hipMalloc, hipHostMalloc), or
+ * mapped through the HSA virtual memory API (hipMemCreate + hipMemMap). */
+static inline int uct_rocm_base_is_hsa_mem_type(hsa_amd_pointer_type_t type)
+{
+    return (type == HSA_EXT_POINTER_TYPE_HSA)
+#if HAVE_DECL_HSA_EXT_POINTER_TYPE_HSA_VMEM
+           || (type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+#endif
+            ;
+}
+
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num);
 int uct_rocm_base_is_gpu_agent(hsa_agent_t agent);
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents);
