@@ -588,6 +588,19 @@ UCS_TEST_F(malloc_hook, asprintf) {
     (void)dlerror();
 }
 
+UCS_TEST_F(malloc_hook, valloc_page_aligned) {
+    static const size_t sizes[] = {1, 100, 4096, 10000, 1 * UCS_MBYTE};
+    const size_t page_size      = ucs_get_page_size();
+
+    for (size_t i = 0; i < ucs_static_array_size(sizes); ++i) {
+        void *ptr = valloc(sizes[i]);
+        ASSERT_NE((void*)NULL, ptr) << "size=" << sizes[i];
+        EXPECT_EQ(0u, (uintptr_t)ptr % page_size) << "size=" << sizes[i];
+        memset(ptr, 0, sizes[i]);
+        free(ptr);
+    }
+}
+
 UCS_TEST_SKIP_COND_F(malloc_hook, fork, "broken") {
     static const int num_processes = 4;
     pthread_barrier_t barrier;
