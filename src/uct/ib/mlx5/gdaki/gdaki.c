@@ -247,7 +247,13 @@ static int uct_gdaki_md_check_uar(const uct_ib_md_t *md)
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
 
-    uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context, 0);
+    uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context,
+                                UCT_IB_MLX5_UAR_ALLOC_TYPE_WC);
+    if (uar == NULL) {
+        uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context,
+                                    UCT_IB_MLX5_UAR_ALLOC_TYPE_NC);
+    }
+
     if (uar == NULL) {
         return 0;
     }
