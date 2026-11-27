@@ -432,16 +432,10 @@ protected:
         mapped_buffer lbuf(num_reqs * REQ_SIZE, sender());
         mapped_buffer rbuf(num_reqs * REQ_SIZE, receiver());
         ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+        unsigned num_stalled_iters   = 0;
         void *flush_req;
 
-        /* Complete the wireup, so the endpoint uses its final lanes */
-        ASSERT_UCS_OK(request_wait(rma_nbx(is_get, lbuf, rbuf, rkey, 0)));
-        flush_workers();
-
-        if (ucp_ep_config(sender().ep())->key.rma_bw_lanes[1] ==
-            UCP_NULL_LANE) {
-            UCS_TEST_SKIP_R("requires two RMA lanes");
-        }
+        complete_wireup(is_get, lbuf, rbuf, rkey);
 
         for (unsigned iter = 0; iter < num_iters; ++iter) {
             if (is_get) {
@@ -454,6 +448,10 @@ protected:
 
             for (size_t offset = 0; offset < lbuf.size(); offset += REQ_SIZE) {
                 m_rma_reqs.push_back(rma_nbx(is_get, lbuf, rbuf, rkey, offset));
+            }
+
+            if (!ucs_hlist_is_empty(&sender().ep()->ext->pending_rma_reqs)) {
+                ++num_stalled_iters;
             }
 
             flush_req = flush_nbx();
@@ -469,11 +467,60 @@ protected:
                 rbuf.pattern_check(iter);
             }
         }
+
+        EXPECT_GT(num_stalled_iters, 0u);
+    }
+
+    void test_force_close_parked_flush()
+    {
+        const size_t num_reqs = 32;
+        mapped_buffer lbuf(num_reqs * REQ_SIZE, sender());
+        mapped_buffer rbuf(num_reqs * REQ_SIZE, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+        void *flush_req;
+
+        complete_wireup(false, lbuf, rbuf, rkey);
+
+        for (size_t offset = 0; offset < lbuf.size(); offset += REQ_SIZE) {
+            m_rma_reqs.push_back(rma_nbx(false, lbuf, rbuf, rkey, offset));
+        }
+
+        if (ucs_hlist_is_empty(&sender().ep()->ext->pending_rma_reqs)) {
+            ASSERT_UCS_OK(requests_wait(m_rma_reqs));
+            UCS_TEST_SKIP_R("no request was added to a pending queue");
+        }
+
+        /* The flush waits for the queued requests until the close cancels
+         * them */
+        flush_req = flush_nbx();
+        ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+        EXPECT_FALSE(m_flushed);
+
+        scoped_log_handler slh(wrap_errors_logger);
+        rkey.reset();
+        request_wait(ep_close_nbx(sender().revoke_ep(),
+                                  UCP_EP_CLOSE_FLAG_FORCE));
+        EXPECT_NE(UCS_OK, requests_wait(m_rma_reqs));
+        request_wait(flush_req);
+        EXPECT_TRUE(m_flushed);
     }
 
 private:
     static constexpr size_t FRAG_SIZE = 64 * UCS_KBYTE;
     static constexpr size_t REQ_SIZE  = 4 * FRAG_SIZE;
+
+    void complete_wireup(bool is_get, const mapped_buffer &lbuf,
+                         const mapped_buffer &rbuf, ucp_rkey_h rkey)
+    {
+        /* Complete the wireup, so the endpoint uses its final lanes */
+        ASSERT_UCS_OK(request_wait(rma_nbx(is_get, lbuf, rbuf, rkey, 0)));
+        flush_workers();
+
+        if (ucp_ep_config(sender().ep())->key.rma_bw_lanes[1] ==
+            UCP_NULL_LANE) {
+            UCS_TEST_SKIP_R("requires two RMA lanes");
+        }
+    }
 
     ucs_status_ptr_t rma_nbx(bool is_get, const mapped_buffer &lbuf,
                              const mapped_buffer &rbuf, ucp_rkey_h rkey,
@@ -510,15 +557,14 @@ private:
                                                           &param);
         EXPECT_FALSE(UCS_PTR_IS_ERR(request));
         if (request == NULL) {
-            flushed(UCS_OK);
+            flushed();
         }
 
         return request;
     }
 
-    void flushed(ucs_status_t status)
+    void flushed()
     {
-        EXPECT_UCS_OK(status);
         m_inprogress_at_flush = std::count_if(
                 m_rma_reqs.begin(), m_rma_reqs.end(), [](void *req) {
                     return UCS_PTR_IS_PTR(req) &&
@@ -527,9 +573,9 @@ private:
         m_flushed             = true;
     }
 
-    static void flushed_cb(void*, ucs_status_t status, void *user_data)
+    static void flushed_cb(void*, ucs_status_t, void *user_data)
     {
-        static_cast<test_ucp_rma_stalled_lane*>(user_data)->flushed(status);
+        static_cast<test_ucp_rma_stalled_lane*>(user_data)->flushed();
     }
 
     std::vector<void*> m_rma_reqs;
@@ -550,6 +596,27 @@ UCS_TEST_P(test_ucp_rma_stalled_lane, flush_after_stalled_puts)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_stalled_lane, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_stalled_lane, dcx, "dc_x")
+
+
+class test_ucp_rma_stalled_lane_peer : public test_ucp_rma_stalled_lane {
+protected:
+    ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_rma_stalled_lane::get_ep_params();
+
+        params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_stalled_lane_peer, force_close_parked_flush)
+{
+    test_force_close_parked_flush();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_stalled_lane_peer, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_stalled_lane_peer, dcx, "dc_x")
 
 
 class test_ucp_rma_dmabuf : public test_ucp_rma {

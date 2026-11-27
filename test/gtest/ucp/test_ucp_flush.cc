@@ -187,6 +187,93 @@ public:
         params.err_handler.arg = NULL;
         return params;
     }
+
+protected:
+    /* Restart a flush after a lane error, while a request which the lane
+     * failure restarted is queued again */
+    void test_restart_with_pending_rma_req(bool wait_rma_reqs)
+    {
+        ucp_request_param_t param = {};
+        ucp_request_t pending_req = {};
+        unsigned num_flushes;
+        ucp_request_t *req;
+        ucp_ep_h ep;
+        ucs_status_ptr_t request;
+        unsigned i;
+
+        flush_ep(sender());
+        ep                    = sender().ep();
+        test_flush_call_count = 0;
+        test_flush_comp       = NULL;
+        pending_req.send.ep   = ep;
+
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_inprogress);
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+            if (wait_rma_reqs) {
+                request = ucp_ep_flush_internal(ep, 0, &param, NULL,
+                                                test_flush_completion,
+                                                "restart_with_pending_rma_req",
+                                                UCT_FLUSH_FLAG_LOCAL);
+            } else {
+                request = ucp_ep_flush_lanes_internal(
+                        ep, 0, &param, NULL, test_flush_completion,
+                        "restart_with_pending_rma_req", UCT_FLUSH_FLAG_LOCAL,
+                        UCS_BIT(0));
+            }
+        }
+        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+        ASSERT_TRUE(test_flush_comp != NULL);
+        req         = static_cast<ucp_request_t*>(request) - 1;
+        num_flushes = test_flush_call_count;
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+            ucp_ep_pending_rma_reqs_add(&pending_req);
+            while (req->send.state.uct_comp.count > 0) {
+                uct_invoke_completion(test_flush_comp,
+                                      UCS_ERR_ENDPOINT_TIMEOUT);
+            }
+        }
+        EXPECT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING, req->send.flush.sw_state);
+
+        for (i = 0; i < 100; ++i) {
+            sender().progress();
+        }
+
+        if (wait_rma_reqs) {
+            EXPECT_EQ(num_flushes, test_flush_call_count);
+            EXPECT_TRUE(req->flags & UCP_REQUEST_FLAG_PENDING_RMA);
+        } else {
+            EXPECT_GT(test_flush_call_count, num_flushes);
+            EXPECT_FALSE(req->flags & UCP_REQUEST_FLAG_PENDING_RMA);
+        }
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+            ucp_ep_pending_rma_reqs_remove(&pending_req);
+        }
+
+        for (i = 0; (i < 100) && (test_flush_call_count == num_flushes); ++i) {
+            sender().progress();
+        }
+
+        EXPECT_GT(test_flush_call_count, num_flushes);
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+            for (i = 0; (i < 100) && (req->send.state.uct_comp.count > 0);
+                 ++i) {
+                uct_invoke_completion(test_flush_comp, UCS_OK);
+            }
+            EXPECT_EQ(0, req->send.state.uct_comp.count);
+            ucp_ep_flush_remote_completed(req);
+        }
+
+        EXPECT_UCS_OK(ucp_request_check_status(request));
+        ucp_request_release(request);
+    }
 };
 
 UCS_TEST_P(test_ucp_flush, empty_lane_mask_skips_transport_flush)
@@ -624,7 +711,7 @@ UCS_TEST_P(test_ucp_flush,
             uct_invoke_completion(test_flush_comp, UCS_OK);
             ASSERT_EQ(UCP_FLUSH_SW_STATE_STARTED,
                       req->send.flush.sw_state);
-            ASSERT_EQ(0, req->send.flush.sw_done);
+            ASSERT_FALSE(req->send.flush.sw_done);
             ASSERT_EQ(1ul, ucs_hlist_length(&flush_state->reqs));
 
             /* Model a reissued lane flush which fails after the software
@@ -832,69 +919,12 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
 
 UCS_TEST_P(test_ucp_flush_failover, restart_waits_for_pending_rma_reqs)
 {
-    ucp_request_param_t param = {};
-    ucp_request_t pending_req = {};
-    ucp_request_t *req;
-    ucp_ep_h ep;
-    ucs_status_ptr_t request;
-    unsigned i;
+    test_restart_with_pending_rma_req(true);
+}
 
-    flush_ep(sender());
-    ep                    = sender().ep();
-    test_flush_call_count = 0;
-    test_flush_comp       = NULL;
-    pending_req.send.ep   = ep;
-
-    ucs::mock mock;
-    mock_ep_flush(ep, mock, test_flush_inprogress);
-
-    {
-        test_flush_worker_cs_guard cs_guard(ep->worker);
-        request = ucp_ep_flush_lanes_internal(
-                ep, 0, &param, NULL, test_flush_completion,
-                "restart_waits_for_pending_rma_reqs", UCT_FLUSH_FLAG_LOCAL,
-                UCS_BIT(0));
-    }
-    ASSERT_TRUE(UCS_PTR_IS_PTR(request));
-    ASSERT_TRUE(test_flush_comp != NULL);
-    req = static_cast<ucp_request_t*>(request) - 1;
-
-    /* A request which the lane failure restarted is queued again */
-    {
-        test_flush_worker_cs_guard cs_guard(ep->worker);
-        ucp_ep_pending_rma_reqs_add(&pending_req);
-        uct_invoke_completion(test_flush_comp, UCS_ERR_ENDPOINT_TIMEOUT);
-    }
-    EXPECT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING, req->send.flush.sw_state);
-
-    for (i = 0; i < 100; ++i) {
-        sender().progress();
-    }
-
-    EXPECT_EQ(1u, test_flush_call_count);
-    EXPECT_TRUE(req->flags & UCP_REQUEST_FLAG_PENDING_RMA);
-
-    {
-        test_flush_worker_cs_guard cs_guard(ep->worker);
-        ucp_ep_pending_rma_reqs_remove(&pending_req);
-    }
-
-    for (i = 0; (i < 100) && (test_flush_call_count < 2); ++i) {
-        sender().progress();
-    }
-
-    EXPECT_GE(test_flush_call_count, 2u);
-    {
-        test_flush_worker_cs_guard cs_guard(ep->worker);
-        for (i = 0; (i < 100) && (req->send.state.uct_comp.count > 0); ++i) {
-            uct_invoke_completion(test_flush_comp, UCS_OK);
-        }
-        EXPECT_EQ(0, req->send.state.uct_comp.count);
-        ucp_ep_flush_remote_completed(req);
-    }
-
-    EXPECT_UCS_OK(ucp_request_check_status(request));
-    ucp_request_release(request);
+UCS_TEST_P(test_ucp_flush_failover, lanes_restart_skips_pending_rma_reqs)
+{
+    test_restart_with_pending_rma_req(false);
 }
 
 UCS_TEST_P(test_ucp_flush_failover, restart_pending_cancels_on_ep_close)
@@ -1001,7 +1031,7 @@ UCS_TEST_P(test_ucp_flush_failover,
             uct_invoke_completion(test_flush_comp, UCS_OK);
             ASSERT_EQ(UCP_FLUSH_SW_STATE_STARTED,
                       req->send.flush.sw_state);
-            ASSERT_EQ(0, req->send.flush.sw_done);
+            ASSERT_FALSE(req->send.flush.sw_done);
             ASSERT_EQ(1ul, ucs_hlist_length(&flush_state->reqs));
 
             /* Model a reissued lane flush which fails after the software

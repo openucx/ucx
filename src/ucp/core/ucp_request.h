@@ -408,7 +408,10 @@ struct ucp_request {
                      * uct_flags on rewind after fast-forwarding */
                     uint8_t            uct_flags_orig;
                     uint8_t            sw_state;
-                    uint8_t            sw_done;
+                    uint8_t            sw_done:1;
+                    /* Wait for the pending RMA requests of the endpoint, also
+                     * when a lane failure restarts the flush */
+                    uint8_t            wait_rma_reqs:1;
                     /* Snapshot used to detect same-index lane replacement */
                     uint32_t           lane_generation;
                     /* 'cmpl_sn' is valid only while this request is linked in

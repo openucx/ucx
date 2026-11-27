@@ -604,7 +604,9 @@ typedef struct ucp_ep_ext {
      * flush requests submitted after them which wait for their completion, in
      * the order they were added. Such a request may still send fragments on
      * lanes which a later flush has already flushed, also after a restart
-     * selects a multi-lane protocol */
+     * selects a multi-lane protocol. When the lanes are discarded, the put and
+     * get requests are completed, and the last one before a waiting flush
+     * resumes it */
     ucs_hlist_head_t              pending_rma_reqs;
 #if UCS_ENABLE_ASSERT
     ucs_time_t                    ka_last_round; /* Time of last KA round done */
@@ -843,7 +845,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
  *
  * Unlike @ref ucp_ep_flush_internal, it does not wait for the pending RMA
  * requests of the endpoint, only for the operations which were already posted
- * on the lanes, unless a lane failure restarts the flush.
+ * on the lanes, also when a lane failure restarts the flush.
  *
  * Device visibility state is shared by all lanes of the endpoint. A partial
  * flush can clear this state while an excluded lane still has writes in
