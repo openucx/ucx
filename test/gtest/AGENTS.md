@@ -14,7 +14,7 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
   - `test_helpers.[h|cc]` — assertion macros (`UCS_TEST_SKIP_R` etc.),
     fork helpers, pseudo-random generators, and other shared utilities.
   - `mem_buffer.[h|cc]` — multi-memtype buffer abstraction (host, CUDA,
-    ROCm, ZE) used everywhere a test needs to vary memory type.
+    MUSA, ROCm, ZE) used everywhere a test needs to vary memory type.
   - `test_obj_size.cc`, `test_perf.[h|cc]`, `test_watchdog.cc` — invariant
     checks (struct sizes), inline perf assertions, hang detection.
   - `main.cc` — gtest main + UCX-specific argument parsing.

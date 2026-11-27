@@ -358,6 +358,19 @@ build_rocm() {
 }
 
 #
+# Build MUSA
+#
+build_musa() {
+	if [ -f /usr/local/musa/include/musa_runtime_api.h ]; then
+		echo "==== Build with enable musa ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-musa
+		$MAKEP
+	else
+		echo "==== Not building with musa ===="
+	fi
+}
+
+#
 # Confirm the ZE memory domain and transport enumerate in ucx_info output.
 #
 check_ze_devices() {
@@ -620,6 +633,7 @@ base_tests=('build_docs' \
 			'build_prof' \
 			'build_cuda' \
 			'build_rocm' \
+			'build_musa' \
 			'build_no_verbs' \
 			'build_release_pkg' \
 			'build_fuse')
