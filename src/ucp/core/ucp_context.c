@@ -261,6 +261,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, multi_path_ratio),
    UCS_CONFIG_TYPE_POS_DOUBLE},
 
+  {"HOST_MEM_DEVICE_LANES", "n",
+   "Guarantee device API lanes over transports which can also access host\n"
+   "memory (e.g. network transports), for CUDA memory not reachable by\n"
+   "CUDA IPC. If disabled, such lanes are not guaranteed, but fewer resources\n"
+   "are allocated.",
+   ucs_offsetof(ucp_context_config_t, host_mem_device_lanes),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"MAX_EAGER_LANES", NULL, "",
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
