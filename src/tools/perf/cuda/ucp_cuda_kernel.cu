@@ -257,6 +257,10 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                      params.remote_mem_list, 0, 0,
                                      params.length + ONESIDED_SIGNAL_SIZE,
                                      channel_id, flags, req);
+    case UCX_PERF_CMD_ADD:
+        return ucp_device_counter_inc<level>(1, params.remote_mem_list, 0,
+                                             params.length, channel_id, flags,
+                                             req);
     default:
         return UCS_ERR_UNSUPPORTED;
     }
@@ -412,17 +416,35 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
     ctx.status = status;
 }
 
-__global__ void
+template<ucx_perf_cmd_t cmd> __global__ void
 ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
                              ucp_perf_cuda_params params)
 {
     volatile uint64_t *sn = params.counter_recv;
-    while (*sn < ctx.max_iters) {
+    while (*sn < ctx.expected_sn) {
         __nanosleep(100000); // 100us
+    }
+
+    if (cmd == UCX_PERF_CMD_ADD) {
+        /* An operation sent twice would add again, wait for it a bit */
+        for (int i = 0; i < 10000; ++i) {
+            __nanosleep(100000);
+        }
+
+        if (*sn != ctx.expected_sn) {
+            ucs_device_error("receive counter %llu, expected %llu",
+                             (unsigned long long)*sn,
+                             (unsigned long long)ctx.expected_sn);
+            ctx.status = UCS_ERR_IO_ERROR;
+            return;
+        }
     }
 
     ctx.status = UCS_OK;
 }
+
+#define UCP_PERF_CUDA_WAIT_BW_KERNEL(_cmd, _ctx, _params) \
+    ucp_perf_cuda_wait_bw_kernel<_cmd><<<1, 1>>>(_ctx, _params)
 
 class ucp_perf_cuda_test_runner : public ucx_perf_cuda_test_runner {
 public:
@@ -471,8 +493,10 @@ public:
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
-            ucp_perf_cuda_wait_bw_kernel<<<1, 1>>>(
-                    *m_gpu_ctx, params_handler.get_params());
+            UCX_PERF_SWITCH_CMD(m_perf.params.command,
+                                UCP_PERF_CUDA_WAIT_BW_KERNEL, *m_gpu_ctx,
+                                params_handler.get_params());
+            CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);

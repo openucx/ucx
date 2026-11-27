@@ -22,6 +22,8 @@ struct ucx_perf_cuda_context {
     unsigned                max_outstanding;
     unsigned                device_fc_window;
     ucx_perf_counter_t      max_iters;
+    /* Final value of the receive counter */
+    ucx_perf_counter_t      expected_sn;
     ucx_perf_cuda_time_t    report_interval_ns;
     ucx_perf_counter_t      completed_iters;
     ucs_status_t            status;
@@ -112,6 +114,9 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
     case UCX_PERF_CMD_PUT: \
         _func(UCX_PERF_CMD_PUT, __VA_ARGS__); \
         break; \
+    case UCX_PERF_CMD_ADD: \
+        _func(UCX_PERF_CMD_ADD, __VA_ARGS__); \
+        break; \
     default: \
         ucs_error("Unsupported cmd: %d", _cmd); \
         break; \
@@ -163,11 +168,22 @@ public:
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;
+        m_cpu_ctx->expected_sn        = perf.max_iter;
         m_cpu_ctx->completed_iters    = 0;
         m_cpu_ctx->report_interval_ns = (perf.report_interval == ULONG_MAX) ?
                                         ULONG_MAX :
                                         ucs_time_to_nsec(perf.report_interval);
         m_cpu_ctx->status             = UCS_ERR_NOT_IMPLEMENTED;
+
+        if (perf.params.command == UCX_PERF_CMD_ADD) {
+            unsigned msgs_per_iter;
+            UCX_PERF_SWITCH_LEVEL(perf.params.device_level,
+                                  UCX_PERF_THREAD_INDEX_SET,
+                                  perf.params.device_thread_count,
+                                  msgs_per_iter);
+            m_cpu_ctx->expected_sn = perf.max_iter * msgs_per_iter *
+                                     perf.params.device_block_count;
+        }
     }
 
     ~ucx_perf_cuda_test_runner()
@@ -222,7 +238,11 @@ template<typename Runner> ucs_status_t
 ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
 {
     Runner runner(*perf);
-    if (perf->params.command == UCX_PERF_CMD_PUT) {
+    if (perf->params.command == UCX_PERF_CMD_ADD) {
+        if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
+            return runner.run_stream_uni();
+        }
+    } else if (perf->params.command == UCX_PERF_CMD_PUT) {
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
             return runner.run_pingpong();
         } else if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
