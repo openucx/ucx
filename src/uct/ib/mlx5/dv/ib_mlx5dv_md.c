@@ -2462,6 +2462,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         md->flags |= UCT_IB_MLX5_MD_FLAG_DUMP_FILL_MKEY;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, qpc_extension) &&
+        UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, qp_error_syndrome)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_QP_ERROR_SYNDROME;
+    }
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
     }
