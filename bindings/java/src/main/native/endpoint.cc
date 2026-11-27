@@ -163,6 +163,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_queryLocalAddressNative(JNIEnv *env,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
+    /* coverity[uninit_use_in_call] */
     return c2jInetSockAddr(env, &ep_attr.local_sockaddr);
 }
 
@@ -179,6 +180,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_queryRemoteAddressNative(JNIEnv *env,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
+    /* coverity[uninit_use_in_call] */
     return c2jInetSockAddr(env, &ep_attr.remote_sockaddr);
 }
 
