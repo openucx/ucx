@@ -147,7 +147,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    null_mkey[0x1];
     uint8_t    log_max_klm_list_size[0x6];
 
-    uint8_t    reserved_at_120[0xa];
+    uint8_t    reserved_at_120[0x2];
+    uint8_t    qpc_extension[0x1];
+    uint8_t    reserved_at_123[0x7];
     uint8_t    log_max_ra_req_dc[0x6];
     uint8_t    reserved_at_130[0x8];
     uint8_t    ooo_sl_mask[0x1];
@@ -299,7 +301,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    pad_tx_eth_packet[0x1];
     uint8_t    reserved_at_263[0x8];
     uint8_t    log_bf_reg_size[0x5];
-    uint8_t    reserved_at_270[0x6];
+    uint8_t    reserved_at_270[0x3];
+    uint8_t    qp_error_syndrome[0x1];
+    uint8_t    reserved_at_274[0x2];
     uint8_t    lag_dct[0x2];
     uint8_t    lag_tx_port_affinity[0x1];
     uint8_t    reserved_at_279[0x2];
@@ -1533,6 +1537,14 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         dbr_umem_id[0x20];
 };
 
+struct uct_ib_mlx5_cqe_error_syndrome_bits {
+    uint8_t         hw_error_syndrome[0x8];
+    uint8_t         hw_syndrome_type[0x4];
+    uint8_t         reserved_at_c[0x4];
+    uint8_t         vendor_error_syndrome[0x8];
+    uint8_t         syndrome[0x8];
+};
+
 struct uct_ib_mlx5_qpc_ext_bits {
     uint8_t         delay_drop_en[0x1];
     uint8_t         vl15[0x1];
@@ -1544,7 +1556,9 @@ struct uct_ib_mlx5_qpc_ext_bits {
 
     uint8_t         qos_queue_group_id_responder[0x20];
 
-    uint8_t         reserved_at_80[0x5a0];
+    struct uct_ib_mlx5_cqe_error_syndrome_bits error_syndrome;
+
+    uint8_t         reserved_at_80[0x580];
 };
 
 struct uct_ib_mlx5_create_qp_out_bits {
@@ -1750,7 +1764,8 @@ struct uct_ib_mlx5_query_qp_out_bits {
 
     uint8_t         reserved_at_800[0x80];
 
-    uint8_t         pas[0][0x40];
+    /* Returned with qpc_ext in the input */
+    struct uct_ib_mlx5_qpc_ext_bits qpc_data_extension;
 };
 
 struct uct_ib_mlx5_query_qp_in_bits {
@@ -1760,7 +1775,8 @@ struct uct_ib_mlx5_query_qp_in_bits {
     uint8_t         reserved_at_20[0x10];
     uint8_t         op_mod[0x10];
 
-    uint8_t         reserved_at_40[0x8];
+    uint8_t         qpc_ext[0x1];
+    uint8_t         reserved_at_41[0x7];
     uint8_t         qpn[0x18];
 
     uint8_t         reserved_at_60[0x20];

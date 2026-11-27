@@ -222,9 +222,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
     /* Device supports dump/fill memory keys */
     UCT_IB_MLX5_MD_FLAG_DUMP_FILL_MKEY       = UCS_BIT(19),
+    /* Device reports the error syndrome of a QP in its context extension */
+    UCT_IB_MLX5_MD_FLAG_QP_ERROR_SYNDROME    = UCS_BIT(20),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 21,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
