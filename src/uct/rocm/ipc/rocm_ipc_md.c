@@ -14,7 +14,6 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
-#include <ucs/arch/atomic.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
 
@@ -90,8 +89,6 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     }
 
     if (uct_rocm_base_is_vmem_type(mem_type)) {
-        /* Unique per-registration id; survives fd reuse for cache matching. */
-        static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
         void *vmm_base;
         size_t vmm_size;
         uint64_t vmm_reg_id;
@@ -99,37 +96,31 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         /* hsa_amd_pointer_info() reports agentBaseAddress as the queried pointer
          * for VMEM, not the hsa_amd_vmem_map() base that
          * hsa_amd_vmem_retain_alloc_handle() requires. Resolve the true base
-         * (and a stable per-live-mapping reg_id) from the vmm registry; fall
-         * back to page-alignment (correct when the buffer is in the mapping's
-         * first page) on a miss. */
+         * (and a stable per-live-mapping reg_id) from the vmm registry; a miss
+         * means the mapping base is unknown, so fall back to staging. */
         if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size,
-                                          &vmm_reg_id) == UCS_OK) {
-            /* A buffer that straddles a vmem_map boundary (e.g. a pool
-             * allocator that maps a large reservation in adjacent chunks)
-             * cannot be described by a single exported handle. Reject so UCP
-             * falls back to the staging pipeline instead of transferring past
-             * the mapping. */
-            if (((uintptr_t)address + length) >
-                ((uintptr_t)vmm_base + vmm_size)) {
-                ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
-                          "[%p, +0x%zx); falling back from rocm_ipc", address,
-                          length, vmm_base, vmm_size);
-                return UCS_ERR_INVALID_ADDR;
-            }
-            /* Importing a pooled buffer's many chunks over IPC starts failing
-             * past a point, so stage it and keep IPC for standalone mappings. */
-            if (uct_rocm_base_vmm_is_pooled(vmm_base, vmm_size)) {
-                ucs_debug("VMM buffer [%p, +0x%zx) is a pooled chunk; falling "
-                          "back from rocm_ipc", address, length);
-                return UCS_ERR_INVALID_ADDR;
-            }
-        } else {
-            /* Registry miss: page-align (correct when the buffer is in the
-             * mapping's first page) and fall back to a unique per-registration
-             * id. */
-            vmm_base   = ucs_align_down_pow2_ptr(base_ptr, ucs_get_page_size());
-            vmm_size   = size;
-            vmm_reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
+                                          &vmm_reg_id) != UCS_OK) {
+            ucs_debug("VMM buffer %p not in registry; falling back from "
+                      "rocm_ipc", address);
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        /* A buffer that straddles a vmem_map boundary (e.g. a pool allocator
+         * that maps a large reservation in adjacent chunks) cannot be described
+         * by a single exported handle. Reject so UCP falls back to the staging
+         * pipeline instead of transferring past the mapping. */
+        if (((uintptr_t)address + length) > ((uintptr_t)vmm_base + vmm_size)) {
+            ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
+                      "[%p, +0x%zx); falling back from rocm_ipc", address,
+                      length, vmm_base, vmm_size);
+            return UCS_ERR_INVALID_ADDR;
+        }
+        /* Importing a pooled buffer's many chunks over IPC starts failing past
+         * a point, so stage it and keep IPC for standalone mappings. */
+        if (uct_rocm_base_vmm_is_pooled(vmm_base, vmm_size)) {
+            ucs_debug("VMM buffer [%p, +0x%zx) is a pooled chunk; falling "
+                      "back from rocm_ipc", address, length);
+            return UCS_ERR_INVALID_ADDR;
         }
 
         status = uct_rocm_base_vmm_export_fd(vmm_base, &key->vmm.fd);
