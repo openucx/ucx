@@ -40,12 +40,14 @@ public:
         m_max_outstanding(m_perf.params.max_outstanding),
         m_sgl_put((UCX_PERF_CMD_PUT == CMD) &&
                   (UCP_PERF_DATATYPE_SGL == m_perf.params.ucp.send_datatype)),
+        m_buffer_count(ucx_perf_get_buffer_count(&m_perf.params)),
         m_length(0ul),
         m_send_sn_buffer(NULL),
         m_send_sn_length(0ul),
         m_recv_sn_length(0ul),
         m_am_rx_buffer(NULL),
-        m_am_rx_length(0ul)
+        m_am_rx_length(0ul),
+        m_am_rx_buffer_index(0ul)
     {
         unsigned am_flags = UCP_AM_FLAG_WHOLE_MSG;
 
@@ -356,8 +358,11 @@ public:
                     "length=%zu expected=%zu index=%u", length, m_am_rx_length,
                     rte_call(&m_perf, group_index));
 
+        size_t offset       = next_buffer_offset(&m_am_rx_buffer_index,
+                                                 m_buffer_count, length);
+        void *buffer        = UCS_PTR_BYTE_OFFSET(m_am_rx_buffer, offset);
         ucs_status_ptr_t sp = ucp_am_recv_data_nbx(m_perf.ucp.worker, data,
-                                                   m_am_rx_buffer, length,
+                                                   buffer, length,
                                                    &m_am_rx_params);
         ucs_assert(UCS_PTR_IS_PTR(sp));
         ucp_request_release(sp);
@@ -1022,15 +1027,17 @@ out:
         uint64_t remote_addr;
         ucp_rkey_h rkey;
         size_t length, send_length, recv_length;
+        size_t buffer_index, offset;
         psn_t sn;
 
-        send_buffer = m_perf.send_buffer;
-        recv_buffer = m_perf.recv_buffer;
-        worker      = m_perf.ucp.worker;
-        ep          = m_perf.ucp.ep;
-        remote_addr = m_perf.ucp.remote_addr;
-        rkey        = m_perf.ucp.rkey;
-        sn          = INITIAL_SN;
+        send_buffer  = m_perf.send_buffer;
+        recv_buffer  = m_perf.recv_buffer;
+        worker       = m_perf.ucp.worker;
+        ep           = m_perf.ucp.ep;
+        remote_addr  = m_perf.ucp.remote_addr;
+        rkey         = m_perf.ucp.rkey;
+        sn           = INITIAL_SN;
+        buffer_index = 0;
 
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
@@ -1048,9 +1055,12 @@ out:
 
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, send_length, send_datatype,
-                    sn, remote_addr, rkey);
-                recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                offset = next_buffer_offset(&buffer_index, m_buffer_count,
+                                            length);
+                send(ep, UCS_PTR_BYTE_OFFSET(send_buffer, offset), send_length,
+                     send_datatype, sn, remote_addr + offset, rkey);
+                recv(worker, ep, UCS_PTR_BYTE_OFFSET(recv_buffer, offset),
+                     recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
@@ -1059,7 +1069,10 @@ out:
             wait_recv_window(m_max_outstanding);
         } else if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                offset = next_buffer_offset(&buffer_index, m_buffer_count,
+                                            length);
+                recv(worker, ep, UCS_PTR_BYTE_OFFSET(recv_buffer, offset),
+                     recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
@@ -1071,8 +1084,11 @@ out:
             /* Sender may only receive final ack */
             m_am_rx_length = 1;
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, send_length, send_datatype, sn,
-                     remote_addr, rkey, m_perf.current.iters == 0);
+                offset = next_buffer_offset(&buffer_index, m_buffer_count,
+                                            length);
+                send(ep, UCS_PTR_BYTE_OFFSET(send_buffer, offset), send_length,
+                     send_datatype, sn, remote_addr + offset, rkey,
+                     m_perf.current.iters == 0);
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
@@ -1107,6 +1123,19 @@ out:
     }
 
 private:
+    static size_t UCS_F_ALWAYS_INLINE
+    next_buffer_offset(size_t *buffer_index, size_t buffer_count,
+                       size_t length)
+    {
+        size_t offset = *buffer_index * length;
+
+        if (++(*buffer_index) == buffer_count) {
+            *buffer_index = 0;
+        }
+
+        return offset;
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream_data(ucp_ep_h ep, size_t length, ucp_datatype_t datatype)
     {
@@ -1223,6 +1252,7 @@ private:
     int                m_sends_outstanding;
     const int          m_max_outstanding;
     const bool         m_sgl_put;
+    const size_t       m_buffer_count;
     size_t             m_length;
     void               *m_send_sn_buffer;
     size_t             m_send_sn_length;
@@ -1233,6 +1263,7 @@ private:
      */
     void                *m_am_rx_buffer;
     size_t              m_am_rx_length;
+    size_t              m_am_rx_buffer_index;
     ucp_request_param_t m_am_rx_params;
     ucp_request_param_t m_send_params;
     ucp_request_param_t m_send_get_info_params;

@@ -180,21 +180,33 @@ static void ucp_perf_mem_buf_free(ucx_perf_exported_mem_t *exported_mem)
     }
 }
 
+static void ucp_perf_mem_alloc_hint(const ucx_perf_params_t *params,
+                                    const char *name, size_t length)
+{
+    size_t buffer_count = ucx_perf_get_buffer_count(params);
+
+    if (buffer_count > 1) {
+        ucs_error("failed to allocate %zu bytes of %s memory for %zu message "
+                  "buffers, \"-u <count>\" reduces the number of buffers",
+                  length, name, buffer_count);
+    }
+}
+
 ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
     ucx_perf_params_t *params               = &perf->params;
     ucp_memh_pack_params_t memh_pack_params = {};
     ucs_status_t status;
-    size_t buffer_size;
+    size_t buffer_size, alloc_size;
 
     buffer_size = ucx_perf_get_thread_buffer_size(params);
+    alloc_size  = (buffer_size * params->thread_count) + ONESIDED_SIGNAL_SIZE;
 
     /* Allocate send buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
-                                ONESIDED_SIGNAL_SIZE,
-                                perf->send_allocator, &perf->send_buffer,
-                                &perf->ucp.send_memh);
+    status = ucp_perf_mem_alloc(perf, alloc_size, perf->send_allocator,
+                                &perf->send_buffer, &perf->ucp.send_memh);
     if (status != UCS_OK) {
+        ucp_perf_mem_alloc_hint(params, "send", alloc_size);
         goto err;
     }
 
@@ -204,11 +216,10 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     perf->ucp.recv_exported_mem.address = NULL;
 
     /* Allocate receive buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
-                                ONESIDED_SIGNAL_SIZE,
-                                perf->recv_allocator, &perf->recv_buffer,
-                                &perf->ucp.recv_memh);
+    status = ucp_perf_mem_alloc(perf, alloc_size, perf->recv_allocator,
+                                &perf->recv_buffer, &perf->ucp.recv_memh);
     if (status != UCS_OK) {
+        ucp_perf_mem_alloc_hint(params, "receive", alloc_size);
         goto err_free_send_buffer;
     }
 
