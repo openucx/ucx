@@ -58,8 +58,14 @@ static void modify_config_for_valgrind(const char *name, const char *value)
 static void set_log_level()
 {
     const char *log_level = getenv("GTEST_LOG_LEVEL");
+    ucs_status_t status;
+
     if (log_level != NULL) {
-        ucs_global_opts_set_value("LOG_LEVEL", log_level);
+        status = ucs_global_opts_set_value("LOG_LEVEL", log_level);
+        if (status != UCS_OK) {
+            UCS_TEST_MESSAGE << "Failed to set GTEST_LOG_LEVEL=" << log_level
+                             << ": " << ucs_status_string(status);
+        }
     }
 }
 

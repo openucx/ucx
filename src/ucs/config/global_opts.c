@@ -231,6 +231,13 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
                             UCS_DISTANCE_KEYS_DESCRIPTION(bandwidth))},
 
+ {"NETLINK_ROUTE_CACHE_TTL", "1s",
+  "How long the route selected by the kernel to a destination address can be\n"
+  "reused for before it is looked up again. Set to inf to never look up\n"
+  "cached routes again, or to 0 to disable the route cache entirely.",
+  ucs_offsetof(ucs_global_opts_t, netlink_route_cache_ttl),
+  UCS_CONFIG_TYPE_TIME},
+
  {NULL}
 };
 

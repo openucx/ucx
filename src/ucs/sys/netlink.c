@@ -10,12 +10,14 @@
 
 #include "netlink.h"
 
+#include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
+#include <ucs/time/time.h>
 #include <ucs/type/status.h>
 #include <ucs/type/init_once.h>
 
@@ -74,6 +76,7 @@ typedef struct {
 
 typedef struct {
     ucs_status_t        status;
+    ucs_time_t          lookup_time;
     ucs_netlink_route_t route;
 } ucs_netlink_route_result_t;
 
@@ -135,6 +138,37 @@ static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
     return (nlh->nlmsg_type == NLMSG_DONE);
 }
 
+/* Check whether an error message replies to a route lookup, not a dump */
+static int ucs_netlink_is_route_lookup_error(const struct nlmsghdr *nlh)
+{
+    const struct nlmsgerr *nlerr = NLMSG_DATA(nlh);
+
+    return (nlh->nlmsg_type == NLMSG_ERROR) &&
+           (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(*nlerr))) &&
+           (nlerr->msg.nlmsg_type == RTM_GETROUTE) &&
+           !(nlerr->msg.nlmsg_flags & NLM_F_DUMP);
+}
+
+static ucs_status_t
+ucs_netlink_error_status(const struct nlmsghdr *nlh, int err)
+{
+    switch (err) {
+    case -ENETUNREACH:
+    case -EHOSTUNREACH:
+        /* Route lookups fail with these errors when the kernel has no route */
+        return UCS_ERR_UNREACHABLE;
+    case -EACCES:
+        /* Route lookups fail with this error on prohibit routes */
+        return ucs_netlink_is_route_lookup_error(nlh) ? UCS_ERR_UNREACHABLE :
+                                                        UCS_ERR_IO_ERROR;
+    case -ENOBUFS:
+    case -ENOMEM:
+        return UCS_ERR_NO_MEMORY;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
+}
+
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
     struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
@@ -144,12 +178,13 @@ static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
     if (status != UCS_OK) {
         ucs_error("failed to create netlink socket: %s",
                   ucs_status_string(status));
+        status = UCS_ERR_NO_RESOURCE;
         goto err;
     }
 
     if (bind(*fd_p, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         ucs_error("failed to bind netlink socket %d: %m", *fd_p);
-        status = UCS_ERR_IO_ERROR;
+        status = UCS_ERR_NO_RESOURCE;
         goto err_close_socket;
     }
 
@@ -204,10 +239,7 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
 err:
     ucs_log(err_log_level, "received error response from netlink err %d: %s",
             err, strerror(-err));
-    /* Route lookups fail with these errors when the kernel has no route */
-    return ((err == -ENETUNREACH) || (err == -EHOSTUNREACH)) ?
-                   UCS_ERR_UNREACHABLE :
-                   UCS_ERR_IO_ERROR;
+    return ucs_netlink_error_status(nlh, err);
 }
 
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
@@ -247,6 +279,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     if (status != UCS_OK) {
         ucs_error("failed to send netlink message on fd=%d: %s",
                   netlink_fd, ucs_status_string(status));
+        status = UCS_ERR_NO_RESOURCE;
         goto out;
     }
 
@@ -258,6 +291,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         if (status != UCS_OK) {
             ucs_error("failed to get netlink message size %d (%s)",
                     status, ucs_status_string(status));
+            status = UCS_ERR_NO_RESOURCE;
             goto out;
         }
 
@@ -274,6 +308,7 @@ ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
             ucs_error("failed to receive netlink message on fd=%d: %s",
                     netlink_fd, ucs_status_string(status));
             ucs_free(recv_msg);
+            status = UCS_ERR_NO_RESOURCE;
             goto out;
         }
 
@@ -789,8 +824,10 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 {
     ucs_netlink_route_result_t *result;
     ucs_netlink_route_key_t key;
+    ucs_netlink_route_t route;
     ucs_status_t status;
     size_t addr_size;
+    ucs_time_t now;
     khiter_t iter;
     int khret;
 
@@ -799,6 +836,10 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 
     if (!ucs_netlink_is_fib_match_supported()) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ucs_global_opts.netlink_route_cache_ttl == 0) {
+        return ucs_netlink_route_lookup(sa_remote, sa_local, if_index, route_p);
     }
 
     status = ucs_sockaddr_inet_addr_sizeof(sa_remote, &addr_size);
@@ -815,6 +856,23 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     key.family   = sa_remote->sa_family;
 
     pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+    now  = ucs_get_time();
+    iter = kh_get(ucs_netlink_route_cache, &ucs_netlink_route_cache, key);
+    if (iter != kh_end(&ucs_netlink_route_cache)) {
+        result = &kh_val(&ucs_netlink_route_cache, iter);
+        if (ucs_time_to_sec(now - result->lookup_time) <
+            ucs_global_opts.netlink_route_cache_ttl) {
+            goto out_result;
+        }
+    }
+
+    /* The lock is not held while waiting for the kernel, so that lookups of
+     * other threads are not delayed. Threads which miss the same destination
+     * at the same time each look it up. */
+    pthread_mutex_unlock(&ucs_netlink_route_cache_lock);
+    status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index, &route);
+    pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+
     iter = kh_put(ucs_netlink_route_cache, &ucs_netlink_route_cache, key,
                   &khret);
     if (khret == UCS_KH_PUT_FAILED) {
@@ -824,17 +882,33 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     }
 
     result = &kh_val(&ucs_netlink_route_cache, iter);
-    if (khret != UCS_KH_PUT_KEY_PRESENT) {
-        result->status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
-                                                  &result->route);
+    if ((khret == UCS_KH_PUT_KEY_PRESENT) && (result->lookup_time > now)) {
+        /* Another thread updated the entry after a later lookup meanwhile */
+        goto out_result;
     }
 
+    if ((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE)) {
+        if (status == UCS_OK) {
+            result->route = route;
+        }
+
+        result->status      = status;
+        result->lookup_time = now;
+    } else if ((khret != UCS_KH_PUT_KEY_PRESENT) ||
+               ((status != UCS_ERR_NO_RESOURCE) &&
+                (status != UCS_ERR_NO_MEMORY))) {
+        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
+        goto out_unlock;
+    } else {
+        /* No answer from the kernel: keep the previous result until the next
+         * TTL, so that the failure is not logged at every call */
+        result->lookup_time = now;
+    }
+
+out_result:
     status = result->status;
     if (status == UCS_OK) {
         *route_p = result->route;
-    } else if (status != UCS_ERR_UNREACHABLE) {
-        /* Other errors can be transient */
-        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
     }
 
 out_unlock:
