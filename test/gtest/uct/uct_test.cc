@@ -1008,10 +1008,7 @@ drop_errors_logger(const char *file, unsigned line, const char *function,
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    /* Do not save the message, wrap_errors_logger() aborts after 1000 saved
-     * errors */
-    ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
-                            comp_conf, message, ap);
+    /* Drop the message, wrap_errors_logger() aborts after 1000 saved errors */
     return UCS_LOG_FUNC_RC_STOP;
 }
 
