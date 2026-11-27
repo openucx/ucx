@@ -89,6 +89,41 @@ cover incidental implementation details without a plausible regression risk.
 
 ---
 
+## Copyright Headers
+
+UCX CI does not check copyright headers, so check them in each review. Check
+source, test, script, binding, and build files. Check documentation,
+configuration, and license and notice files only if they already have a
+copyright header. A copyright line can use `(c)` or `(C)`. A copyright issue
+in a changed file is an issue of the PR, also when the diff does not show the
+copyright line.
+
+- **Current year** — 2026. Do not report a later year
+- **Changed files** — the NVIDIA copyright line must include the current
+  year. Extend the end year, for example `YYYY` or `YYYY-<old>` becomes
+  `YYYY-<current>`
+- **New files** — must start with an NVIDIA copyright header in the format of
+  the sibling files, with only the current year, not a range
+- **Missing NVIDIA line** — if a changed file has only copyright lines of
+  other organizations, ask to add an NVIDIA line with the current year
+- **No copyright line** — if an existing source, test, script, binding, or
+  build file has no copyright line, ask with `minor:` whether to add an NVIDIA
+  header. Add a suggestion with the header
+- **Copyright-only changes** — ask to revert a file whose only change is its
+  copyright line
+- **Other organizations** — skip these checks in a file where the PR adds or
+  updates a copyright line of another organization
+
+Report each fix as one comment on its copyright line. If the file has no
+copyright line, comment on line 1, and keep that line in the suggestion. Add a
+`suggestion` block with the complete fixed lines, including the comment prefix
+such as ` * ` or `# `. Give the line number of the copyright line itself, also
+when the diff does not show it. Use `search_code` on the file to get the
+number. Never attach the comment to another changed line, because the
+suggestion replaces that line.
+
+---
+
 ## Review Checklist
 
 Apply the `AGENTS.md` discovery rule from the root guide for changed paths, and
@@ -101,7 +136,7 @@ Review by risk, in order:
 1. API/ABI and wire compatibility.
 2. Correctness, error handling, cleanup, and resource lifetime.
 3. Concurrency and hot-path performance.
-4. Test expectations and build metadata for changed files.
+4. Test expectations, build metadata, and copyright headers for changed files.
 5. Documentation and style.
 
 Focused checks:
@@ -169,6 +204,9 @@ Do not use abbreviations such as "pls", "lgtm", "imo", "idk", etc.
 
 **Actionability:** Omit observations that identify neither a concrete impact
 nor a specific question or requested action.
+
+**Review guide:** do not name `REVIEW.md`, the review skill, or the review
+instructions in a comment. State only the requirement itself.
 
 **Comment order:** For change requests, start with the requested action, then
 briefly explain why it is needed when the reason is not obvious. For uncertainty
