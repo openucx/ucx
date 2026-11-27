@@ -277,6 +277,16 @@ typedef enum {
 
 
 /**
+ * Active-message lane mode.
+ */
+typedef enum {
+    UCP_AM_LANE_MODE_AUTO,      /* Separate based on transport capabilities */
+    UCP_AM_LANE_MODE_DEDICATED, /* Always separate from high-bandwidth RMA */
+    UCP_AM_LANE_MODE_LAST
+} ucp_am_lane_mode_t;
+
+
+/**
  * Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints.
  */
 typedef enum {

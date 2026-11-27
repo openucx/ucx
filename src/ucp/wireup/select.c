@@ -1821,11 +1821,13 @@ static int
 ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                             const ucp_wireup_select_bw_info_t *bw_info,
                             ucp_tl_bitmap_t tl_bitmap,
+                            ucp_lane_index_t excl_lane,
                             ucp_wireup_select_context_t *select_ctx)
 {
     ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
     const uint64_t local_dev_bitmap           = bw_info->local_dev_bitmap;
     const uint64_t remote_dev_bitmap          = bw_info->remote_dev_bitmap;
+    const ucp_wireup_lane_desc_t *excl_desc;
     ucp_wireup_select_info_t *sinfo;
     int found_lane;
     ucs_status_t status;
@@ -1845,6 +1847,18 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
             if (status != UCS_OK) {
                 ucs_array_pop_back(&sinfo_array);
                 continue;
+            }
+
+            if (excl_lane == UCP_NULL_LANE) {
+                continue;
+            }
+
+            /* Use the extra path of the excluded lane, as the pairwise
+             * selection does, so that the lane is not merged into it */
+            excl_desc = &select_ctx->lane_descs[excl_lane];
+            if ((sinfo->rsc_index == excl_desc->rsc_index) &&
+                (sinfo->addr_index == excl_desc->addr_index)) {
+                sinfo->path_index = excl_desc->path_index + 1;
             }
         }
     }
@@ -2097,6 +2111,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                 found_lane |= ucp_wireup_add_bw_lanes_a2a(select_params,
                                                           bw_info,
                                                           mem_type_tl_bitmap,
+                                                          excl_lane,
                                                           select_ctx);
             }
         }
@@ -2356,10 +2371,11 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
     }
 
-    /* Find if an AM lane needs to be separated from RMA operations. More lanes
-     * can cause fence calls to last longer at scale. Applications making heavy
-     * use of fence operations usually don't request the TAG feature, hence the
-     * check.
+    /* Find if an AM lane needs to be separated from high-bandwidth RMA
+     * operations. More lanes can cause fence calls to last longer at scale.
+     * Applications making heavy use of fence operations usually don't request
+     * the TAG feature, hence the check. The dedicated mode must be set on all
+     * peers, since both peers must select the same lanes.
      */
     if ((select_params->address->dst_version >=
          UCP_MIN_DST_VERSION_WIREUP_SEPARATE_AM_LANE) &&
@@ -2372,7 +2388,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
             wiface = ucp_worker_iface(ep->worker, lane_desc->rsc_index);
             flags  = ucp_wireup_iface_get_perf_attr_flags(wiface);
-            if (!(flags & UCT_PERF_ATTR_FLAGS_TX_RX_SHARED)) {
+            if ((context->config.ext.am_lane_mode !=
+                 UCP_AM_LANE_MODE_DEDICATED) &&
+                !(flags & UCT_PERF_ATTR_FLAGS_TX_RX_SHARED)) {
                 continue;
             }
 

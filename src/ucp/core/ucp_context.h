@@ -179,6 +179,8 @@ typedef struct ucp_context_config {
     ucp_max_rails_t                        max_rndv_rails;
     /** RMA multi-lane limits */
     ucp_max_rails_t                        max_rma_rails;
+    /** Active-message lane mode */
+    ucp_am_lane_mode_t                     am_lane_mode;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
