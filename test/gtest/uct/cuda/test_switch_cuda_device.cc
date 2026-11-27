@@ -388,6 +388,35 @@ protected:
         EXPECT_EQ(exp_gdr_capable, !!(mem_flags & UCS_MEM_FLAG_GDR_CAPABLE));
     }
 
+    void check_registrable_iff_exportable(void *address, size_t size)
+    {
+        uct_md_mem_attr_v2_t attr = {};
+        ucs_mem_flags_t mem_flags;
+
+        if (!(md_attr().dmabuf_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+            UCS_TEST_SKIP_R("dmabuf is not supported");
+        }
+
+        /* Without a requested fd, registrability is detected on its own */
+        mem_flags = query_mem_flags(address, size);
+
+        attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD;
+        ASSERT_UCS_OK(uct_md_mem_query_v2(md(), address, size, &attr));
+        EXPECT_EQ(attr.dmabuf_fd != UCT_DMABUF_FD_INVALID,
+                  !!(mem_flags & UCS_MEM_FLAG_REGISTRABLE));
+        if (attr.dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+            close(attr.dmabuf_fd);
+        }
+    }
+
+    template<class T> void test_registrable_iff_exportable()
+    {
+        constexpr size_t size = 4 * UCS_MBYTE;
+        T buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+        check_registrable_iff_exportable(buffer.ptr(), size);
+    }
+
     /* Stream-ordered memory from the default pool, as allocated by
      * 'cudaMallocAsync' */
     void test_mem_pool_not_gdr_capable()
@@ -506,8 +535,10 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     EXPECT_UCS_OK(free_status);
 }
 
-UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
-           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
+                     no_current_context_user_mem_registrable,
+                     !check_registrable(UCS_MEMORY_TYPE_CUDA),
+                     "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     CUdeviceptr dptr      = 0;
@@ -552,14 +583,108 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_gpu_pref_loc,
     test_async_managed_mem_pool_registrable();
 }
 
-/* Plain device memory is allocated as GPUDirect RDMA capable */
+/* Plain device memory is allocated as GPUDirect RDMA capable, except under an
+ * MPS MLOPart device, where the driver allocates none. Assert what the driver
+ * itself reports, so that both cases are covered. */
 UCS_TEST_P(test_mem_alloc_device, legacy_mem_gdr_capable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+    if (mem_buffer::cuda_mem_is_gdr_capable()) {
+        query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+    } else {
+        /* Registrability is not asserted under MLOPart, as it dependson
+         * whether the platform can export a dma_buf fd for such memory */
+        query_gdr_capable(buffer.ptr(), size, 0);
+    }
 }
+
+/* Registrability, which is detected without exporting when its outcome is
+ * known, must match the dmabuf export it stands for, on a plain device as well
+ * as under an MPS MLOPart device */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_registrable_iff_exportable<mem_buffer>();
+}
+
+UCS_TEST_P(test_mem_alloc_device, mem_pool_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
+    }
+
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
+                      mem_buffer::alloc_mode::ASYNC);
+
+    check_registrable_iff_exportable(buffer.ptr(), size);
+}
+
+#if CUDA_VERSION >= 11020
+UCS_TEST_P(test_mem_alloc_device,
+           exportable_mem_pool_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_exportable_mem_pool_buffer buffer(size);
+
+    check_registrable_iff_exportable(buffer.ptr(), size);
+}
+
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN && \
+    HAVE_DECL_CU_POINTER_ATTRIBUTE_LOCALITY_DOMAIN_ORDINAL
+UCS_TEST_P(test_mem_alloc_device,
+           localized_mem_pool_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_localized_mem_pool_buffer buffer(size);
+
+    check_registrable_iff_exportable(buffer.ptr(), size);
+}
+#endif
+#endif
+
+UCS_TEST_P(test_mem_alloc_device, vmm_mem_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_registrable_iff_exportable<cuda_vmm_mem_buffer>();
+}
+
+UCS_TEST_P(test_mem_alloc_device, gdr_vmm_mem_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_registrable_iff_exportable<cuda_gdr_vmm_mem_buffer>();
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 2);
+
+    check_registrable_iff_exportable(buffer.ptr(), buffer.size());
+}
+
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+UCS_TEST_P(test_mem_alloc_device, localized_mem_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_registrable_iff_exportable<cuda_localized_mem_buffer>();
+}
+
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
+UCS_TEST_P(test_mem_alloc_device,
+           localized_pcie_mem_registrable_iff_exportable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_registrable_iff_exportable<cuda_localized_pcie_mem_buffer>();
+}
+#endif
+#endif
 
 /* VMM device memory is GDR capable only when requested at allocation */
 UCS_TEST_P(test_mem_alloc_device, vmm_mem_not_gdr_capable)
@@ -589,12 +714,19 @@ UCS_TEST_P(test_mem_alloc_device, managed_mem_not_gdr_capable)
 }
 
 #if CUDA_VERSION >= 11020
-/* Stream-ordered memory is not GDR capable, even when an exportable pool makes
- * it registrable. This is the combination gdr_copy has to reject. */
-UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_gdr_capable,
-           "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=try")
+/* Stream-ordered memory is not GDR capable, even though it is registrable. This
+ * is the combination gdr_copy has to reject. */
+UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
+                     exportable_mem_pool_not_gdr_capable,
+                     !check_registrable(UCS_MEMORY_TYPE_CUDA),
+                     "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=try")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
+
+    if (!check_dmabuf_export(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("dmabuf export is not supported");
+    }
+
     cuda_exportable_mem_pool_buffer buffer(size);
 
     query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
@@ -616,6 +748,59 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_gdr_capable,
     test_mem_pool_not_gdr_capable();
 }
 
+/* Without dmabuf the NIC pins the pages behind the virtual address, which the
+ * driver only allows for GPUDirect RDMA capable memory. Stream-ordered memory
+ * is typed as cuda to keep it out of the managed flow, which is
+ * non-registrable on its own. */
+UCS_TEST_P(test_mem_alloc_device, mem_pool_not_registrable_without_dmabuf,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size         = 4 * UCS_MBYTE;
+    uct_md_mem_attr_v2_t mem_attr = {};
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
+    }
+
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
+                      mem_buffer::alloc_mode::ASYNC);
+
+    query_mem_attr(buffer.ptr(), size, &mem_attr);
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_FALSE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+}
+
+/* Plain device memory remains registrable, unless allocated under an MPS
+ * MLOPart device, where the driver allocates none as GDR capable */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size    = 4 * UCS_MBYTE;
+    const int is_gdr_capable = mem_buffer::cuda_mem_is_gdr_capable();
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, is_gdr_capable,
+                                  is_gdr_capable);
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_mem_not_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 0, 0);
+}
+
+UCS_TEST_P(test_mem_alloc_device, gdr_vmm_mem_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_gdr_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+}
+
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
 /* Localized memory cannot be allocated as GPUDirect RDMA capable.
  * Registrability is not asserted, as it depends on whether the platform can
@@ -628,6 +813,17 @@ UCS_TEST_P(test_mem_alloc_device, localized_mem_not_gdr_capable,
 
     query_gdr_capable(buffer.ptr(), size, 0);
 }
+
+#ifdef CU_MEM_CREATE_USAGE_GPU_DIRECT_RDMA_OVER_PCIE
+/* Localized memory allocated for GPUDirect RDMA over PCIe is GDR capable */
+UCS_TEST_P(test_mem_alloc_device, localized_pcie_mem_gdr_capable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_localized_pcie_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_gdr_capable(buffer.ptr(), size, 1);
+}
+#endif
 #endif
 
 UCS_TEST_P(test_mem_alloc_device,
@@ -637,10 +833,18 @@ UCS_TEST_P(test_mem_alloc_device,
     test_async_managed_mem_pool_registrable();
 }
 
-UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
-           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
+                     no_current_context_vmm_mem_registrable,
+                     !check_registrable(UCS_MEMORY_TYPE_CUDA),
+                     "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
+
+    /* VMM memory is not GDR capable, so only dmabuf makes it registrable */
+    if (!check_dmabuf_export(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("dmabuf export is not supported");
+    }
+
     cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_no_current_context(buffer.ptr(), size);
@@ -684,13 +888,16 @@ UCS_TEST_P(test_mem_alloc_device, vmm_locality_domain_mem_type)
     };
 
     ucs_sys_device_t sys_dev0, sys_dev1;
-    if (!check_domain(0, sys_dev0)) {
-        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
+
+    /* Domain 1 is present only on a device with several locality domains, so
+     * its absence is what tells a single-domain device apart */
+    if (!check_domain(1, sys_dev1)) {
+        UCS_TEST_SKIP_R("single locality-domain device");
     }
 
-    if (!check_domain(1, sys_dev1)) {
-        ADD_FAILURE() << "locality domain 1 allocation failed even though "
-                         "domain 0 succeeded";
+    if (!check_domain(0, sys_dev0)) {
+        ADD_FAILURE() << "locality domain 0 allocation failed even though "
+                         "domain 1 succeeded";
         return;
     }
 
