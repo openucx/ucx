@@ -120,57 +120,59 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
                     _index))
 
 
-UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
-        const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, uint64_t &remote_address, unsigned lane,
+UCS_F_DEVICE ucs_status_t ucp_device_prepare_remote(
+        const ucp_device_remote_mem_list_h remote_mem_list_h,
+        unsigned remote_mem_list_index, uint64_t &remote_address, unsigned lane,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
         const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
 {
     ucs_status_t status;
 
-    status = ucp_device_check_params(dst_mem_list_h, dst_mem_list_index);
+    status = ucp_device_check_params(remote_mem_list_h, remote_mem_list_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    const auto dst_mem_element = UCP_DEVICE_GET_ELEM(dst_mem_list_h,
-                                                     dst_mem_list_index);
-    remote_address             = dst_mem_element->addr;
-    device_ep                  = dst_mem_element->tl[lane].ep;
-    uct_elem                   = &dst_mem_element->tl[lane].uct;
+    const auto remote_mem_element = UCP_DEVICE_GET_ELEM(remote_mem_list_h,
+                                                        remote_mem_list_index);
+    remote_address                = remote_mem_element->addr;
+    device_ep                     = remote_mem_element->tl[lane].ep;
+    uct_elem                      = &remote_mem_element->tl[lane].uct;
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
 }
 
 
-UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
-        const ucp_device_local_mem_list_h src_mem_list_h,
-        unsigned src_mem_list_index,
-        const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, const void *&address,
-        uint64_t &remote_address, unsigned lane, ucp_device_request_t *req,
-        uct_device_ep_t *&device_ep, const uct_device_mem_elem_t *&src_uct_elem,
-        const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
+UCS_F_DEVICE ucs_status_t
+ucp_device_prepare_rma(const ucp_device_local_mem_list_h local_mem_list_h,
+                       unsigned local_mem_list_index,
+                       const ucp_device_remote_mem_list_h remote_mem_list_h,
+                       unsigned remote_mem_list_index, void *&local_address,
+                       uint64_t &remote_address, unsigned lane,
+                       ucp_device_request_t *req, uct_device_ep_t *&device_ep,
+                       const uct_device_mem_elem_t *&local_uct_elem,
+                       const uct_device_mem_elem_t *&remote_uct_elem,
+                       uct_device_completion_t *&comp)
 {
     ucs_status_t status;
 
-    status = ucp_device_check_params(src_mem_list_h, src_mem_list_index);
+    status = ucp_device_check_params(local_mem_list_h, local_mem_list_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
-                                            remote_address, lane, req,
-                                            device_ep, uct_elem, comp);
+    status = ucp_device_prepare_remote(remote_mem_list_h, remote_mem_list_index,
+                                       remote_address, lane, req, device_ep,
+                                       remote_uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
-                                                  src_mem_list_index);
-    src_uct_elem            = src_mem_elem->tl + lane;
-    address                 = src_mem_elem->addr;
+    const auto local_mem_elem = UCP_DEVICE_GET_ELEM(local_mem_list_h,
+                                                    local_mem_list_index);
+    local_uct_elem            = local_mem_elem->tl + lane;
+    local_address             = local_mem_elem->addr;
 
     return UCS_OK;
 }
@@ -223,7 +225,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
 {
     unsigned uct_channel_id;
     unsigned lane;
-    const void *address;
+    void *address;
     const uct_device_mem_elem_t *uct_elem;
     const uct_device_mem_elem_t *src_uct_elem;
     uint64_t remote_address;
@@ -233,10 +235,10 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
 
     UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id, lane, uct_channel_id);
 
-    status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
-                                     dst_mem_list_h, dst_mem_list_index,
-                                     address, remote_address, lane, req,
-                                     device_ep, src_uct_elem, uct_elem, comp);
+    status = ucp_device_prepare_rma(src_mem_list_h, src_mem_list_index,
+                                    dst_mem_list_h, dst_mem_list_index, address,
+                                    remote_address, lane, req, device_ep,
+                                    src_uct_elem, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
@@ -245,6 +247,86 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                                     src_uct_elem, uct_elem,
                                     UCS_PTR_BYTE_OFFSET(address, src_offset),
                                     remote_address + dst_offset, length,
+                                    uct_channel_id, flags, comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Posts one memory get operation.
+ *
+ * This device routine posts one get operation using descriptor list handles,
+ * reading remote memory into local memory. The @a dst_mem_list_index and
+ * @a src_mem_list_index are used to point at the respective mem_list entry to
+ * be used for the memory transfer. The @a dst_offset and @a src_offset
+ * parameters specify byte offsets within the selected memory list entry. The
+ * @a length, @a dst_offset and @a src_offset parameters must be valid for the
+ * used @a mem_list entry.
+ *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_device_progress_req. The data is available in the
+ * local memory only after the request completes, or after a successful
+ * @ref ucp_device_flush on the same channel.
+ * The routine returns only after the message has been posted or an error has
+ * occurred.
+ *
+ * This routine can be called repeatedly with the same handles and different
+ * offsets and length. The flags parameter can be used to modify the behavior
+ * of the routine with bit from @ref ucp_device_flags_t.
+ *
+ * @tparam      level              Level of cooperation of the transfer.
+ * @param [in]  dst_mem_list_h     Local memory descriptor list handle to use.
+ * @param [in]  dst_mem_list_index Index in descriptor list pointing to the
+ *                                 local memory.
+ * @param [in]  dst_offset         Local offset to receive data to.
+ * @param [in]  src_mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  src_mem_list_index Index in descriptor list pointing to the
+ *                                 remote memory.
+ * @param [in]  src_offset         Remote offset to read data from.
+ * @param [in]  length             Length in bytes of the data to read.
+ * @param [in]  channel_id         Channel ID to use for the transfer.
+ * @param [in]  flags              Flags usable to modify the function behavior.
+ * @param [out] req                Request populated by the call.
+ *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion. If @a req is NULL, the caller
+ *                              must call @ref ucp_device_flush on the same
+ *                              channel before accessing the destination data.
+ * @return UCS_OK             - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t
+ucp_device_get(ucp_device_local_mem_list_h dst_mem_list_h,
+               unsigned dst_mem_list_index, size_t dst_offset,
+               ucp_device_remote_mem_list_h src_mem_list_h,
+               unsigned src_mem_list_index, size_t src_offset, size_t length,
+               unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+{
+    unsigned uct_channel_id;
+    unsigned lane;
+    void *address;
+    const uct_device_mem_elem_t *uct_elem;
+    const uct_device_mem_elem_t *dst_uct_elem;
+    uint64_t remote_address;
+    uct_device_completion_t *comp;
+    uct_device_ep_t *device_ep;
+
+    UCP_DEVICE_GET_LANE(src_mem_list_h, channel_id, lane, uct_channel_id);
+
+    const ucs_status_t status = ucp_device_prepare_rma(
+            dst_mem_list_h, dst_mem_list_index, src_mem_list_h,
+            src_mem_list_index, address, remote_address, lane, req, device_ep,
+            dst_uct_elem, uct_elem, comp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_get, device_ep, req,
+                                    dst_uct_elem, uct_elem,
+                                    UCS_PTR_BYTE_OFFSET(address, dst_offset),
+                                    remote_address + src_offset, length,
                                     uct_channel_id, flags, comp);
 }
 
@@ -297,9 +379,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
 
     UCP_DEVICE_GET_LANE(mem_list_h, channel_id, lane, uct_channel_id);
 
-    status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
-                                            remote_address, lane, req,
-                                            device_ep, uct_elem, comp);
+    status = ucp_device_prepare_remote(mem_list_h, mem_list_index,
+                                       remote_address, lane, req, device_ep,
+                                       uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }

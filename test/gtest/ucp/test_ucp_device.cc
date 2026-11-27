@@ -61,6 +61,8 @@ protected:
 
         ucp_device_remote_mem_list_h remote_handle() const;
 
+        void src_pattern_check(unsigned index, uint64_t seed) const;
+
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
@@ -269,6 +271,12 @@ uint64_t test_ucp_device::mem_list::dst_counter_read(unsigned index,
                                                      size_t remote_offset) const
 {
     return test_ucp_device::counter_read(*m_dst[index], remote_offset);
+}
+
+void test_ucp_device::mem_list::src_pattern_check(unsigned index,
+                                                  uint64_t seed) const
+{
+    m_src[index]->pattern_check(seed, m_src[index]->size());
 }
 
 void test_ucp_device::mem_list::dst_pattern_check(unsigned index,
@@ -771,6 +779,26 @@ UCS_TEST_P(test_ucp_device_xfer, put)
     list.dst_pattern_check(mem_list_index - 1, mem_list::SEED_DST);
     list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, get)
+{
+    static constexpr size_t size = 32 * UCS_KBYTE;
+    mem_list list(*this, size, 6, UCS_MEMORY_TYPE_CUDA,
+                  mem_list::MODE_WITH_GAP_ELEMENT);
+
+    // Perform the transfer
+    static constexpr unsigned mem_list_index = 3;
+    auto params = init_params_put(list, mem_list_index, size,
+                                  TEST_UCP_DEVICE_KERNEL_GET);
+    params.put.remote_mem_list_index = 4;
+    launch_kernel(params);
+
+    // Check proper index received data, and remote data is intact
+    list.src_pattern_check(mem_list_index - 1, mem_list::SEED_SRC);
+    list.src_pattern_check(mem_list_index, mem_list::SEED_DST);
+    list.src_pattern_check(mem_list_index + 1, mem_list::SEED_SRC);
+    list.dst_pattern_check(mem_list_index, mem_list::SEED_DST);
 }
 
 /* TODO: Enable these tests in CI */

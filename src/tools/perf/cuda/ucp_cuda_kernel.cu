@@ -257,6 +257,10 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                      params.remote_mem_list, 0, 0,
                                      params.length + ONESIDED_SIGNAL_SIZE,
                                      channel_id, flags, req);
+    case UCX_PERF_CMD_GET:
+        return ucp_device_get<level>(params.local_mem_list, 0, 0,
+                                     params.remote_mem_list, 0, 0,
+                                     params.length, channel_id, flags, req);
     default:
         return UCS_ERR_UNSUPPORTED;
     }
@@ -471,8 +475,14 @@ public:
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
-            ucp_perf_cuda_wait_bw_kernel<<<1, 1>>>(
-                    *m_gpu_ctx, params_handler.get_params());
+            if (m_perf.params.command == UCX_PERF_CMD_PUT) {
+                ucp_perf_cuda_wait_bw_kernel<<<1, 1>>>(
+                        *m_gpu_ctx, params_handler.get_params());
+            } else {
+                /* Get does not write to the passive side, which only waits
+                 * for the closing barrier */
+                m_cpu_ctx->status = UCS_OK;
+            }
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);

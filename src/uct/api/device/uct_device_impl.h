@@ -132,6 +132,66 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
 
 /**
  * @ingroup UCT_DEVICE
+ * @brief Posts one memory get operation.
+ *
+ * This device routine reads a single memory block from the remote address
+ * @a remote_address into the local address @a address using the device
+ * endpoint @a device_ep. The local memory element @a dst_mem_elem and remote
+ * memory element @a src_mem_elem must be valid and contain the local and
+ * remote memory regions to be transferred.
+ *
+ * User can pass @a comp to track execution and completion status. The data is
+ * available at @a address only after the operation completes.
+ * The @a flags parameter can be used to modify the behavior of the routine.
+ *
+ * @param [in]  device_ep       Device endpoint to be used for the operation.
+ * @param [in]  dst_mem_elem    Local memory element representing the memory
+ *                              to receive the data.
+ * @param [in]  src_mem_elem    Remote memory element representing the memory
+ *                              to read from.
+ * @param [in]  address         Local virtual address to receive data to.
+ * @param [in]  remote_address  Remote virtual address to read data from.
+ * @param [in]  length          Length in bytes of the data to read.
+ * @param [in]  channel_id      Channel ID to use for the transfer.
+ * @param [in]  flags           Flags to modify the function behavior.
+ * @param [out] comp            Completion object to track the progress of
+ *                              operation.
+ *
+ * @return UCS_INPROGRESS     - Operation successfully posted, use @ref
+ *                              uct_device_ep_progress and @ref
+ *                              uct_device_ep_check_completion to
+ *                              check for completion.
+ * @return UCS_OK             - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_device_ep_get(
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *dst_mem_elem,
+        const uct_device_mem_elem_t *src_mem_elem, void *address,
+        uint64_t remote_address, size_t length, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+#if UCT_RC_MLX5_GDA_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        return uct_rc_mlx5_gda_ep_get<level>(device_ep, dst_mem_elem,
+                                             src_mem_elem, address,
+                                             remote_address, length, channel_id,
+                                             flags, comp);
+    }
+#endif
+#if UCT_CUDA_IPC_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_get<level>(device_ep, src_mem_elem, address,
+                                          remote_address, length, flags, comp);
+    }
+#endif
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
+
+/**
+ * @ingroup UCT_DEVICE
  * @brief Posts one atomic add operation.
  *
  * This device routine increments a single memory value by @a inc_value using the
