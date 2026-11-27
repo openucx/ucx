@@ -19,6 +19,9 @@ jobs:
         name: MLNX
         demands: ${{ parameters.demands }}
       displayName: ${{ parameters.name }} prebuild
+      ${{ if eq(parameters.name, 'gpu') }}:
+        variables:
+          UCX_CI_GPU_JOB: yes
       timeoutInMinutes: 120
       container: ${{ parameters.container }}
       workspace:
@@ -57,6 +60,9 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     displayName: ${{ parameters.name }} on worker
+    ${{ if eq(parameters.name, 'gpu') }}:
+      variables:
+        UCX_CI_GPU_JOB: yes
     timeoutInMinutes: 360
     strategy:
       matrix:
