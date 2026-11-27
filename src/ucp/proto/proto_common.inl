@@ -93,14 +93,17 @@ ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
-/* Restart a failed request on another lane if the endpoint is in failover mode
- * and still has a chance to recover, otherwise complete it with 'status'. */
+/* Software failover restarts a failed request on another lane. Token failover
+ * reaches this completion only after the RX token purge: a delivered operation
+ * completes with UCS_OK, and a repost completion finishes an operation the
+ * peer did not accept. A failed endpoint completes the request either way. */
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_restart_or_complete(ucp_request_t *req, ucs_status_t status,
                                       ucp_request_callback_t complete_cb)
 {
     if (ucs_unlikely(status != UCS_OK) &&
         ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        !ucp_context_is_token_failover(req->send.ep->worker->context) &&
         !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_proto_request_restart(req);
         return;

@@ -107,7 +107,9 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
-                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER |
+                               ucp_proto_rma_offload_resume_flags(
+                                       init_params),
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_rails           = ucp_max_rails_make(
@@ -137,6 +139,11 @@ static void ucp_proto_get_offload_reset(ucp_request_t *req)
 
 static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
 {
+    if (ucp_proto_rma_offload_resume(req)) {
+        ucp_proto_rma_offload_resume_reset(req);
+        return UCS_OK;
+    }
+
     ucp_proto_get_offload_reset(req);
     /* GET is idempotent, so a restarted request replays from the beginning
      * instead of resuming from an offset which counts posted rather than
@@ -229,7 +236,9 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
-                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER |
+                               ucp_proto_rma_offload_resume_flags(
+                                       init_params),
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -253,6 +262,11 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 
 static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
 {
+    if (ucp_proto_rma_offload_resume(req)) {
+        ucp_proto_rma_offload_resume_reset(req);
+        return UCS_OK;
+    }
+
     ucp_proto_get_offload_reset(req);
     return ucp_proto_offload_zcopy_reset(req);
 }

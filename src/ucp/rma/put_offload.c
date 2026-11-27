@@ -364,11 +364,24 @@ ucp_proto_put_offload_zcopy_probe_param(
     ucp_proto_multi_probe(&params);
 }
 
+static ucs_status_t ucp_proto_put_offload_zcopy_reset(ucp_request_t *req)
+{
+    if (ucp_proto_rma_offload_resume(req)) {
+        ucp_proto_rma_offload_resume_reset(req);
+        return UCS_OK;
+    }
+
+    return ucp_proto_offload_zcopy_reset(req);
+}
+
 static void
 ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_put_offload_zcopy_probe_param(
-            init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0);
+            init_params, 30,
+            UCP_PROTO_COMMON_INIT_FLAG_FAILOVER |
+                    ucp_proto_rma_offload_resume_flags(init_params),
+            0);
 }
 
 ucp_proto_t ucp_put_offload_zcopy_proto = {
@@ -381,7 +394,7 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_offload_zcopy_progress},
     .abort          = ucp_proto_request_zcopy_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_offload_zcopy_reset
 };
 
 static void

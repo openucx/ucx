@@ -16,6 +16,11 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+extern ucp_proto_t ucp_get_offload_bcopy_proto;
+extern ucp_proto_t ucp_get_offload_zcopy_proto;
+extern ucp_proto_t ucp_put_offload_zcopy_proto;
+
+
 ucp_proto_common_init_params_t
 ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
 {
@@ -988,4 +993,45 @@ ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req)
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
+}
+
+int ucp_proto_rma_offload_resume(const ucp_request_t *req)
+{
+    const ucp_proto_t *proto = (req->send.proto_config == NULL) ? NULL :
+                               req->send.proto_config->proto;
+
+    /* A zero count means this completion already ran. It released the
+     * registration, and a fragment that failed is behind the iterator, so the
+     * request restarts from the beginning. */
+    if ((proto == NULL) ||
+        !(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) ||
+        !ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        !ucp_context_is_token_failover(req->send.ep->worker->context) ||
+        ucp_datatype_iter_is_begin(&req->send.state.dt_iter) ||
+        (req->send.state.uct_comp.count == 0)) {
+        return 0;
+    }
+
+    return (proto == &ucp_put_offload_zcopy_proto) ||
+           (proto == &ucp_get_offload_bcopy_proto) ||
+           (proto == &ucp_get_offload_zcopy_proto);
+}
+
+unsigned ucp_proto_rma_offload_resume_flags(
+        const ucp_proto_init_params_t *init_params)
+{
+    if ((init_params->ep_config_key->err_mode !=
+         UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        !ucp_context_is_token_failover(init_params->worker->context)) {
+        return 0;
+    }
+
+    return UCP_PROTO_COMMON_INIT_FLAG_RESUME;
+}
+
+void ucp_proto_rma_offload_resume_reset(ucp_request_t *req)
+{
+    /* The posted fragments still hold this completion. The tail starts from
+     * the first lane of the protocol selected for the remaining offset. */
+    req->send.multi_lane_idx = 0;
 }

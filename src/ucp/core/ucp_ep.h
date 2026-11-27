@@ -1240,6 +1240,15 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
 
 
 /**
+ * Queue a token-failover repost until a live lane can send it.
+ *
+ * The repost request keeps the origin completion. Resume sends it once a lane
+ * is connected. Recovery teardown completes it if no lane appears.
+ */
+void ucp_ep_tf_repost_defer(ucp_request_t *req);
+
+
+/**
  * Notify recovery progress that a lanes-address reply was received.
  */
 void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);

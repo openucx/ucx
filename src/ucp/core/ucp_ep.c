@@ -3139,17 +3139,7 @@ ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
     }
 }
 
-/* Nonzero if operations of a partly sent request are in flight. On a failover
- * endpoint, the protocols of several fragments count them in the completion of
- * the request, and the protocols of one fragment are never partly sent. */
-static int ucp_ep_tf_req_in_flight(const ucp_request_t *req)
-{
-    return ucs_test_all_flags(req->flags,
-                              UCP_REQUEST_FLAG_PROTO_SEND |
-                              UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
-           !ucp_datatype_iter_is_begin(&req->send.state.dt_iter) &&
-           (req->send.state.uct_comp.count > 1);
-}
+static unsigned ucp_ep_tf_resume_progress(void *arg);
 
 /*
  * Send the requests from the pending queues of held lanes once no held lane has
@@ -3161,10 +3151,8 @@ static int ucp_ep_tf_req_in_flight(const ucp_request_t *req)
 static void ucp_ep_tf_resume(ucp_ep_h ep)
 {
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
-    ucs_queue_head_t replay_q;
-    uct_pending_req_t *self;
+    ucs_queue_head_t pending_q;
     ucp_lane_index_t lane;
-    ucp_request_t *req;
 
     if ((arg == NULL) || ucs_queue_is_empty(&arg->tf_pending_q)) {
         return;
@@ -3176,30 +3164,22 @@ static void ucp_ep_tf_resume(ucp_ep_h ep)
         }
     }
 
-    /* A request of several fragments counts its operations in flight in
-     * uct_comp, plus one reference until it sends all of its data. A restart
-     * would reset that count to 1 while operations are in flight, and their
-     * completions would complete the restarted request too early. Instead,
-     * the request drops its reference with an error: when its last operation
-     * completes, the error restarts the request, or completes it on a failed
-     * endpoint, as after a failed operation. */
-    ucs_queue_head_init(&replay_q);
-    ucs_queue_for_each_extract(self, &arg->tf_pending_q, priv, 1) {
-        req = ucs_container_of(self, ucp_request_t, send.uct);
-        if (ucp_ep_tf_req_in_flight(req)) {
-            ucp_trace_req(req, "restarts after its operations in flight");
-            ucp_invoke_uct_completion(&req->send.state.uct_comp,
-                                      UCS_ERR_CANCELED);
-        } else {
-            ucs_queue_push(&replay_q, (ucs_queue_elem_t*)self->priv);
-        }
-    }
+    /* Replay can queue a repost again when no live lane can send it. Iterate
+     * a copy so that request is not sent again in this call. */
+    pending_q = arg->tf_pending_q;
+    ucs_queue_head_init(&arg->tf_pending_q);
 
     if ((ep->flags & UCP_EP_FLAG_FAILED) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
-        ucp_ep_tf_abort_pending(&replay_q, UCS_ERR_CANCELED);
-    } else {
-        ucp_wireup_replay_pending_requests(ep, &replay_q);
+        ucp_ep_tf_abort_pending(&pending_q, UCS_ERR_CANCELED);
+        return;
+    }
+
+    ucp_wireup_replay_pending_requests(ep, &pending_q);
+    if (!ucs_queue_is_empty(&arg->tf_pending_q)) {
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_tf_resume_progress, ep);
+        ucp_worker_signal_internal(ep->worker);
     }
 }
 
@@ -3212,6 +3192,19 @@ static unsigned ucp_ep_tf_resume_progress(void *arg)
     ucp_ep_tf_resume(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
+}
+
+void ucp_ep_tf_repost_defer(ucp_request_t *req)
+{
+    ucp_ep_h ep                = req->send.ep;
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
+
+    ucs_assert(arg != NULL);
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
+    ucs_queue_push(&arg->tf_pending_q, (ucs_queue_elem_t*)&req->send.uct.priv);
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_ep_tf_resume_progress, ep);
+    ucp_worker_signal_internal(ep->worker);
 }
 
 /* Complete an outstanding operation. Teardown must not allocate a repost. */
@@ -3392,8 +3385,12 @@ static void ucp_ep_tf_cleanup(ucp_ep_h ep)
         ucp_ep_tf_lane_release(ep, tf);
     }
 
-    /* Every held lane is done, so pending requests can follow outstanding. */
+    /* Every held lane is done, so pending requests can follow outstanding.
+     * A repost that still has no lane cannot outlive this object. */
     ucp_ep_tf_resume(ep);
+    if (!ucs_queue_is_empty(&arg->tf_pending_q)) {
+        ucp_ep_tf_abort_pending(&arg->tf_pending_q, UCS_ERR_CANCELED);
+    }
 }
 
 static ucs_status_t
