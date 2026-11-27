@@ -1601,6 +1601,17 @@ public:
     static const size_t SGL_LENGTH = 256;
     static const size_t NO_INDEX   = SIZE_MAX;
 
+    void init() override
+    {
+        /* With direct data placement, when other QPs share the port, the
+         * device may acknowledge the WQEs which follow the failed element of
+         * the chain, and never report its remote access error.
+         * TODO: enable DDP when the device reports the error */
+        set_config("RC_MLX5_DDP_ENABLE?=n");
+        set_config("DC_MLX5_DDP_ENABLE?=n");
+        test_uct_peer_failure::init();
+    }
+
     /* Fail one element of the SGL by accessing memory outside of the remote
      * buffer, the whole operation must complete with the endpoint error
      * status. The element at empty_index is of zero length */
