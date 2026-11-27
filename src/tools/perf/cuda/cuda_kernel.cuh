@@ -239,6 +239,12 @@ ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
 {
     Runner runner(*perf);
     if (perf->params.command == UCX_PERF_CMD_ADD) {
+        /* The device adds to a 64-bit counter */
+        if (ucx_perf_get_message_size(&perf->params) != sizeof(uint64_t)) {
+            ucs_error("device add supports only 64-bit size");
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
             return runner.run_stream_uni();
         }

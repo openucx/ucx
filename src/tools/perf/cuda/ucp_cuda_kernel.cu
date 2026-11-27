@@ -416,7 +416,7 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
     ctx.status = status;
 }
 
-template<ucx_perf_cmd_t cmd> __global__ void
+__global__ void
 ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
                              ucp_perf_cuda_params params)
 {
@@ -425,26 +425,8 @@ ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
         __nanosleep(100000); // 100us
     }
 
-    if (cmd == UCX_PERF_CMD_ADD) {
-        /* An operation sent twice would add again, wait for it a bit */
-        for (int i = 0; i < 10000; ++i) {
-            __nanosleep(100000);
-        }
-
-        if (*sn != ctx.expected_sn) {
-            ucs_device_error("receive counter %llu, expected %llu",
-                             (unsigned long long)*sn,
-                             (unsigned long long)ctx.expected_sn);
-            ctx.status = UCS_ERR_IO_ERROR;
-            return;
-        }
-    }
-
     ctx.status = UCS_OK;
 }
-
-#define UCP_PERF_CUDA_WAIT_BW_KERNEL(_cmd, _ctx, _params) \
-    ucp_perf_cuda_wait_bw_kernel<_cmd><<<1, 1>>>(_ctx, _params)
 
 class ucp_perf_cuda_test_runner : public ucx_perf_cuda_test_runner {
 public:
@@ -493,16 +475,42 @@ public:
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
-            UCX_PERF_SWITCH_CMD(m_perf.params.command,
-                                UCP_PERF_CUDA_WAIT_BW_KERNEL, *m_gpu_ctx,
-                                params_handler.get_params());
-            CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
+            ucp_perf_cuda_wait_bw_kernel<<<1, 1>>>(
+                    *m_gpu_ctx, params_handler.get_params());
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
+
+        if ((my_index == 0) && (m_cpu_ctx->status == UCS_OK) &&
+            (m_perf.params.command == UCX_PERF_CMD_ADD)) {
+            return check_add_counter(params_handler.get_params());
+        }
+
         return m_cpu_ctx->status;
+    }
+
+private:
+    /*
+     * The operations of the sender completed before the barrier, so the
+     * receive counter is final, and shows an add that was lost or applied
+     * twice.
+     */
+    ucs_status_t check_add_counter(const ucp_perf_cuda_params &params) const
+    {
+        uint64_t counter;
+
+        CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaMemcpy, &counter,
+                      params.counter_recv, sizeof(counter),
+                      cudaMemcpyDeviceToHost);
+        if (counter != m_cpu_ctx->expected_sn) {
+            ucs_error("receive counter %" PRIu64 ", expected %" PRIu64,
+                      counter, m_cpu_ctx->expected_sn);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        return UCS_OK;
     }
 };
 
