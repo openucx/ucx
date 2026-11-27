@@ -144,6 +144,44 @@ void ucp_proto_common_lane_priv_str(const ucp_proto_query_params_t *params,
     }
 }
 
+void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
+                                         ucp_proto_query_attr_t *attr)
+{
+    ucs_memory_type_t mem_type = params->select_param->mem_type;
+    ucp_context_h context      = params->worker->context;
+    const ucp_ep_config_t *ep_config;
+    ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t lane;
+    ucp_ep_h mtype_ep;
+    size_t desc_len;
+
+    /* TODO: Report the exact CPU copy routine, such as memcpy or
+     * ucs_memcpy_relaxed, in protocol info. */
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+        return;
+    }
+
+    mtype_ep = params->worker->mem_type_ep[mem_type];
+    if (mtype_ep == NULL) {
+        return;
+    }
+
+    ep_config = ucp_ep_config(mtype_ep);
+    lane      = ep_config->key.rma_lanes[0];
+    if (lane == UCP_NULL_LANE) {
+        return;
+    }
+
+    rsc_index = ep_config->key.lanes[lane].rsc_index;
+    desc_len  = strnlen(attr->desc, sizeof(attr->desc));
+    if (desc_len >= sizeof(attr->desc)) {
+        return;
+    }
+
+    ucs_snprintf_safe(attr->desc + desc_len, sizeof(attr->desc) - desc_len,
+                      " %s", context->tl_rscs[rsc_index].tl_rsc.tl_name);
+}
+
 ucp_md_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane)
