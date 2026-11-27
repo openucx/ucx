@@ -870,7 +870,7 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 
     result = &kh_val(&ucs_netlink_route_cache, iter);
     if ((khret == UCS_KH_PUT_KEY_PRESENT) && (result->lookup_time > now)) {
-        /* Another thread stored the result of a later lookup meanwhile */
+        /* Another thread updated the entry after a later lookup meanwhile */
         goto out_result;
     }
 
@@ -886,11 +886,11 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
                 (status != UCS_ERR_NO_MEMORY))) {
         kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
         goto out_unlock;
+    } else {
+        /* No answer from the kernel: keep the previous result until the next
+         * TTL, so that the failure is not logged at every call */
+        result->lookup_time = now;
     }
-
-    /* A lookup which failed to get an answer from the kernel, e.g. for lack of
-     * file descriptors or memory, keeps the previous result, and is done again
-     * at the next call */
 
 out_result:
     status = result->status;

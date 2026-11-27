@@ -183,7 +183,7 @@ void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
  * is cached for UCX_NETLINK_ROUTE_CACHE_TTL, unless it is an error other than
  * UCS_ERR_UNREACHABLE. When looking it up again fails to get an answer from the
  * kernel, e.g. for lack of file descriptors or memory, the previous result is
- * returned.
+ * returned and kept for another TTL.
  *
  * @param [in]  sa_remote        Pointer to the destination address.
  * @param [in]  sa_local         Optional pointer to the source address, of the

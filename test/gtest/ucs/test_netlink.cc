@@ -516,6 +516,14 @@ protected:
                                status_str(status));
         }
 
+        /* The failed lookup keeps the previous result for another TTL */
+        num_errors = m_errors.size();
+        status     = route_get("10ms", "127.0.0.1", lo_index, &route);
+        if ((status != UCS_OK) || (m_errors.size() != num_errors)) {
+            return child_error("lookup after a failed lookup of an expired "
+                               "route: " + status_str(status));
+        }
+
         status = route_get("inf", "127.0.0.2", lo_index, &route);
         if (status != UCS_ERR_NO_RESOURCE) {
             return child_error("failed lookup of a new destination: " +
