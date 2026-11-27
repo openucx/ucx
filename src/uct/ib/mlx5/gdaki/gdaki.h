@@ -9,6 +9,7 @@
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_mem.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
 
 #include <cuda.h>
@@ -16,8 +17,9 @@
 
 #include "gdaki_dev.h"
 
-#define UCT_DEVICE_CUDA_NAME     "cuda"
-#define UCT_DEVICE_CUDA_NAME_LEN 4
+#define UCT_DEVICE_CUDA_NAME      "cuda"
+#define UCT_DEVICE_CUDA_NAME_LEN  4
+#define UCT_RC_GDAKI_MAX_CHANNELS 256
 
 typedef struct {
     uct_ib_mlx5_cq_t   cq;
@@ -47,6 +49,8 @@ typedef struct uct_rc_gdaki_iface {
     uint64_t                   *atomic_buff;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
+    ucs_range_spec_t           qpn_range;
+    uint32_t                   *next_qpns;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
     uct_rc_gdaki_devx_uar_t    *uar_wrap;
