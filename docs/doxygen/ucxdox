@@ -807,7 +807,8 @@ FILE_PATTERNS          = ucp.h              \
                          memory_type.h      \
                          callbackq.h        \
                          callbackq_compat.h \
-                         types.h
+                         types.h            \
+                         qos_level.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.
