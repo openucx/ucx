@@ -36,6 +36,9 @@
     _macro(ucp_put_sgl_offload_proto) \
     _macro(ucp_put_sgl_offload_sw_proto) \
     _macro(ucp_put_sgl_contig_proto) \
+    _macro(ucp_get_sgl_offload_proto) \
+    _macro(ucp_get_sgl_offload_sw_proto) \
+    _macro(ucp_get_sgl_contig_proto) \
     _macro(ucp_eager_bcopy_multi_proto) \
     _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_eager_zcopy_multi_proto) \
