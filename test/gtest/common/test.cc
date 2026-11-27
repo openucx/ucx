@@ -25,6 +25,7 @@ std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
+int test_base::m_prev_cuda_ctx_count   = 0;
 size_t test_base::m_total_fd_increases = 0;
 
 test_base::test_base() :
@@ -54,32 +55,53 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
-bool test_base::is_open_file_whitelisted(const std::string &path) const
+static bool is_path_matched(const std::string &path,
+                            const std::vector<std::string> &patterns)
 {
-    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
-    static const std::string targets_whitelist[] = {
-        "/dev/infiniband/uverbs*",
-        "*anon_inode:\\[infinibandevent\\]",
-        "/dev/nvidia*",
-        "/proc/*/pagemap",
-    };
-
-    for (const auto &str : targets_whitelist) {
-        if (fnmatch(str.c_str(), path.c_str(), 0) == 0) {
+    for (const auto &pattern : patterns) {
+        if (fnmatch(pattern.c_str(), path.c_str(), 0) == 0) {
             return true;
         }
     }
     return false;
 }
 
+bool test_base::is_open_file_whitelisted(const std::string &path) const
+{
+    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
+    static const std::vector<std::string> targets_whitelist = {
+        "/dev/infiniband/uverbs*",
+        "*anon_inode:\\[infinibandevent\\]",
+        "/dev/nvidia*",
+        "/proc/*/pagemap",
+    };
+
+    return is_path_matched(path, targets_whitelist);
+}
+
+bool test_base::is_cuda_ctx_file(const std::string &path) const
+{
+    /* Besides /dev/nvidia*, the CUDA driver opens eventfds and pipes when it
+     * creates a context, and keeps them open until the context is destroyed */
+    static const std::vector<std::string> targets = {
+        "anon_inode:\\[eventfd\\]",
+        "pipe:*",
+    };
+
+    return is_path_matched(path, targets);
+}
+
 /* Compare open file descriptors against the previous test's post-cleanup
  * state via set-difference. New fds whose targets match the whitelist
- * (e.g. from external libraries) are logged but not counted as leaks.
- * Non-whitelisted new fds increment a total-increase counter and
- * trigger a failure once TOTAL_FD_INCREASE_THRESHOLD is reached. */
+ * (e.g. from external libraries) are logged but not counted as leaks, as
+ * well as new eventfds and pipes when the test activated a CUDA primary
+ * context. Other new fds increment a total-increase counter and trigger a
+ * failure once TOTAL_FD_INCREASE_THRESHOLD is reached. */
 void test_base::check_fd_leaks()
 {
     std::set<int> open_fds = get_open_fds();
+    int cuda_ctx_count     = mem_buffer::get_active_primary_ctx_count();
+    bool new_cuda_ctx      = cuda_ctx_count > m_prev_cuda_ctx_count;
 
     if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
@@ -93,6 +115,9 @@ void test_base::check_fd_leaks()
                 ss << "\n" << padding << "  fd " << fd << " -> " << target;
                 if (is_open_file_whitelisted(target)) {
                     ss << " (whitelisted)";
+                    ++num_whitelisted;
+                } else if (new_cuda_ctx && is_cuda_ctx_file(target)) {
+                    ss << " (new CUDA context)";
                     ++num_whitelisted;
                 } else {
                     ++num_leaked;
@@ -120,7 +145,8 @@ void test_base::check_fd_leaks()
         }
     }
 
-    m_prev_open_fds = std::move(open_fds);
+    m_prev_open_fds       = std::move(open_fds);
+    m_prev_cuda_ctx_count = cuda_ctx_count;
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
