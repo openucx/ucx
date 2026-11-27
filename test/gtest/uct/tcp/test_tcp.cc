@@ -578,6 +578,47 @@ UCS_TEST_P(test_uct_tcp, maxseg_auto)
     close(fds.front());
 }
 
+/* The rest of a partly sent zcopy fails to be sent: the zcopy is completed
+ * once, by the error handling */
+UCS_TEST_P(test_uct_tcp, zcopy_send_err_while_pending, "TCP_SNDBUF=64k",
+           "TCP_RCVBUF=64k")
+{
+    std::vector<char> buf(m_ent->iface_attr().cap.am.max_zcopy);
+    /* The second count stands for another operation of the same request */
+    uct_completion_t comp = {(uct_completion_callback_t)ucs_empty_function, 2,
+                             UCS_OK};
+    entity *peer          = uct_test::create_entity(0);
+    ucs_status_t status;
+    uct_tcp_ep_t *ep;
+
+    m_entities.push_back(peer);
+    m_ent->connect(0, *peer, 0);
+    ep = ucs_derived_of(m_ent->ep(0), uct_tcp_ep_t);
+    wait_for_cond([ep]() {
+                      return ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED;
+                  },
+                  [this]() { progress(); });
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.data(), buf.size(),
+                            UCT_MEM_HANDLE_NULL, 1);
+
+    /* The peer does not progress, so the last zcopy is sent in part */
+    do {
+        status = uct_ep_am_zcopy(m_ent->ep(0), 0, NULL, 0, iov, iovcnt, 0,
+                                 &comp);
+    } while (status == UCS_OK);
+    ASSERT_EQ(UCS_INPROGRESS, status);
+
+    /* Sending the rest of the zcopy fails */
+    ASSERT_EQ(0, shutdown(ep->fd, SHUT_WR)) << strerror(errno);
+    wait_for_cond([&comp]() { return comp.status != UCS_OK; },
+                  [this]() { m_ent->progress(); });
+
+    /* The zcopy is completed once */
+    EXPECT_EQ(1, comp.count);
+    EXPECT_EQ(UCS_ERR_CONNECTION_RESET, comp.status);
+}
+
 /* The peer closes the connection while the rest of the last message is not
  * sent: the endpoint, closed on CONN_FIN, still sends it */
 UCS_TEST_P(test_uct_tcp, peer_fin_while_send_pending, "TCP_SNDBUF=64k",
