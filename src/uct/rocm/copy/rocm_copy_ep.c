@@ -108,7 +108,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if (uct_rocm_base_is_hsa_mem_type(remote_addr_mem_type)) {
         remote_addr_mod = (void*)remote_addr;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
@@ -143,7 +143,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if (uct_rocm_base_is_hsa_mem_type(iov_buffer_mem_type)) {
         iov_buffer_mod = iov->buffer;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
