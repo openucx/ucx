@@ -32,7 +32,8 @@ typedef struct {
     uint64_t laddr;
     uint64_t raddr;
     uint64_t add;
-    uint8_t  pad[16];
+    uint64_t comp_id;
+    uint8_t  pad[8];
 } uct_ib_d2p_desc_t UCS_V_ALIGNED(64);
 
 #endif /* UCT_D2P_PROTO_H_ */
