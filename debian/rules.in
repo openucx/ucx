@@ -15,6 +15,9 @@ CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda \
 XPMEM_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw xpmem \
 	&& echo --with-xpmem || echo --without-xpmem)
 
+RDU_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw rdu \
+	&& echo --with-rdu || echo --without-rdu)
+
 CUDA_SUBSTVARS = debian/ucx-cuda.substvars
 
 %:
@@ -24,7 +27,7 @@ override_dh_auto_configure:
 	./contrib/configure-release-mt --prefix=/usr \
 		--with-rdmacm --with-verbs --with-mlx5 --enable-cma \
 		--enable-examples --without-java --without-go --without-gda \
-		$(CUDA_OPT) $(XPMEM_OPT)
+		$(CUDA_OPT) $(XPMEM_OPT) $(RDU_OPT)
 	chmod +x debian/rules
 
 # We may have a single package or two packages. We can't tell in advance.

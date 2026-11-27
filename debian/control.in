@@ -39,6 +39,17 @@ Description: Unified Communication X - XPMEM support
  process to map the memory of another process into its virtual address
  space.
 
+Package: ucx-rdu
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Architecture: any
+Build-Profiles: <rdu>
+Description: Unified Communication X - SambaNova RDU support
+ UCX is a communication library implementing high-performance messaging.
+ .
+ Provide SambaNova RDU memory support. The SambaNova rdu_devmem runtime
+ library is loaded at run time.
+
 Package: ucx-cuda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
