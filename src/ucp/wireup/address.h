@@ -18,6 +18,11 @@
 #define UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR 64
 
 
+/* In unified mode, the resource index is packed in the low bits of the byte
+ * that also holds flags, so fewer than UCP_MAX_RESOURCES can be addressed */
+#define UCP_ADDRESS_UNIFIED_MAX_RESOURCES 64
+
+
 /* Which iface flags would be packed in the address */
 enum {
     UCP_ADDRESS_IFACE_FLAGS =

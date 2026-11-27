@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -73,4 +73,18 @@ size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
                            size_t start_index, size_t bit_count)
 {
     return ucs_bitmap_bits_fns_inline(bits, num_words, start_index, bit_count);
+}
+
+size_t ucs_bitmap_bits_fls(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    size_t word_index = num_words;
+
+    while (word_index-- > 0) {
+        if (bits[word_index] != 0) {
+            return (word_index * UCS_BITMAP_BITS_IN_WORD) +
+                   ucs_ilog2(bits[word_index]);
+        }
+    }
+
+    return num_words * UCS_BITMAP_BITS_IN_WORD;
 }
