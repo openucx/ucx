@@ -1517,6 +1517,73 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
         OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
 }
 
+static ucp_ep_h test_fence_ep;
+static ucp_lane_index_t test_fence_atomic_lane;
+static uct_ep_t test_fence_replacement_lane;
+static uct_ep_h test_fence_posted_lane;
+
+/* Emulate wireup replacing the atomic lane while the strong fence flushes */
+static ucs_status_t
+test_fence_flush_replace_atomic_lane(uct_ep_h, unsigned, uct_completion_t *)
+{
+    ucp_ep_set_lane(test_fence_ep, test_fence_atomic_lane,
+                    &test_fence_replacement_lane);
+    return UCS_OK;
+}
+
+static ucs_status_t
+test_fence_atomic64_post(uct_ep_h ep, unsigned, uint64_t, uint64_t, uct_rkey_t)
+{
+    test_fence_posted_lane = ep;
+    return UCS_OK;
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_atomic_replaced_lane) {
+    uint64_t value = 1;
+    const mapped_buffer remote_buffer(sizeof(value), receiver());
+    ucs::handle<ucp_rkey_h> rkey;
+    ucp_lane_index_t lane;
+    ucs::mock mock;
+
+    /* Complete the wireup, so the lanes hold the transport endpoints */
+    flush_workers();
+    test_fence_ep = sender().ep();
+    if (ucp_ep_num_lanes(test_fence_ep) < 2) {
+        UCS_TEST_SKIP_R("requires two endpoint lanes");
+    }
+
+    remote_buffer.rkey(sender(), rkey);
+
+    /* Post an atomic to find its lane and whether it uses transport atomics */
+    test_fence_posted_lane = nullptr;
+    for (lane = 0; lane < ucp_ep_num_lanes(test_fence_ep); ++lane) {
+        const auto iface = ucp_ep_get_lane(test_fence_ep, lane)->iface;
+        mock.setup(&iface->ops.ep_atomic64_post, test_fence_atomic64_post);
+    }
+
+    do_rma_op(OP_ATOMIC, &value, sizeof(value), remote_buffer.ptr(), rkey);
+    if (test_fence_posted_lane == nullptr) {
+        /* Complete the software atomic before the buffer is released */
+        flush_workers();
+        UCS_TEST_SKIP_R("atomic protocol does not use transport atomics");
+    }
+
+    const uct_ep_h original_lane = test_fence_posted_lane;
+
+    test_fence_atomic_lane = ucs_ffs64(test_fence_ep->ext->unflushed_lanes);
+
+    /* Force a strong fence, whose flush replaces the atomic lane */
+    test_fence_ep->ext->unflushed_lanes = ucp_ep_get_live_lanes(test_fence_ep);
+    test_fence_replacement_lane.iface   = original_lane->iface;
+    mock_ep_flush(test_fence_ep, mock, test_fence_flush_replace_atomic_lane);
+
+    do_fence();
+    do_rma_op(OP_ATOMIC, &value, sizeof(value), remote_buffer.ptr(), rkey);
+    ucp_ep_set_lane(test_fence_ep, test_fence_atomic_lane, original_lane);
+
+    EXPECT_EQ(&test_fence_replacement_lane, test_fence_posted_lane);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
 #define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
