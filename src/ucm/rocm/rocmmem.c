@@ -124,9 +124,10 @@ hsa_status_t ucm_hsa_amd_vmem_map(void* va, size_t size, size_t in_offset,
     status = ucm_orig_hsa_amd_vmem_map(va, size, in_offset, handle, flags);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_vmem_map(va=%p size:%lu)", va, size);
-        /* Keep type unknown for MD detection, but flag the mapping as VMM. */
+        /* Keep type unknown for MD detection; the VMM registry hook queries the
+         * pointer type to tell a real VMEM mapping from a pool allocation. */
         ucm_dispatch_mem_type_alloc(va, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                    UCS_MEM_FLAG_REGISTRABLE | UCS_MEM_FLAG_VMM);
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();

@@ -142,6 +142,9 @@ static void uct_rocm_base_vmm_registry_insert(void *address, size_t size)
     }
 }
 
+/* Grant RW access to VMM mapping [va, va+size) for all local GPU agents. */
+static hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size);
+
 static void uct_rocm_base_vmm_event_cb(ucm_event_type_t event_type,
                                        ucm_event_t *event, void *arg)
 {
@@ -155,14 +158,11 @@ static void uct_rocm_base_vmm_event_cb(ucm_event_type_t event_type,
     }
 
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
-        /* Trust the vmem_map hook's VMM flag; else query to filter non-VMEM. */
-        if (!(event->mem_type.mem_flags & UCS_MEM_FLAG_VMM)) {
-            status = uct_rocm_base_get_ptr_info(address, size, NULL, NULL,
-                                                &hsa_mem_type, NULL, NULL);
-            if ((status != HSA_STATUS_SUCCESS) ||
-                (hsa_mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
-                return;
-            }
+        status = uct_rocm_base_get_ptr_info(address, size, NULL, NULL,
+                                            &hsa_mem_type, NULL, NULL);
+        if ((status != HSA_STATUS_SUCCESS) ||
+            (hsa_mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
+            return;
         }
 
         ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
@@ -320,7 +320,7 @@ int uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length)
     return found;
 }
 
-hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size)
+static hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size)
 {
     hsa_amd_memory_access_desc_t *descs;
     hsa_agent_t *gpu_agents;
@@ -414,4 +414,37 @@ void uct_rocm_base_vmm_unmap(void *va, size_t length)
         ucs_warn("failed to free vmm addr:%p", va);
     }
 }
+#else
+/* VMM-less build: the registry and dmabuf export/import are unavailable, so
+ * callers that read is_vmm (always 0) never reach these. */
+void uct_rocm_base_vmm_registry_init(void) { }
+void uct_rocm_base_vmm_registry_cleanup(void) { }
+
+ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
+                                           size_t *size, uint64_t *reg_id)
+{
+    return UCS_ERR_NO_ELEM;
+}
+
+int uct_rocm_base_vmm_is_pooled(const void *base, size_t size)
+{
+    return 0;
+}
+
+int uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length)
+{
+    return 0;
+}
+
+ucs_status_t uct_rocm_base_vmm_export_fd(void *base, int *fd_p)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t uct_rocm_base_vmm_import_map(int fd, size_t length, void **va_p)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+void uct_rocm_base_vmm_unmap(void *va, size_t length) { }
 #endif

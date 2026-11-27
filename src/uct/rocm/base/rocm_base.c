@@ -15,9 +15,6 @@
 #include <ucs/sys/sock.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/init_once.h>
-#include <ucs/sys/math.h>
-#include <ucs/sys/sys.h>
-#include <ucm/api/ucm.h>
 #include <sys/utsname.h>
 #include <pthread.h>
 
