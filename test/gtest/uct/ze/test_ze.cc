@@ -429,6 +429,85 @@ protected:
                                            (uintptr_t)remote_addr, 0, NULL));
         }
     }
+
+    static constexpr size_t CHUNK = 64 * UCS_KBYTE;
+
+    /* [offset, offset + length) in CHUNK units */
+    using range = std::pair<size_t, size_t>;
+
+    /* The host memory import tests copy between device memory and imported
+       host memory. The skip condition is also checked before the entities
+       are created, so it asks the driver rather than the MD; with the
+       tests' ZE_COPY_HOST_IMPORT=try the MD imports exactly when the driver
+       can. */
+    bool can_test_import()
+    {
+        return (uct_ze_copy_md_get_host_import() != NULL) &&
+               mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE) &&
+               check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_GET_ZCOPY);
+    }
+
+    /* Register a host range with the receiver's MD, which imports it */
+    uct_allocated_memory_t reg_host(void *ptr, size_t length)
+    {
+        const uct_ze_copy_host_import_t *hi = uct_ze_copy_md_get_host_import();
+        uct_allocated_memory_t mem          = {};
+        void *base                          = NULL;
+
+        mem.address    = ptr;
+        mem.length     = length;
+        mem.mem_type   = UCS_MEMORY_TYPE_HOST;
+        mem.method     = UCT_ALLOC_METHOD_LAST;
+        mem.memh       = UCT_MEM_HANDLE_NULL;
+        mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        receiver().mem_type_reg(&mem, UCT_MD_MEM_ACCESS_ALL);
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, hi->get_base(hi->driver, ptr, &base));
+        EXPECT_EQ(ptr, base);
+        return mem;
+    }
+
+    /*
+     * Copies whose host side crosses the boundary of imported host memory.
+     * The driver serves such a copy without the import, so the data must
+     * still land correctly on both sides of the boundary. Import the given
+     * ranges of a four-chunk host buffer, then copy its two middle chunks to
+     * and from the device and compare every byte, including the untouched
+     * chunks on both sides.
+     */
+    void test_copy(const std::vector<range> &ranges)
+    {
+        std::vector<char> host(4 * CHUNK);
+        char *middle = host.data() + CHUNK;
+        char *last   = host.data() + (3 * CHUNK);
+        std::vector<uct_allocated_memory_t> regs;
+
+        for (const range &r : ranges) {
+            regs.push_back(reg_host(host.data() + (r.first * CHUNK),
+                                    r.second * CHUNK));
+        }
+
+        mapped_buffer dev(2 * CHUNK, sender(), 0, UCS_MEMORY_TYPE_ZE_DEVICE);
+
+        mem_buffer::pattern_fill(host.data(), CHUNK, SEED3);
+        mem_buffer::pattern_fill(last, CHUNK, SEED3);
+
+        mem_buffer::pattern_fill(middle, 2 * CHUNK, SEED1);
+        dev.memset(0);
+        zcopy(dev.ptr(), middle, 2 * CHUNK, false);
+        dev.pattern_check(SEED1);
+
+        dev.pattern_fill(SEED2);
+        zcopy(dev.ptr(), middle, 2 * CHUNK, true);
+        mem_buffer::pattern_check(middle, 2 * CHUNK, SEED2);
+
+        mem_buffer::pattern_check(host.data(), CHUNK, SEED3);
+        mem_buffer::pattern_check(last, CHUNK, SEED3);
+
+        for (uct_allocated_memory_t &reg : regs) {
+            receiver().mem_type_dereg(&reg);
+        }
+    }
 };
 
 UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
@@ -723,6 +802,21 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, shared_memory_copy_on_copy_engine,
     EXPECT_EQ(0u, get_queue(shared_buf.ptr(), device_buf.ptr()));
 
     fill_and_copy_through(shared_buf.ptr(), length);
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, inside_import, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 4}});
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, across_two_imports, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 2}, {2, 2}});
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, across_import_end, !can_test_import(),
+                     "ZE_COPY_HOST_IMPORT=try") {
+    test_copy({{0, 2}});
 }
 
 UCT_INSTANTIATE_ZE_TEST_CASE(test_ze_copy_rma)

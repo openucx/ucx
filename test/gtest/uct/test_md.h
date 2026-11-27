@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -37,6 +38,8 @@ public:
 protected:
     virtual void init();
     virtual void cleanup();
+    /* Open an MD of the tested resource */
+    void open_md(ucs::handle<uct_md_h> &md) const;
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode);
     bool check_caps(uint64_t flags) const;

@@ -213,12 +213,17 @@ bool test_md::is_bf_arm() const
     return false;
 }
 
+void test_md::open_md(ucs::handle<uct_md_h> &md) const
+{
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+}
+
 void test_md::init()
 {
     ucs::test_base::init();
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
+    ASSERT_NO_FATAL_FAILURE(open_md(m_md));
 
     m_md_attr.field_mask = UINT64_MAX;
     ucs_status_t status  = uct_md_query_v2(m_md, &m_md_attr);
@@ -1240,9 +1245,7 @@ protected:
 
 UCS_TEST_P(test_md_memlock_limit, md_open)
 {
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
+    open_md(m_md);
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_memlock_limit)
