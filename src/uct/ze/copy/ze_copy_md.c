@@ -13,10 +13,10 @@
 
 #include <string.h>
 #include <limits.h>
-#include <dlfcn.h>
 #include <pthread.h>
 #include <ucm/api/ucm.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/debug/memtrack_int.h>
@@ -134,42 +134,6 @@ static ucs_status_t uct_ze_copy_import_get_func(ze_driver_handle_t driver,
     return UCS_OK;
 }
 
-/*
- * The translation exists since loader 1.7 and is resolved at runtime to keep
- * older loaders working without the import. It is looked up in the loader
- * which provides zeDriverGet, so the result does not depend on how the C
- * library resolves RTLD_DEFAULT for a module loaded with RTLD_LOCAL.
- */
-static uct_ze_copy_translate_handle_func_t
-uct_ze_copy_import_find_translate(void)
-{
-    uct_ze_copy_translate_handle_func_t translate;
-    Dl_info lib_info;
-    const char *error;
-    void *dl_handle;
-
-    if (dladdr(zeDriverGet, &lib_info) == 0) {
-        ucs_debug("could not identify the level zero loader providing "
-                  "zeDriverGet");
-        return NULL;
-    }
-
-    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
-    if (dl_handle == NULL) {
-        error = dlerror();
-        ucs_debug("could not open loaded level zero loader %s: %s",
-                  lib_info.dli_fname,
-                  (error != NULL) ? error : "unknown error");
-        return NULL;
-    }
-
-    translate = (uct_ze_copy_translate_handle_func_t)
-            dlsym(dl_handle, "zelLoaderTranslateHandle");
-    /* The loader stays loaded as a dependency of this module */
-    dlclose(dl_handle);
-    return translate;
-}
-
 static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
@@ -179,8 +143,13 @@ static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
     ze_result_t ret;
     char probe;
 
-    /* The extension bypasses the loader, so it needs the driver's own handle */
-    translate = uct_ze_copy_import_find_translate();
+    /* The extension bypasses the loader, so it needs the driver's own handle.
+     * The translation exists since loader 1.7 and is resolved at runtime, in
+     * the loader which provides zeDriverGet, to keep older loaders working
+     * without the import. The loader stays loaded as a dependency of this
+     * module. */
+    translate = (uct_ze_copy_translate_handle_func_t)
+            ucs_sys_lib_dlsym(zeDriverGet, "zelLoaderTranslateHandle");
     if (translate == NULL) {
         ucs_debug("zelLoaderTranslateHandle not found, host memory import is "
                   "disabled");
@@ -352,8 +321,10 @@ static void uct_ze_copy_import_release(void *address)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
     const uct_ze_copy_host_import_t *funcs  = &registry->funcs;
+    ucs_status_t status;
     khiter_t iter;
     ze_result_t ret;
+    void *base;
 
     pthread_mutex_lock(&registry->lock);
     iter = kh_get(ze_copy_import, &registry->hash, (uintptr_t)address);
@@ -367,13 +338,26 @@ static void uct_ze_copy_import_release(void *address)
 
     kh_del(ze_copy_import, &registry->hash, iter);
 
-    /* The driver fails a release only when no import contains the address,
-       which was already released, so the import is gone and its entry goes
-       with it */
-    ret = funcs->release(funcs->driver, address);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_diag("zexDriverReleaseImportedPointer(%p) failed: 0x%x", address,
-                 ret);
+    /* Another user of the extension may have released our import, so the
+       address can now resolve to an enclosing import, which is not ours to
+       release. Release only an import which still starts at this address. A
+       new import made at the same base cannot be told apart from ours and is
+       released as well. */
+    status = uct_ze_copy_import_get_base(address, &base);
+    if (status != UCS_OK) {
+        ucs_diag("could not look up the import of host memory %p, not "
+                 "releasing it",
+                 address);
+    } else if (base != address) {
+        ucs_debug("import of host memory %p was released outside ze_copy, "
+                  "address now in import %p",
+                  address, base);
+    } else {
+        ret = funcs->release(funcs->driver, address);
+        if (ret != ZE_RESULT_SUCCESS) {
+            ucs_diag("zexDriverReleaseImportedPointer(%p) failed: 0x%x",
+                     address, ret);
+        }
     }
     pthread_mutex_unlock(&registry->lock);
 }

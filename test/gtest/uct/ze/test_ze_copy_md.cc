@@ -207,27 +207,26 @@ UCS_TEST_P(test_ze_copy_md, host_import_reg_dereg, "ZE_COPY_HOST_IMPORT=try") {
 
 /*
  * Registrations of the same range, and of a range inside it, share one
- * import that stays until the last of them is deregistered, in any order.
+ * import that stays until the last of them is deregistered. They get the
+ * same memory handle, so the order of deregistration makes no difference.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_shared, "ZE_COPY_HOST_IMPORT=try") {
     const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr = buf.data();
 
-    for (int reverse = 0; reverse < 2; ++reverse) {
-        uct_mem_h whole = mem_reg(md(), ptr, buf.size());
-        uct_mem_h again = mem_reg(md(), ptr, buf.size());
-        uct_mem_h inner = mem_reg(md(), ptr + (CHUNK / 2), CHUNK);
-        EXPECT_EQ(whole, again);
-        EXPECT_EQ(whole, inner);
+    uct_mem_h whole = mem_reg(md(), ptr, buf.size());
+    uct_mem_h again = mem_reg(md(), ptr, buf.size());
+    uct_mem_h inner = mem_reg(md(), ptr + (CHUNK / 2), CHUNK);
+    EXPECT_EQ(whole, again);
+    EXPECT_EQ(whole, inner);
 
-        mem_dereg(md(), reverse ? inner : whole);
-        EXPECT_EQ(ptr, import_base(hi, ptr));
-        mem_dereg(md(), again);
-        EXPECT_EQ(ptr, import_base(hi, ptr));
-        mem_dereg(md(), reverse ? whole : inner);
-        EXPECT_TRUE(import_base(hi, ptr) == NULL);
-    }
+    mem_dereg(md(), whole);
+    EXPECT_EQ(ptr, import_base(hi, ptr));
+    mem_dereg(md(), again);
+    EXPECT_EQ(ptr, import_base(hi, ptr));
+    mem_dereg(md(), inner);
+    EXPECT_TRUE(import_base(hi, ptr) == NULL);
 }
 
 
@@ -407,7 +406,9 @@ UCS_TEST_P(test_ze_copy_md, host_import_foreign, "ZE_COPY_HOST_IMPORT=try") {
 /*
  * Another user of the extension can drop one of our imports by releasing a
  * pointer inside it. Registering the range again leaves it unimported, and
- * deregistering both registrations must not release anything twice.
+ * deregistering both registrations must not release anything twice. When our
+ * nested import is dropped, its address resolves to our enclosing import,
+ * which deregistering the nested range must not release.
  */
 UCS_TEST_P(test_ze_copy_md, host_import_released_by_foreign,
            "ZE_COPY_HOST_IMPORT=try") {
@@ -430,6 +431,23 @@ UCS_TEST_P(test_ze_copy_md, host_import_released_by_foreign,
     mem_dereg(md(), first);
     mem_dereg(md(), second);
     EXPECT_TRUE(import_base(hi, ptr) == NULL);
+
+    std::vector<char> nested_buf(3 * CHUNK);
+    char *outer_ptr  = nested_buf.data();
+    char *nested_ptr = outer_ptr + CHUNK;
+
+    uct_mem_h nested = mem_reg(md(), nested_ptr, CHUNK);
+    uct_mem_h outer  = mem_reg(md(), outer_ptr, nested_buf.size());
+    EXPECT_EQ(nested_ptr, import_base(hi, nested_ptr));
+    EXPECT_EQ(outer_ptr, import_base(hi, outer_ptr));
+
+    EXPECT_EQ(ZE_RESULT_SUCCESS, hi->release(hi->driver, nested_ptr));
+    EXPECT_EQ(outer_ptr, import_base(hi, nested_ptr));
+
+    mem_dereg(md(), nested);
+    EXPECT_EQ(outer_ptr, import_base(hi, outer_ptr));
+    mem_dereg(md(), outer);
+    EXPECT_TRUE(import_base(hi, outer_ptr) == NULL);
 }
 
 
