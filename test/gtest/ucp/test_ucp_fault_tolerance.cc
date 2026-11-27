@@ -1443,7 +1443,9 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 #undef UCP_FT_TESTS
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
+/* cuda_copy detects device memory. RC performs the transfer. */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx,
+                              "rc_x,cuda_copy")
 
 /* A send on a FAILOVER endpoint is canceled locally when the user closes the
  * endpoint or destroys the worker while the send is still pending or in flight.
