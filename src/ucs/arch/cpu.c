@@ -80,6 +80,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_NVIDIA] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_GENERIC_LOONGARCH64] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 
@@ -162,15 +166,16 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type)
 const char *ucs_cpu_vendor_name()
 {
     static const char *cpu_vendor_names[] = {
-        [UCS_CPU_VENDOR_UNKNOWN]       = UCS_VALUE_UNKNOWN_STR,
-        [UCS_CPU_VENDOR_INTEL]         = "Intel",
-        [UCS_CPU_VENDOR_AMD]           = "AMD",
-        [UCS_CPU_VENDOR_GENERIC_ARM]   = "Generic ARM",
-        [UCS_CPU_VENDOR_GENERIC_PPC]   = "Generic PPC",
-        [UCS_CPU_VENDOR_GENERIC_RV64G] = "Generic RV64G",
-        [UCS_CPU_VENDOR_FUJITSU_ARM]   = "Fujitsu ARM",
-        [UCS_CPU_VENDOR_ZHAOXIN]       = "Zhaoxin",
-        [UCS_CPU_VENDOR_NVIDIA]        = "Nvidia"
+        [UCS_CPU_VENDOR_UNKNOWN]             = UCS_VALUE_UNKNOWN_STR,
+        [UCS_CPU_VENDOR_INTEL]               = "Intel",
+        [UCS_CPU_VENDOR_AMD]                 = "AMD",
+        [UCS_CPU_VENDOR_GENERIC_ARM]         = "Generic ARM",
+        [UCS_CPU_VENDOR_GENERIC_PPC]         = "Generic PPC",
+        [UCS_CPU_VENDOR_GENERIC_RV64G]       = "Generic RV64G",
+        [UCS_CPU_VENDOR_FUJITSU_ARM]         = "Fujitsu ARM",
+        [UCS_CPU_VENDOR_ZHAOXIN]             = "Zhaoxin",
+        [UCS_CPU_VENDOR_NVIDIA]              = "Nvidia",
+        [UCS_CPU_VENDOR_GENERIC_LOONGARCH64] = "Generic LoongArch64"
     };
 
     return cpu_vendor_names[ucs_arch_get_cpu_vendor()];
@@ -202,7 +207,8 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_NVIDIA_GRACE]         = "Grace",
         [UCS_CPU_MODEL_NVIDIA_VERA]          = "Vera",
         [UCS_CPU_MODEL_FUJITSU_A64FX]        = "FUJITSU-A64FX",
-        [UCS_CPU_MODEL_FUJITSU_MONAKA]       = "FUJITSU-MONAKA"
+        [UCS_CPU_MODEL_FUJITSU_MONAKA]       = "FUJITSU-MONAKA",
+        [UCS_CPU_MODEL_LOONGARCH64]          = "LoongArch 64-bit"
     };
 
     return cpu_model_names[ucs_arch_get_cpu_model()];
