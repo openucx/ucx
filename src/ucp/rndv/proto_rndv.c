@@ -685,6 +685,38 @@ out_destroy_ctrl_perf:
     ucp_proto_perf_destroy(ctrl_perf);
 }
 
+/*
+ * The peer selects the lanes for sending the data and ATP by the device of its
+ * own buffer, which is unknown here, so the remote protocol model may predict
+ * other lanes than the peer uses. Activate all bandwidth lanes, since the peer
+ * may send on any of them.
+ */
+static void ucp_proto_rndv_ctrl_activate_bw_lanes(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        const ucp_proto_select_param_t *remote_select_param)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    const ucp_ep_config_key_t *key             = init_params->ep_config_key;
+    ucp_lane_map_t lane_map                    = 0;
+    ucp_lane_index_t lane;
+
+    if ((params->remote_op_id != UCP_OP_ID_RNDV_SEND) ||
+        UCP_MEM_IS_HOST(remote_select_param->mem_type)) {
+        return;
+    }
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if ((key->lanes[lane].lane_types &
+             (UCS_BIT(UCP_LANE_TYPE_RMA_BW) | UCS_BIT(UCP_LANE_TYPE_AM_BW))) &&
+            !(key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            lane_map |= UCS_BIT(lane);
+        }
+    }
+
+    ucp_proto_select_activate_lanes(init_params->worker,
+                                    init_params->ep_cfg_index, lane_map);
+}
+
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
                                void *priv, size_t priv_size)
 {
@@ -713,6 +745,8 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
         return;
     }
     remote_proto_init = &remote_proto_select->proto_init;
+
+    ucp_proto_rndv_ctrl_activate_bw_lanes(params, &remote_select_param);
 
     /* Add variants for each remote proto */
     ucs_trace("add variants for %s: min_length=%zu max_length=%zu",

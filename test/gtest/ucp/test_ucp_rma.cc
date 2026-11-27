@@ -766,6 +766,99 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_foreign_mem_type, rcx,
                                         "rc_x")
 
 
+/* Without GPUDirect RDMA the get initiator cannot know the GPU of the peer's
+ * buffer, so its model of the peer's rndv/put/mtype may predict other lanes than
+ * the peer selects by its own GPU. The initiator must progress also the lanes
+ * the peer writes the data and ATP on, since their events may never arrive. */
+class test_ucp_rma_rndv_multi_gpu_no_gdr : public test_ucp_rma {
+public:
+    /* Fits one host fragment, so that the peer writes it by rndv/put/mtype */
+    static constexpr size_t SIZE = 256 * UCS_KBYTE;
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        /* The workers of a shared context arm their CQs through different UAR
+         * pages of the same device context */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "shared_context",
+                               MULTI_THREAD_CONTEXT);
+    }
+
+    test_ucp_rma_rndv_multi_gpu_no_gdr()
+    {
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
+    }
+
+    void init() override
+    {
+        if (mem_buffer::get_device_count() < 2) {
+            UCS_TEST_SKIP_R("need at least 2 CUDA devices");
+        }
+
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        /* Tie the NICs, so that the GPU of the buffer breaks the tie */
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
+        modify_config("RNDV_SCHEME", "put_ppln");
+        modify_config("RNDV_FRAG_MEM_TYPES", "host");
+        modify_config("RNDV_FRAG_SIZE", "host:512K");
+        /* TODO: Remove when rndv/put/mtype implements reset */
+        modify_config("PROTO_REQUEST_RESET", "n");
+        test_ucp_rma::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_multi_gpu_no_gdr, get_from_other_gpu)
+{
+    const int worker_index    = sender().get_num_workers() - 1;
+    const ucp_ep_h ep         = sender().ep(worker_index);
+    const ucp_worker_h worker = sender().worker(worker_index);
+    const uint64_t seed       = 0x1234;
+    ucp_request_param_t param;
+    unsigned proxy_count;
+    void *rkey_buffer;
+    size_t rkey_size;
+    ucp_rkey_h rkey;
+    void *req;
+
+    scoped_cuda_device device_guard(1);
+    mapped_buffer remote_buf(SIZE, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+
+    mem_buffer::set_device(0);
+    mapped_buffer local_buf(SIZE, sender(), 0, UCS_MEMORY_TYPE_CUDA);
+    remote_buf.pattern_fill(seed);
+    local_buf.memset(0);
+
+    ASSERT_UCS_OK(ucp_rkey_pack(receiver().ucph(), remote_buf.memh(),
+                                &rkey_buffer, &rkey_size));
+    ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
+    ucp_rkey_buffer_release(rkey_buffer);
+    ucs::handle<ucp_rkey_h> rkey_handle(rkey, ucp_rkey_destroy);
+
+    proxy_count = worker_proxy_recv_count(worker);
+    request_param_init(&param, local_buf.memh());
+    req = ucp_get_nbx(ep, local_buf.ptr(), SIZE, (uintptr_t)remote_buf.ptr(),
+                      rkey, &param);
+    ASSERT_UCS_PTR_OK(req);
+    if (req != NULL) {
+        ASSERT_EQ(UCS_OK, request_progress(req, {&sender(), &receiver()}, 10.0,
+                                           worker_index))
+                << "the get did not complete";
+        request_release(req);
+    }
+
+    local_buf.pattern_check(seed);
+
+    /* Waking up on an interface event is not enough, since the events of some
+     * interfaces may never arrive */
+    EXPECT_EQ(proxy_count, worker_proxy_recv_count(worker))
+            << "the peer sent on an interface the initiator did not progress";
+}
+
+/* cuda_ipc is reachable intra-node and would resolve the sys_dev */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_multi_gpu_no_gdr, rcx_cuda,
+                              "rc_x,cuda_copy")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;

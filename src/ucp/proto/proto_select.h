@@ -248,6 +248,13 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
                      ucp_worker_cfg_index_t *new_rkey_cfg_index);
 
 
+/* Activate the worker interfaces of the given lanes while the endpoint config
+ * is used, like the lanes of the selected protocols */
+void ucp_proto_select_activate_lanes(ucp_worker_h worker,
+                                     ucp_worker_cfg_index_t ep_cfg_index,
+                                     ucp_lane_map_t lane_map);
+
+
 /* Lookup the initialized protocols for another select parameter, on the same
  * endpoint and remote key configuration as the given init parameters */
 const ucp_proto_select_init_protocols_t *

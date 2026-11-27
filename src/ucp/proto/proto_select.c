@@ -515,6 +515,19 @@ ucp_proto_select_get_lane_map(ucp_worker_h worker,
     return lane_map;
 }
 
+void ucp_proto_select_activate_lanes(ucp_worker_h worker,
+                                     ucp_worker_cfg_index_t ep_cfg_index,
+                                     ucp_lane_map_t lane_map)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
+
+    lane_map &= ~ep_config->active_lane_map;
+    ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
+                                     ucp_worker_iface_progress_ep);
+
+    ep_config->active_lane_map |= lane_map;
+}
+
 /**
  * Activate UCP worker interfaces corresponding to the resources of lanes used
  * in the selected protocols.
@@ -524,16 +537,9 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
                                  const ucp_proto_select_elem_t *select_elem,
                                  ucp_worker_cfg_index_t ep_cfg_index)
 {
-    ucp_ep_config_t *ep_config;
-    ucp_lane_map_t lane_map;
-
-    ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
-    lane_map  = ucp_proto_select_get_lane_map(worker, select_elem) &
-                ~ep_config->active_lane_map;
-    ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
-                                     ucp_worker_iface_progress_ep);
-
-    ep_config->active_lane_map |= lane_map;
+    ucp_proto_select_activate_lanes(
+            worker, ep_cfg_index,
+            ucp_proto_select_get_lane_map(worker, select_elem));
 }
 
 static ucs_status_t
