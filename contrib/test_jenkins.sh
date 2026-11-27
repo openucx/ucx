@@ -1307,6 +1307,14 @@ run_malloc_hook_gtest() {
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
 
+	echo "==== Running malloc hooks valloc test with malloc relocation, $compiler_name compiler ===="
+	$TIMEOUT env \
+		UCX_MEM_MMAP_HOOK_MODE=reloc \
+		UCX_MEM_MALLOC_HOOKS=n \
+		UCX_MEM_MALLOC_RELOC=y \
+		GTEST_FILTER=malloc_hook.valloc_page_aligned \
+			make -C test/gtest test
+
 	echo "==== Running cuda hooks, $compiler_name compiler ===="
 	$TIMEOUT env \
 		GTEST_FILTER='cuda_hooks.*' \

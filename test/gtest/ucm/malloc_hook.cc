@@ -588,7 +588,17 @@ UCS_TEST_F(malloc_hook, asprintf) {
     (void)dlerror();
 }
 
-UCS_TEST_F(malloc_hook, valloc_page_aligned) {
+static bool skip_if_malloc_reloc_disabled() {
+    return !ucm_global_opts.enable_malloc_reloc ||
+           ucm_global_opts.enable_malloc_hooks;
+}
+
+/* valloc() is replaced by UCM only when malloc symbols are relocated, so run
+ * with UCX_MEM_MMAP_HOOK_MODE=reloc UCX_MEM_MALLOC_HOOKS=n
+ * UCX_MEM_MALLOC_RELOC=y. Otherwise, this checks libc and passes anyway.
+ */
+UCS_TEST_SKIP_COND_F(malloc_hook, valloc_page_aligned,
+                     skip_if_malloc_reloc_disabled()) {
     static const size_t sizes[] = {1, 100, 4096, 10000, 1 * UCS_MBYTE};
     const size_t page_size      = ucs_get_page_size();
 
