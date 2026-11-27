@@ -102,7 +102,7 @@ ucp_proto_put_sgl_am_bcopy_send_func(ucp_request_t *req,
 
     if (ucp_datatype_iter_next_sgl_frags(dt_iter,
                                          req->send.rma.sgl.remote_addrs, 1,
-                                         max_payload, next_iter, &buffer,
+                                         max_payload, 0, next_iter, &buffer,
                                          &length, &remote_addr,
                                          &elem_index) == 0) {
         return UCS_OK;

@@ -97,6 +97,54 @@
     } while (0)
 
 
+typedef struct {
+    ucp_datatype_t             datatype;
+    size_t                     contig_length;
+    size_t                     sgl_length;
+    size_t                     sgl_min_length;
+    const ucp_dt_remote_sgl_t *remote;
+} ucp_rma_dt_info_t;
+
+
+#define UCP_RMA_DT_INFO_INIT() \
+    { .datatype = ucp_dt_make_contig(1) }
+
+
+#define UCP_RMA_PARSE_DATATYPE(_dt_info, _buffer, _count, _remote_addr, \
+                               _rkey, _param) \
+    do { \
+        if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) { \
+            (_dt_info).datatype = (_param)->datatype; \
+            if (UCP_DT_IS_SGL((_dt_info).datatype)) { \
+                UCP_RMA_SGL_CHECK_PARAMS(_buffer, _count, _remote_addr, \
+                                         _rkey, _param); \
+                (_dt_info).remote     = (_param)->remote; \
+                (_rkey)               = (_dt_info).remote->rkeys[0]; \
+                (_dt_info).sgl_length = ucp_dt_sgl_length( \
+                        ((const ucp_dt_local_sgl_t*)(_buffer))->lengths, \
+                        _count, &(_dt_info).sgl_min_length); \
+            } else if (UCP_DT_IS_CONTIG((_dt_info).datatype)) { \
+                (_dt_info).contig_length = \
+                        ucp_contig_dt_length((_dt_info).datatype, _count); \
+            } \
+        } else { \
+            (_dt_info).contig_length = (_count); \
+        } \
+    } while (0)
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_rma_request_set_sgl(ucp_request_t *req, const ucp_rma_dt_info_t *dt_info)
+{
+    if (dt_info->remote != NULL) {
+        req->send.rma.sgl.remote_addrs    = dt_info->remote->remote_addrs;
+        req->send.rma.sgl.rkeys           = dt_info->remote->rkeys;
+        req->send.rma.sgl.length          = dt_info->sgl_length;
+        req->send.rma.sgl.min_elem_length = dt_info->sgl_min_length;
+    }
+}
+
+
 #define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
     do { \
         if (ENABLE_PARAMS_CHECK && ucs_unlikely((_buffer) == NULL)) { \
@@ -212,11 +260,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
-    ucp_worker_h worker               = ep->worker;
-    size_t contig_length              = 0;
-    size_t sgl_length                 = 0;
-    ucp_datatype_t datatype           = ucp_dt_make_contig(1);
-    const ucp_dt_remote_sgl_t *remote = NULL;
+    ucp_worker_h worker       = ep->worker;
+    ucp_rma_dt_info_t dt_info = UCP_RMA_DT_INFO_INIT();
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
@@ -243,35 +288,19 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     }
 
 
-    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
-        datatype = param->datatype;
-        if (UCP_DT_IS_SGL(datatype)) {
-            UCP_RMA_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
-            remote     = param->remote;
-            rkey       = remote->rkeys[0];
-            sgl_length = ucp_dt_sgl_length(
-                    ((const ucp_dt_local_sgl_t*)buffer)->lengths, count);
-        } else if (UCP_DT_IS_CONTIG(datatype)) {
-            contig_length = ucp_contig_dt_length(datatype, count);
-        }
-    } else {
-        contig_length = count;
-    }
+    UCP_RMA_PARSE_DATATYPE(dt_info, buffer, count, remote_addr, rkey, param);
 
     req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                 goto out_unlock;});
     req->send.rma.rkey        = rkey;
     req->send.rma.remote_addr = remote_addr;
-    if (remote != NULL) {
-        req->send.rma.sgl.remote_addrs = remote->remote_addrs;
-        req->send.rma.sgl.rkeys        = remote->rkeys;
-        req->send.rma.sgl.length       = sgl_length;
-    }
+    ucp_rma_request_set_sgl(req, &dt_info);
 
     ret = ucp_proto_request_send_op_rma(
             ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_PUT,
-            buffer, count, datatype, contig_length, param, 0, 0);
+            buffer, count, dt_info.datatype, dt_info.contig_length, param, 0,
+            0);
 
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -310,13 +339,12 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
-    ucp_worker_h worker  = ep->worker;
-    size_t contig_length = 0;
+    ucp_worker_h worker       = ep->worker;
+    ucp_rma_dt_info_t dt_info = UCP_RMA_DT_INFO_INIT();
     ucs_status_ptr_t ret;
     ucp_request_t *req;
-    uintptr_t datatype;
 
-    UCP_REQUEST_CHECK_PARAM(param);
+    UCP_REQUEST_CHECK_PARAM_COMMON(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -335,21 +363,21 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         goto out_unlock;
     }
 
-    datatype = ucp_request_param_datatype(param);
-    req      = ucp_request_get_param(worker, param,
-                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                     goto out_unlock;});
+    UCP_RMA_PARSE_DATATYPE(dt_info, buffer, count, remote_addr, rkey, param);
+
+    req = ucp_request_get_param(worker, param,
+                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                goto out_unlock;});
 
     req->send.rma.rkey             = rkey;
     req->send.rma.remote_addr      = remote_addr;
     req->send.state.completed_size = 0;
-    if (UCP_DT_IS_CONTIG(datatype)) {
-        contig_length = ucp_contig_dt_length(datatype, count);
-    }
+    ucp_rma_request_set_sgl(req, &dt_info);
 
     ret = ucp_proto_request_send_op_rma(
             ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_GET,
-            buffer, count, datatype, contig_length, param, 0, 0);
+            buffer, count, dt_info.datatype, dt_info.contig_length, param, 0,
+            0);
 
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
