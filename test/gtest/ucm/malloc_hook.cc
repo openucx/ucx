@@ -589,7 +589,8 @@ UCS_TEST_F(malloc_hook, asprintf) {
 }
 
 static bool is_malloc_reloc_active() {
-    return ucm_global_opts.enable_malloc_reloc &&
+    return (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&
+           ucm_global_opts.enable_malloc_reloc &&
            !ucm_global_opts.enable_malloc_hooks;
 }
 
@@ -610,7 +611,12 @@ static void test_valloc_page_aligned() {
  * is not the current configuration, re-run this test in a child process with
  * relocation forced, otherwise it would only check libc and pass anyway.
  */
-UCS_TEST_SKIP_COND_F(malloc_hook, valloc_page_aligned, RUNNING_ON_VALGRIND) {
+class malloc_hook_system : private ucs::clear_dontcopy_regions,
+                           public malloc_hook {
+};
+
+UCS_TEST_SKIP_COND_F(malloc_hook_system, valloc_page_aligned,
+                     RUNNING_ON_VALGRIND) {
     static const char *child_env = "UCX_GTEST_VALLOC_CHILD";
 
     if (is_malloc_reloc_active()) {
@@ -627,7 +633,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, valloc_page_aligned, RUNNING_ON_VALGRIND) {
         << " UCX_MEM_MMAP_HOOK_MODE=reloc UCX_MEM_MALLOC_HOOKS=n"
         << " UCX_MEM_MALLOC_RELOC=y " << child_env << "=1"
         << " '" << ucs_get_exe() << "'"
-        << " --gtest_filter=malloc_hook.valloc_page_aligned";
+        << " --gtest_filter=malloc_hook_system.valloc_page_aligned";
 
     int ret = system(cmd.str().c_str());
     EXPECT_EQ(0, ret) << cmd.str();
