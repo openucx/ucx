@@ -273,6 +273,8 @@ struct ucp_request {
                         const uint64_t   *remote_addrs;
                         ucp_rkey_h const *rkeys;
                         size_t           length; /* Total length in bytes */
+                        size_t           min_elem_length; /* Shortest non-zero
+                                                             element length */
                     } sgl;
                 } rma;
 

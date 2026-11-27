@@ -954,6 +954,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     mpriv->lane_map     = selection->lane_map;
     mpriv->num_lanes    = 0;
     mpriv->min_frag     = 0;
+    mpriv->min_get_frag = 0;
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
     perf->max_frag      = 0;
@@ -1038,6 +1039,11 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
+
+        mpriv->min_get_frag = ucs_max(
+                mpriv->min_get_frag,
+                ucp_proto_common_get_iface_attr(&params->super.super,
+                                                lane)->cap.get.min_zcopy);
 
         if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {

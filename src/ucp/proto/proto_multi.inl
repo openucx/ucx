@@ -422,7 +422,7 @@ ucp_proto_rma_sgl_max_payload(const ucp_request_t *req,
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rma_sgl_offload_send_frags(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        size_t max_frag_count, ucp_datatype_iter_t *next_iter,
+        size_t max_frag_count, size_t min_frag, ucp_datatype_iter_t *next_iter,
         ucp_proto_rma_sgl_post_func_t post_func)
 {
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
@@ -450,8 +450,8 @@ ucp_proto_rma_sgl_offload_send_frags(
 
     frag_count = ucp_datatype_iter_next_sgl_frags(
             dt_iter, req->send.rma.sgl.remote_addrs, max_frag_count,
-            ucp_proto_rma_sgl_max_payload(req, lpriv), next_iter, buffers,
-            lengths, remote_addrs, elem_indices);
+            ucp_proto_rma_sgl_max_payload(req, lpriv), min_frag, next_iter,
+            buffers, lengths, remote_addrs, elem_indices);
     if (frag_count == 0) {
         return UCS_OK;
     }
@@ -474,7 +474,7 @@ ucp_proto_rma_sgl_offload_send_frags(
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rma_sgl_offload_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter,
+        size_t min_frag, ucp_datatype_iter_t *next_iter,
         ucp_proto_rma_sgl_post_func_t post_func)
 {
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
@@ -510,7 +510,8 @@ ucp_proto_rma_sgl_offload_send_func(
                      (lengths[start_index] == 0) ||
                      (lengths[start_index] > max_payload))) {
         return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, max_frag_count,
-                                                    next_iter, post_func);
+                                                    min_frag, next_iter,
+                                                    post_func);
     }
 
     /* Stop at the lane payload, so that each lane sends its share of the
@@ -522,6 +523,9 @@ ucp_proto_rma_sgl_offload_send_func(
             break;
         }
 
+        ucs_assertv(length >= min_frag, "length=%zu min_frag=%zu", length,
+                    min_frag);
+
         total_length += length;
     }
 
@@ -531,7 +535,8 @@ ucp_proto_rma_sgl_offload_send_func(
                      (elem_count < max_frag_count) &&
                      ((start_index + elem_count) < dt_iter->length))) {
         return ucp_proto_rma_sgl_offload_send_frags(req, lpriv, max_frag_count,
-                                                    next_iter, post_func);
+                                                    min_frag, next_iter,
+                                                    post_func);
     }
 
     uct_rkeys_size = elem_count * sizeof(uct_rkey_t);
