@@ -11,6 +11,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 #include <ucs/arch/atomic.h>
@@ -1190,6 +1191,55 @@ UCS_TEST_P(test_uct_sockaddr_tcp_maxseg, set_sockopt)
 }
 
 _UCT_INSTANTIATE_CM_TEST_CASE(test_uct_sockaddr_tcp_maxseg, tcp)
+
+
+class test_uct_sockaddr_tcp : public test_uct_sockaddr {
+protected:
+    size_t num_pending_server_eps()
+    {
+        uct_tcp_sockcm_t *tcp_sockcm = ucs_derived_of(m_server->cm(),
+                                                      uct_tcp_sockcm_t);
+        ucs::scoped_async_lock lock(m_server->async());
+
+        return ucs_list_length(&tcp_sockcm->ep_list);
+    }
+};
+
+/* Destroy the listener while a server endpoint it accepted waits for the
+ * client's private data. The listener must close the endpoint, since it would
+ * invoke the destroyed listener's callback once the data arrives. */
+UCS_TEST_P(test_uct_sockaddr_tcp, destroy_listener_with_pending_conn_request) {
+    const struct sockaddr *addr        = m_connect_addr.get_sock_addr_ptr();
+    uct_tcp_sockcm_priv_data_hdr_t hdr = {};
+    int fd;
+
+    start_listen(test_uct_sockaddr::conn_request_cb);
+
+    /* Connect a plain TCP client, which does not send its private data */
+    ASSERT_UCS_OK(ucs_socket_create(addr->sa_family, SOCK_STREAM, 0, &fd));
+    EXPECT_UCS_OK(ucs_socket_connect(fd, addr));
+
+    wait_for_cond([this]() { return num_pending_server_eps() == 1; },
+                  [this]() { progress(); });
+    EXPECT_EQ(1u, num_pending_server_eps());
+
+    uct_listener_destroy(m_server->revoke_listener());
+    EXPECT_EQ(0u, num_pending_server_eps());
+
+    if (!HasFailure()) {
+        /* The connection is closed by the server, sending the private data
+         * must not invoke the destroyed listener's callback */
+        scoped_log_handler slh(wrap_errors_logger);
+        ucs_socket_send(fd, &hdr, sizeof(hdr));
+        EXPECT_NE(UCS_OK, ucs_socket_recv(fd, &hdr, sizeof(hdr)));
+        short_progress_loop();
+        EXPECT_EQ(0, m_server_recv_req_cnt);
+    }
+
+    ucs_close_fd(&fd);
+}
+
+_UCT_INSTANTIATE_CM_TEST_CASE(test_uct_sockaddr_tcp, tcp)
 
 
 class test_uct_sockaddr_err_handle_non_exist_ip : public test_uct_sockaddr {
