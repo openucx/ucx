@@ -1767,13 +1767,20 @@ ucp_perf_test_destroy_workers(ucx_perf_context_t *perf, unsigned count)
 ucs_status_t
 ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
 {
-    ucs_time_t deadline = ucs_get_time() +
-                          ucs_time_from_sec(params->warmup_time);
     ucx_perf_counter_t warmup_iter, total_warmup_iter;
     ucs_status_t status, stop_status;
+    ucs_time_t deadline;
 
-    /* Perform no more than 'params->warmup_iter' iterations but try to not
-       exceed 'params->warmup_time' */
+    /* Run rounds of doubling size until 'params->warmup_iter' iterations are
+       done or 'params->max_warmup_time' has passed (no time limit if it is 0).
+       Both limits are checked only between rounds, so the last round may
+       exceed them. */
+    if (params->max_warmup_time == 0.0) {
+        deadline = UCS_TIME_INFINITY;
+    } else {
+        deadline = ucs_get_time() + ucs_time_from_sec(params->max_warmup_time);
+    }
+
     warmup_iter       = 1;
     total_warmup_iter = 0;
     while (total_warmup_iter < params->warmup_iter) {
