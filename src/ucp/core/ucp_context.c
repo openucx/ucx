@@ -3108,7 +3108,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_status_t status;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-        if (!ucp_gpu_nic_assignment_is_vera_rubin()) {
+        if (!ucs_topo_is_vera_rubin()) {
             ucs_debug("gpu-nic assignment is supported only on vera rubin, "
                       "skipping");
             return UCS_OK;

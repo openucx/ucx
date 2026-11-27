@@ -11,6 +11,7 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -1236,6 +1237,48 @@ int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return is_incomplete;
+}
+
+int ucs_topo_is_vera_rubin(void)
+{
+    const unsigned num_devices = ucs_topo_num_devices();
+    unsigned num_gpus          = 0;
+    ucs_sys_device_t sys_dev;
+    unsigned i;
+
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        ucs_debug("cpu model %s is not vera", ucs_cpu_model_name());
+        return 0;
+    }
+
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        ucs_diag("gpu discovery is incomplete, cannot detect vera rubin");
+        return 0;
+    }
+
+    for (i = 0; i < num_devices; ++i) {
+        sys_dev = (ucs_sys_device_t)i;
+        if (ucs_topo_sys_device_get_class(sys_dev) !=
+            UCS_TOPO_DEVICE_CLASS_ACC) {
+            continue;
+        }
+
+        if (!(ucs_topo_sys_device_get_flags(sys_dev) &
+              UCS_TOPO_DEVICE_FLAG_RUBIN)) {
+            ucs_diag("gpu %s is not rubin",
+                     ucs_topo_sys_device_get_name(sys_dev));
+            return 0;
+        }
+
+        ++num_gpus;
+    }
+
+    if (num_gpus == 0) {
+        ucs_debug("no gpus found");
+        return 0;
+    }
+
+    return 1;
 }
 
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
