@@ -90,7 +90,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"TX_POLL_ALWAYS", "n",
    "When enabled, TX completions are polled every time the progress function is invoked.\n"
-   "Otherwise poll TX completions only if no RX completions found.",
+   "Otherwise, poll TX completions only if no RX completions are found.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
   {"ECE", "auto",
