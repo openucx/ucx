@@ -244,40 +244,16 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
     ucs_assert_always(ep->tx.resend_count == 0);
 }
 
-/* A simultaneous CREQ is not a proof that the peer received our CREQ, so wait
- * for the ACK of our CREP */
-static void uct_ud_ep_crep_comp_wait(uct_ud_ep_t *ep)
+/* Make the completions waiting for the ACK of from_psn wait for to_psn */
+static void uct_ud_ep_comp_psn_move(uct_ud_ep_t *ep, uct_ud_psn_t from_psn,
+                                    uct_ud_psn_t to_psn)
 {
     uct_ud_send_skb_t *skb;
-
-    /* Only our CREQ was sent, the next packet is our CREP */
-    ucs_assert(!uct_ud_ep_is_connected(ep));
-    ucs_assertv(ep->tx.psn == (uct_ud_psn_t)(UCT_UD_INITIAL_PSN + 1),
-                "ep %p: tx.psn=%u", ep, ep->tx.psn);
 
     ucs_queue_for_each(skb, &ep->tx.window, queue) {
         if ((skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) &&
-            (skb->neth->psn == (uct_ud_psn_t)(ep->tx.psn - 1))) {
-            skb->neth->psn = ep->tx.psn;
-        }
-    }
-}
-
-/* A purge or flush(CANCEL) does not wait for the CREP which is not sent yet, so
- * release the completions waiting for it with the packets sent */
-static void uct_ud_ep_crep_comp_purge(uct_ud_ep_t *ep)
-{
-    uct_ud_send_skb_t *skb;
-
-    if (ep->tx.psn != (uct_ud_psn_t)(UCT_UD_INITIAL_PSN + 1)) {
-        /* The CREP was sent, so the window PSN releases its completions */
-        return;
-    }
-
-    ucs_queue_for_each(skb, &ep->tx.window, queue) {
-        if (skb->neth->psn == ep->tx.psn) {
-            ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
-            skb->neth->psn = (uct_ud_psn_t)(ep->tx.psn - 1);
+            (skb->neth->psn == from_psn)) {
+            skb->neth->psn = to_psn;
         }
     }
 }
@@ -299,7 +275,7 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
     uct_ud_ep_ctl_op_del(ep, ep->tx.pending.ops);
     ucs_arbiter_group_desched(&iface->tx.pending_q, &ep->tx.pending.group);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
-    uct_ud_ep_crep_comp_purge(ep);
+    uct_ud_ep_comp_psn_move(ep, ep->tx.psn, ep->tx.acked_psn);
     uct_ud_ep_window_release(ep, status, 0);
     ucs_assert(ucs_queue_is_empty(&ep->tx.window));
 }
@@ -937,7 +913,8 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                  * creq, so a completion waiting for it is completed by the
                  * ack of our next packet, the crep.
                  */
-                uct_ud_ep_crep_comp_wait(ep);
+                uct_ud_ep_comp_psn_move(ep, UCT_UD_INITIAL_PSN,
+                                        UCT_UD_INITIAL_PSN + 1);
                 uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
             }
         } else {
@@ -1343,7 +1320,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ud_ep_reset_max_psn(ep);
         ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
-        uct_ud_ep_crep_comp_purge(ep);
+        uct_ud_ep_comp_psn_move(ep, ep->tx.psn, ep->tx.acked_psn);
     }
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
