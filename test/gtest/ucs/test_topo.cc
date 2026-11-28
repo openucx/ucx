@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <ftw.h>
 #include <limits>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -18,7 +19,7 @@ extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/topo/base/topo.h>
+#include <ucs/sys/topo/base/topo_int.h>
 }
 
 static std::string get_sysfs_device_path(const std::string &bdf)
@@ -1339,6 +1340,405 @@ UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
     EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
     EXPECT_FALSE(ucs_topo_device_has_sibling(plane));
     EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+}
+
+UCS_TEST_F(test_topo, pci_p2p_path_config) {
+    const ucs_sys_bus_id_t bus_id = {0xffff, 0xff, 0x1f, 7};
+    ucs_sys_device_t sys_dev;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+
+    /* The device is not found in sysfs */
+    modify_config("TOPO_PCI_P2P_PATH", "auto");
+    EXPECT_FALSE(ucs_topo_sys_device_is_p2p_redirected(sys_dev));
+
+    modify_config("TOPO_PCI_P2P_PATH", "root");
+    EXPECT_TRUE(ucs_topo_sys_device_is_p2p_redirected(sys_dev));
+    EXPECT_FALSE(
+            ucs_topo_sys_device_is_p2p_redirected(UCS_SYS_DEVICE_ID_UNKNOWN));
+    /* The device itself counts as under its root port */
+    EXPECT_TRUE(ucs_topo_is_p2p_redirected(sys_dev, sys_dev));
+
+    /* The override does not change the detected value */
+    modify_config("TOPO_PCI_P2P_PATH", "auto");
+    EXPECT_FALSE(ucs_topo_sys_device_is_p2p_redirected(sys_dev));
+
+    modify_config("TOPO_PCI_P2P_PATH", "direct");
+    EXPECT_FALSE(ucs_topo_sys_device_is_p2p_redirected(sys_dev));
+}
+
+UCS_TEST_F(test_topo, same_root_port) {
+    const ucs_sys_bus_id_t bus_id1 = {0xffff, 0xff, 0x1f, 5};
+    const ucs_sys_bus_id_t bus_id2 = {0xffff, 0xff, 0x1f, 6};
+    ucs_sys_device_t sys_dev1, sys_dev2;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id1, &sys_dev1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id2, &sys_dev2));
+
+    EXPECT_TRUE(ucs_topo_is_same_root_port(sys_dev1, sys_dev1));
+    /* The devices are not found in sysfs */
+    EXPECT_FALSE(ucs_topo_is_same_root_port(sys_dev1, sys_dev2));
+    EXPECT_FALSE(ucs_topo_is_same_root_port(sys_dev1,
+                                            UCS_SYS_DEVICE_ID_UNKNOWN));
+}
+
+/* Find a PCI device of the host behind a root port, skip the test if none */
+static void find_pci_device_behind_root_port(std::string &bdf,
+                                             std::string &path)
+{
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir("/sys/bus/pci/devices");
+    if (dir == NULL) {
+        UCS_TEST_SKIP_R("PCI devices sysfs directory is unavailable");
+    }
+
+    /* The bus ID has a 16-bit domain, so skip devices with wider domains, such
+     * as Intel VMD domains */
+    while ((entry = readdir(dir)) != NULL) {
+        path = get_sysfs_device_path(entry->d_name);
+        if (path.empty() ||
+            (strchr(entry->d_name, ':') != (entry->d_name + 4))) {
+            continue;
+        }
+
+        if (ucs_topo_sysfs_get_root_port(path.c_str()) !=
+            UCS_TOPO_ROOT_PORT_NONE) {
+            bdf = entry->d_name;
+            break;
+        }
+    }
+
+    closedir(dir);
+    if (bdf.empty()) {
+        UCS_TEST_SKIP_R("no PCI device behind a root port");
+    }
+}
+
+/* Two system devices of one PCI device of the host, and one not in sysfs */
+class test_topo_pci_device : public test_topo {
+protected:
+    virtual void init()
+    {
+        const ucs_sys_bus_id_t fake_bus_id = {0xffff, 0xff, 0x1f, 4};
+        ucs_sys_bus_id_t bus_id;
+
+        /* Skip before test_topo::init(), whose state cleanup() restores only
+         * after a successful init() */
+        find_pci_device_behind_root_port(m_bdf, m_path);
+
+        test_topo::init();
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bdf_name(m_bdf.c_str(),
+                                                       &m_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(m_sys_dev, &bus_id));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id, 1,
+                                                                    &m_alias));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&fake_bus_id, &m_fake));
+        ASSERT_NE(m_sys_dev, m_alias);
+    }
+
+    std::string m_bdf, m_path;
+    ucs_sys_device_t m_sys_dev, m_alias, m_fake;
+};
+
+UCS_TEST_F(test_topo_pci_device, p2p_redirect) {
+    bool is_redirected;
+
+    EXPECT_TRUE(ucs_topo_is_same_root_port(m_sys_dev, m_alias));
+    EXPECT_FALSE(ucs_topo_is_same_root_port(m_sys_dev, m_fake));
+
+    /* The memory of the same PCI device is under the same root port */
+    modify_config("TOPO_PCI_P2P_PATH", "root");
+    EXPECT_TRUE(ucs_topo_is_p2p_redirected(m_sys_dev, m_alias));
+    EXPECT_FALSE(ucs_topo_is_p2p_redirected(m_sys_dev, m_fake));
+    EXPECT_FALSE(ucs_topo_is_p2p_redirected(m_fake, m_sys_dev));
+    EXPECT_FALSE(
+            ucs_topo_is_p2p_redirected(m_sys_dev, UCS_SYS_DEVICE_ID_UNKNOWN));
+
+    modify_config("TOPO_PCI_P2P_PATH", "direct");
+    EXPECT_FALSE(ucs_topo_is_p2p_redirected(m_sys_dev, m_alias));
+
+    /* Under the same root port, the check of the device decides */
+    modify_config("TOPO_PCI_P2P_PATH", "auto");
+    is_redirected = ucs_topo_sysfs_is_p2p_redirected("/sys/bus/pci/devices",
+                                                     m_path.c_str());
+    EXPECT_EQ(is_redirected,
+              ucs_topo_sys_device_is_p2p_redirected(m_sys_dev) != 0)
+            << m_bdf;
+    EXPECT_EQ(is_redirected,
+              ucs_topo_is_p2p_redirected(m_sys_dev, m_alias) != 0)
+            << m_bdf;
+}
+
+UCS_TEST_F(test_topo_pci_device, direct_nic) {
+    modify_config("TOPO_PCI_P2P_PATH", "root");
+    EXPECT_TRUE(ucs_topo_sys_device_is_p2p_redirected(m_sys_dev));
+    EXPECT_TRUE(ucs_topo_is_p2p_redirected(m_sys_dev, m_alias));
+
+    /* A Direct NIC accesses the memory directly */
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(m_sys_dev, m_fake));
+    EXPECT_FALSE(ucs_topo_sys_device_is_p2p_redirected(m_sys_dev));
+    EXPECT_FALSE(ucs_topo_is_p2p_redirected(m_sys_dev, m_alias));
+    EXPECT_TRUE(ucs_topo_is_p2p_redirected(m_alias, m_sys_dev));
+}
+
+/* A fake sysfs tree with the PCI devices and their IOMMU groups */
+class test_topo_p2p_redirect : public ucs::test {
+protected:
+    static constexpr unsigned PCI_CLASS_BRIDGE      = 0x060400;
+    static constexpr unsigned PCI_CLASS_GPU         = 0x030200;
+    static constexpr unsigned PCI_CLASS_ACCELERATOR = 0x120000;
+    static constexpr unsigned PCI_CLASS_NIC         = 0x020700;
+    static constexpr unsigned PCI_CLASS_NVME        = 0x010802;
+    static constexpr int NO_IOMMU_GROUP             = -1;
+
+    virtual void init()
+    {
+        std::string root = std::string(ucs_get_tmpdir()) + "/ucx_topo.XXXXXX";
+        char resolved[PATH_MAX];
+
+        ucs::test::init();
+        if (mkdtemp(&root[0]) == nullptr) {
+            UCS_TEST_ABORT("mkdtemp(" << root << ") failed: "
+                                      << strerror(errno));
+        }
+
+        /* cleanup() is not called if init() fails */
+        m_root = root;
+        try {
+            if (realpath(root.c_str(), resolved) == nullptr) {
+                UCS_TEST_ABORT("realpath(" << root << ") failed: "
+                                           << strerror(errno));
+            }
+
+            m_root = resolved;
+            for (const auto &dir : {"/devices", "/devices/pci0000:00", "/bus",
+                                    "/bus/pci", "/bus/pci/devices", "/kernel",
+                                    "/kernel/iommu_groups"}) {
+                make_dir(m_root + dir);
+            }
+        } catch (...) {
+            remove_root();
+            throw;
+        }
+    }
+
+    virtual void cleanup()
+    {
+        remove_root();
+        ucs::test::cleanup();
+    }
+
+    /* Create a sysfs device directory under a parent device, and its link in
+     * the directory of the PCI devices */
+    std::string add_device(const std::string &parent, const std::string &bdf,
+                           unsigned pci_class, int iommu_group = NO_IOMMU_GROUP)
+    {
+        std::string path = parent + "/" + bdf;
+
+        make_dir(path);
+        set_class(path, pci_class);
+        if (iommu_group != NO_IOMMU_GROUP) {
+            /* The group can already exist */
+            EXPECT_TRUE((mkdir(group_path(iommu_group).c_str(), 0755) == 0) ||
+                        (errno == EEXIST))
+                    << group_path(iommu_group);
+            EXPECT_EQ(0, symlink(group_path(iommu_group).c_str(),
+                                 (path + "/iommu_group").c_str()));
+        }
+
+        EXPECT_EQ(0, symlink(path.c_str(), (pci_dir() + "/" + bdf).c_str()))
+                << bdf;
+        return path;
+    }
+
+    /* Create a bridge with its range of buses */
+    std::string add_bridge(const std::string &parent, const std::string &bdf,
+                           int first_bus, int last_bus,
+                           int iommu_group = NO_IOMMU_GROUP)
+    {
+        std::string path = add_device(parent, bdf, PCI_CLASS_BRIDGE,
+                                      iommu_group);
+
+        write_file(path + "/secondary_bus_number",
+                   std::to_string(first_bus) + "\n");
+        write_file(path + "/subordinate_bus_number",
+                   std::to_string(last_bus) + "\n");
+        return path;
+    }
+
+    /*
+     * Root port 0000:00:01.0 with a switch which connects m_peer (a GPU by
+     * default) and m_nic, and root port 0000:00:02.0 with m_other_nic right
+     * under it.
+     */
+    void add_topology(int peer_iommu_group, int nic_iommu_group)
+    {
+        m_root_port          = add_bridge(host_bridge(), "0000:00:01.0", 1, 4);
+        std::string upstream = add_bridge(m_root_port, "0000:01:00.0", 2, 4);
+
+        m_peer      = add_device(add_bridge(upstream, "0000:02:00.0", 3, 3),
+                                 "0000:03:00.0", PCI_CLASS_GPU,
+                                 peer_iommu_group);
+        m_nic       = add_device(add_bridge(upstream, "0000:02:01.0", 4, 4),
+                                 "0000:04:00.0", PCI_CLASS_NIC,
+                                 nic_iommu_group);
+        m_other_nic = add_device(add_bridge(host_bridge(), "0000:00:02.0", 5,
+                                            5),
+                                 "0000:05:00.0", PCI_CLASS_NIC);
+    }
+
+    std::string host_bridge() const
+    {
+        return m_root + "/devices/pci0000:00";
+    }
+
+    std::string pci_dir() const
+    {
+        return m_root + "/bus/pci/devices";
+    }
+
+    void set_class(const std::string &dev_path, unsigned pci_class)
+    {
+        char class_str[16];
+
+        snprintf(class_str, sizeof(class_str), "0x%06x\n", pci_class);
+        write_file(dev_path + "/class", class_str);
+    }
+
+    void set_domain_type(int iommu_group, const std::string &type)
+    {
+        write_file(group_path(iommu_group) + "/type", type + "\n");
+    }
+
+    bool is_redirected(const std::string &dev_path) const
+    {
+        return ucs_topo_sysfs_is_p2p_redirected(pci_dir().c_str(),
+                                                dev_path.c_str());
+    }
+
+    static void make_dir(const std::string &path)
+    {
+        if (mkdir(path.c_str(), 0755) != 0) {
+            UCS_TEST_ABORT("mkdir(" << path << ") failed: " << strerror(errno));
+        }
+    }
+
+    std::string m_root_port, m_peer, m_nic, m_other_nic;
+
+private:
+    static int
+    remove_path(const char *path, const struct stat *, int, struct FTW *)
+    {
+        return remove(path);
+    }
+
+    void remove_root()
+    {
+        nftw(m_root.c_str(), remove_path, 16, FTW_DEPTH | FTW_PHYS);
+    }
+
+    std::string group_path(int iommu_group) const
+    {
+        return m_root + "/kernel/iommu_groups/" + std::to_string(iommu_group);
+    }
+
+    void write_file(const std::string &path, const std::string &contents)
+    {
+        std::ofstream file(path);
+
+        file << contents;
+        EXPECT_TRUE(file.good()) << path;
+    }
+
+    std::string m_root;
+};
+
+UCS_TEST_F(test_topo_p2p_redirect, acs_isolation) {
+    add_topology(1, 2);
+    set_domain_type(1, "identity");
+    set_domain_type(2, "identity");
+
+    /* Separate IOMMU groups mean ACS redirect, even without translation */
+    EXPECT_TRUE(is_redirected(m_nic));
+    EXPECT_TRUE(is_redirected(m_peer));
+    /* No other device under its root port */
+    EXPECT_FALSE(is_redirected(m_other_nic));
+}
+
+UCS_TEST_F(test_topo_p2p_redirect, translation) {
+    add_topology(1, 1);
+
+    /* Without the domain type, on older kernels, assume no translation */
+    EXPECT_FALSE(is_redirected(m_nic));
+
+    for (const auto &type : {"DMA", "DMA-FQ"}) {
+        set_domain_type(1, type);
+        EXPECT_TRUE(is_redirected(m_nic)) << type;
+    }
+
+    for (const auto &type : {"identity", "unknown"}) {
+        set_domain_type(1, type);
+        EXPECT_FALSE(is_redirected(m_nic)) << type;
+    }
+}
+
+UCS_TEST_F(test_topo_p2p_redirect, no_iommu) {
+    add_topology(NO_IOMMU_GROUP, NO_IOMMU_GROUP);
+
+    EXPECT_FALSE(is_redirected(m_nic));
+}
+
+UCS_TEST_F(test_topo_p2p_redirect, any_peer) {
+    add_topology(1, 2);
+
+    for (unsigned pci_class : {PCI_CLASS_GPU, PCI_CLASS_ACCELERATOR,
+                               PCI_CLASS_NIC, PCI_CLASS_NVME}) {
+        set_class(m_peer, pci_class);
+        EXPECT_TRUE(is_redirected(m_nic)) << std::hex << pci_class;
+    }
+}
+
+UCS_TEST_F(test_topo_p2p_redirect, not_peers) {
+    std::string root_port = add_bridge(host_bridge(), "0000:00:01.0", 1, 6, 1);
+    std::string upstream  = add_bridge(root_port, "0000:01:00.0", 2, 6, 2);
+    std::string port      = add_bridge(upstream, "0000:02:00.0", 3, 4, 3);
+    std::string nic       = add_device(port, "0000:03:00.0", PCI_CLASS_NIC, 4);
+    std::string vmd_bridge;
+
+    /* Another function and a virtual function of the NIC under its port, a
+     * switch port without a device, and a device of a wider domain, e.g. of
+     * Intel VMD, whose truncated bus ID would be under the root port. All of
+     * them are in other IOMMU groups. */
+    add_device(port, "0000:03:00.1", PCI_CLASS_GPU, 5);
+    add_device(port, "0000:04:00.1", PCI_CLASS_NIC, 6);
+    add_bridge(upstream, "0000:02:01.0", 5, 5, 7);
+    vmd_bridge = add_bridge(upstream, "0000:02:02.0", 6, 6, 8);
+    add_device(vmd_bridge, "10000:05:00.0", PCI_CLASS_GPU, 9);
+
+    EXPECT_FALSE(is_redirected(nic));
+
+    /* A device under the root port in another domain is not a peer either */
+    add_device(add_bridge(upstream, "0001:02:03.0", 7, 7, 10), "0001:03:00.0",
+               PCI_CLASS_GPU, 11);
+    EXPECT_FALSE(is_redirected(nic));
+}
+
+UCS_TEST_F(test_topo_p2p_redirect, root_port) {
+    add_topology(1, 2);
+
+    /* Bus IDs of the root ports 0000:00:01.0 and 0000:00:02.0 */
+    EXPECT_EQ(0x100, ucs_topo_sysfs_get_root_port(m_nic.c_str()));
+    EXPECT_EQ(0x100, ucs_topo_sysfs_get_root_port(m_peer.c_str()));
+    EXPECT_EQ(0x200, ucs_topo_sysfs_get_root_port(m_other_nic.c_str()));
+
+    /* The host bridge and the root port itself are not behind a root port */
+    for (const auto &path : {host_bridge(), m_root_port}) {
+        EXPECT_EQ(UCS_TOPO_ROOT_PORT_NONE,
+                  ucs_topo_sysfs_get_root_port(path.c_str()))
+                << path;
+    }
 }
 
 class test_topo_pci_bw : public ucs::test {

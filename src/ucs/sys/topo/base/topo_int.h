@@ -9,9 +9,14 @@
 
 #include "topo.h"
 
+#include <ucs/config/types.h>
 #include <ucs/datastruct/static_bitmap.h>
 
 BEGIN_C_DECLS
+
+/* Root port of a device which is not behind a PCIe root port */
+#define UCS_TOPO_ROOT_PORT_NONE ((ucs_bus_id_bit_rep_t)-1)
+
 
 /* Possible role of a current device wrt its sibling */
 typedef enum {
@@ -61,6 +66,14 @@ typedef struct {
      * Several DEVs can share one auxiliary device (e.g. planes of a multiplane
      * NIC), and several MEMs can sit behind it (e.g. MPS MLOPart aliases). */
     ucs_sys_device_bitmap_t siblings;
+
+    /* PCIe root port of the device as returned by
+     * ucs_topo_get_bus_id_bit_repr(), or UCS_TOPO_ROOT_PORT_NONE */
+    ucs_bus_id_bit_rep_t    root_port;
+
+    /* Whether the peer-to-peer traffic with the other devices under the root
+     * port goes through the root complex, UCS_AUTO until detected */
+    ucs_ternary_auto_value_t p2p_redirect;
 } ucs_topo_sys_device_info_t;
 
 
@@ -83,6 +96,44 @@ int ucs_topo_sys_device_info_cmp(const ucs_topo_sys_device_info_t *device1,
  */
 ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
                                            char *path, size_t max);
+
+
+/**
+ * Check whether two system devices are the same device, or PCI devices under
+ * the same PCIe root port.
+ *
+ * @param [in] sys_dev1  First system device.
+ * @param [in] sys_dev2  Second system device.
+ *
+ * @return Nonzero if the devices are under the same root port, 0 otherwise.
+ */
+int ucs_topo_is_same_root_port(ucs_sys_device_t sys_dev1,
+                               ucs_sys_device_t sys_dev2);
+
+
+/**
+ * Get the PCIe root port of a PCI device from sysfs, as the registration of a
+ * system device does. For unit tests.
+ *
+ * @param [in] dev_path  Canonical sysfs path of the device.
+ *
+ * @return The root port as returned by ucs_topo_get_bus_id_bit_repr(), or
+ *         UCS_TOPO_ROOT_PORT_NONE if the device is not behind a root port.
+ */
+ucs_bus_id_bit_rep_t ucs_topo_sysfs_get_root_port(const char *dev_path);
+
+
+/**
+ * The sysfs variant of @ref ucs_topo_sys_device_is_p2p_redirected in the auto
+ * mode, for unit tests.
+ *
+ * @param [in] pci_dir   Directory of the PCI devices, /sys/bus/pci/devices.
+ * @param [in] dev_path  Canonical sysfs path of the device.
+ *
+ * @return Nonzero if the peer-to-peer traffic goes through the root complex,
+ *         0 otherwise.
+ */
+int ucs_topo_sysfs_is_p2p_redirected(const char *pci_dir, const char *dev_path);
 
 
 END_C_DECLS
