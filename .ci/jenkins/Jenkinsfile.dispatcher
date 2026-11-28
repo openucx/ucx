@@ -59,8 +59,18 @@ if (currentPrNumber) {
 def sha = githubHelper.getMergedSHA()
 def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
 
-githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
 currentBuild.description = githubHelper.getBuildDescription()
+
+// PR runs that start leaf jobs at the same time; the rest wait in start order
+def maxActiveRuns = 3
+
+// Run objects are not serializable, hence NonCPS
+@NonCPS
+def countOlderRuns(String jobName, int buildNumber) {
+  return Jenkins.instance.getItemByFullName(jobName).builds.findAll {
+    it.isBuilding() && it.number < buildNumber
+  }.size()
+}
 
 def jobs = [
   'ucx-static-checks-oss',
@@ -71,6 +81,15 @@ def jobs = [
 ]
 
 try {
+  if (countOlderRuns(env.JOB_NAME, currentBuild.number) >= maxActiveRuns) {
+    echo "Waiting for a free slot, at most ${maxActiveRuns} PR runs start leaf jobs at a time"
+    githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI waiting for a free slot", GitHubCommitState.PENDING)
+    while (countOlderRuns(env.JOB_NAME, currentBuild.number) >= maxActiveRuns) {
+      sleep 60
+    }
+  }
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
+
   def fanout = [:]
   for (def j in jobs) {
     def jobName = "UCX-OSS/${j}"
