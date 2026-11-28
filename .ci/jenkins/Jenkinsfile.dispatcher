@@ -68,6 +68,7 @@ def jobs = [
   'ucx-build-oss',
   'ucx-build-static-oss',
   'ucx-test-oss',
+  'ucx-test-namespace-oss',
 ]
 
 try {
