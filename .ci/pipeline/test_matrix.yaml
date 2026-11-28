@@ -26,6 +26,8 @@ taskName: '${arch}/${name}/w${axis_index}'
 
 env:
   RUN_TESTS: "yes"
+  # No MPI module in this job yet
+  RUN_MPI_TESTS: "no"
   TEST_PERF: "0"
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
