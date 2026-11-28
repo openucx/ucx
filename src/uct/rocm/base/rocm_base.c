@@ -163,6 +163,9 @@ hsa_status_t uct_rocm_base_init(void)
         goto end;
     }
 
+    /* Best-effort: a failure leaves VMM IPC to the align-down fallback. */
+    uct_rocm_base_vmm_registry_init();
+
     rocm_ucx_initialized = 1;
 
 end:
@@ -291,7 +294,7 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     status = uct_rocm_base_get_ptr_info((void *)addr, length, NULL, NULL,
                                         &hsa_mem_type, &agent, &dev_type);
     if ((status == HSA_STATUS_SUCCESS) &&
-        (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
+        uct_rocm_base_is_gpu_hsa_mem_type(hsa_mem_type) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         *mem_type_p = UCS_MEMORY_TYPE_ROCM;
@@ -469,13 +472,27 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
+    if (uct_rocm_base_is_gpu_hsa_mem_type(hsa_mem_type) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
+        if (uct_rocm_base_is_vmem_type(hsa_mem_type)) {
+            void *vmm_base;
+            size_t vmm_size;
+
+            /* agentBaseAddress is the queried pointer for VMEM, not the mapping
+             * base; use the true base/size from the vmm registry so the
+             * reported base_address and the memtype cache update below are not
+             * poisoned. */
+            if (uct_rocm_base_vmm_lookup_base(addr, &vmm_base, &vmm_size,
+                                              NULL) == UCS_OK) {
+                base_addr = vmm_base;
+                base_size = vmm_size;
+            }
         }
     } else {
         base_addr = (void*)addr;
@@ -670,4 +687,8 @@ UCS_MODULE_INIT() {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_rocm);
     UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);
     return UCS_OK;
+}
+
+UCS_STATIC_CLEANUP {
+    uct_rocm_base_vmm_registry_cleanup();
 }

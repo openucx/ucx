@@ -197,6 +197,9 @@ UCS_TEST_P(test_rocm_ipc_rma, get_device_ep)
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 }
 
+/* Host-initiated put/get zcopy (including VMM-backed buffers) is covered by the
+ * uct_p2p_rma_test *_zcopy[_vmm] variants, which instantiate for rocm_ipc. */
+
 _UCT_INSTANTIATE_TEST_CASE(test_rocm_ipc_rma, rocm_ipc)
 
 UCS_TEST_P(test_rocm_ipc_rma_device, device_put)

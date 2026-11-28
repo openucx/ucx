@@ -14,6 +14,8 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
 #include <unistd.h>
 
@@ -52,6 +54,15 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
+    /* Registration rejects a VMM buffer that straddles its mapping, so the
+     * packed range is always within [key->address, +key->length). */
+    ucs_assertv(!key->is_vmm ||
+                (((uintptr_t)address >= key->address) &&
+                 (((uintptr_t)address + length) <=
+                  (key->address + key->length))),
+                "VMM rkey range [%p, +0x%zx) exceeds mapping [0x%lx, +0x%zx)",
+                address, length, (unsigned long)key->address, key->length);
+
     *packed = *key;
 
     return UCS_OK;
@@ -76,6 +87,64 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         return UCS_ERR_INVALID_ADDR;
     }
 
+    if (uct_rocm_base_is_vmem_type(mem_type)) {
+        void *vmm_base;
+        size_t vmm_size;
+        uint64_t vmm_reg_id;
+
+        /* hsa_amd_pointer_info() reports agentBaseAddress as the queried pointer
+         * for VMEM, not the hsa_amd_vmem_map() base that
+         * hsa_amd_vmem_retain_alloc_handle() requires. Resolve the true base
+         * (and a stable per-live-mapping reg_id) from the vmm registry; a miss
+         * means the mapping base is unknown, so fall back to staging. */
+        if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size,
+                                          &vmm_reg_id) != UCS_OK) {
+            ucs_debug("VMM buffer %p not in registry; falling back from "
+                      "rocm_ipc", address);
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        /* A buffer that straddles a vmem_map boundary (e.g. a pool allocator
+         * that maps a large reservation in adjacent chunks) cannot be described
+         * by a single exported handle. Reject so UCP falls back to the staging
+         * pipeline instead of transferring past the mapping. */
+        if (((uintptr_t)address + length) > ((uintptr_t)vmm_base + vmm_size)) {
+            ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
+                      "[%p, +0x%zx); falling back from rocm_ipc", address,
+                      length, vmm_base, vmm_size);
+            return UCS_ERR_INVALID_ADDR;
+        }
+        /* Importing a pooled buffer's many chunks over IPC starts failing past
+         * a point, so stage it and keep IPC for standalone mappings. */
+        if (uct_rocm_base_vmm_is_pooled(vmm_base, vmm_size)) {
+            ucs_debug("VMM buffer [%p, +0x%zx) is a pooled chunk; falling "
+                      "back from rocm_ipc", address, length);
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        status = uct_rocm_base_vmm_export_fd(vmm_base, &key->vmm.fd);
+        if (status != UCS_OK) {
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        key->vmm.reg_id = vmm_reg_id;
+        key->address    = (uintptr_t)vmm_base;
+        key->length     = vmm_size;
+        key->dev_num    = uct_rocm_base_get_dev_num(agent);
+        key->is_vmm     = 1;
+        key->pid        = getpid();
+        key->pid_ns     = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        /* Export a free-invalidation signal so the owner's vmem_unmap tells
+         * importers to detach, releasing the allocation their mapping pins. */
+        memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        status = uct_rocm_ipc_export_add(key->address, key->length,
+                                         &key->ipc_signal);
+        if (status != UCS_OK) {
+            memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        }
+        return UCS_OK;
+    }
+
     hsa_status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
     if (hsa_status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to create ipc for %p/%lx", address, length);
@@ -85,6 +154,7 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->address = (uintptr_t)base_ptr;
     key->length  = size;
     key->dev_num = uct_rocm_base_get_dev_num(agent);
+    key->is_vmm  = 0;
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
@@ -107,7 +177,7 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     uct_rocm_ipc_key_t *key;
     ucs_status_t status;
 
-    key = ucs_malloc(sizeof(*key), "uct_rocm_ipc_key_t");
+    key = ucs_calloc(1, sizeof(*key), "uct_rocm_ipc_key_t");
     if (NULL == key) {
         ucs_error("Failed to allocate memory for uct_rocm_ipc_key_t");
         return UCS_ERR_NO_MEMORY;
@@ -134,6 +204,10 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
     /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
+    /* The exported dmabuf fd is owned by this registration. */
+    if (mem_hndl->is_vmm) {
+        close(mem_hndl->vmm.fd);
+    }
     ucs_free(mem_hndl);
     return UCS_OK;
 }
@@ -208,6 +282,10 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     };
 
     uct_rocm_ipc_export_init();
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* pidfd_getfd() import requires passing the peer's ptrace check. */
+    ucs_sys_ptrace_enable_peers();
+#endif
     *md_p = &md;
     return UCS_OK;
 }
@@ -229,6 +307,18 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     unpacked->super       = *packed;
     unpacked->region      = NULL;
     unpacked->mapped_addr = NULL;
+
+    /* Map eagerly so an import failure drops the rocm_ipc lane here and UCP
+     * falls back, instead of failing the put/get later. */
+    if (packed->is_vmm) {
+        ucs_status_t status = uct_rocm_ipc_cache_map_memhandle(
+                &unpacked->super, &unpacked->mapped_addr, &unpacked->region);
+        if (status != UCS_OK) {
+            ucs_free(unpacked);
+            return UCS_ERR_UNREACHABLE;
+        }
+    }
+
     *handle_p             = NULL;
     *rkey_p               = (uintptr_t)unpacked;
 

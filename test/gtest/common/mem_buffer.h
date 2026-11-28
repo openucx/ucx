@@ -29,9 +29,17 @@ public:
 
     static bool is_mem_type_supported(ucs_memory_type_t mem_type);
 
+    /* Allocation mode. */
+    enum class alloc_mode {
+        DEFAULT, /* Default synchronous allocation (cudaMalloc/hipMalloc/host) */
+        ASYNC,   /* Asynchronous CUDA allocation mode */
+        VMM      /* Virtual memory management allocation mode */
+    };
+
     /* allocate buffer of a given memory type */
     static void *
-    allocate(size_t size, ucs_memory_type_t mem_type, bool async = false);
+    allocate(size_t size, ucs_memory_type_t mem_type,
+             alloc_mode mode = alloc_mode::DEFAULT);
     /* release buffer of a given memory type */
     static void
     release(void *ptr, ucs_memory_type_t mem_type, bool async = false);
@@ -106,6 +114,9 @@ public:
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
+    /* returns whether ROCM device supports virtual memory management (VMM) */
+    static bool is_rocm_vmm_supported();
+
     /* returns whether ROCM device supports hipMallocPitch */
     static bool is_rocm_malloc_pitch_supported();
 
@@ -136,12 +147,6 @@ public:
      * Check whether asynchronous operations are supported for the memory type
      */
     static bool is_async_supported(ucs_memory_type_t mem_type);
-
-    /* Allocation mode. */
-    enum class alloc_mode {
-        DEFAULT, /* Default allocation mode, using cudaMalloc */
-        ASYNC    /* Asynchronous CUDA allocation mode */
-    };
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
@@ -206,7 +211,8 @@ private:
 class scoped_async_cuda_buffer {
 public:
     explicit scoped_async_cuda_buffer(size_t size) :
-        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA, true))
+        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA,
+                                   mem_buffer::alloc_mode::ASYNC))
     {
     }
 

@@ -11,6 +11,7 @@
 
 #include "rocm_ipc_cache.h"
 #include "rocm_ipc_iface.h"
+#include "../base/rocm_base.h"
 
 #include <ucm/api/ucm.h>
 #include <ucs/arch/atomic.h>
@@ -322,6 +323,93 @@ uct_rocm_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
     ucs_list_add_tail(list, &region->list);
 }
 
+#if HAVE_DECL_SYS_PIDFD_GETFD
+/* Duplicate the sender's dmabuf fd into this process via pidfd_open/
+ * pidfd_getfd. Returns a local fd on success, or -1 if the peer is in a
+ * different pid namespace or the syscalls fail. */
+static int uct_rocm_ipc_dup_peer_fd(const uct_rocm_ipc_key_t *key)
+{
+    int pidfd, local_fd;
+
+    /* key->pid is meaningful only in the sender's PID namespace; a peer in a
+     * different namespace would resolve to an unrelated local process. */
+    if (key->pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
+        ucs_debug("cannot import vmm fd: sender pid %d is in a different pid "
+                  "namespace (remote=%u local=%u)", key->pid, key->pid_ns,
+                  ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
+        return -1;
+    }
+
+    pidfd    = syscall(SYS_pidfd_open, key->pid, 0);
+    local_fd = (pidfd >= 0) ?
+               syscall(SYS_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
+    if (local_fd < 0) {
+        /* Log before close(pidfd) so errno still reflects the failed dup. */
+        ucs_debug("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
+                  key->pid, key->vmm.fd);
+    }
+    if (pidfd >= 0) {
+        close(pidfd);
+    }
+    return local_fd;
+}
+#else
+static int uct_rocm_ipc_dup_peer_fd(const uct_rocm_ipc_key_t *key)
+{
+    ucs_debug("cannot import vmm dmabuf fd: SYS_pidfd_getfd is not available");
+    return -1;
+}
+#endif
+
+/* Import a cross-process VMM handle into the local address space: duplicate the
+ * sender's dmabuf fd via pidfd, then map it through the base layer. */
+static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
+{
+    void *va = NULL;
+    int local_fd;
+
+    local_fd = uct_rocm_ipc_dup_peer_fd(key);
+    if (local_fd < 0) {
+        return NULL;
+    }
+
+    if (uct_rocm_base_vmm_import_map(local_fd, key->length, &va) != UCS_OK) {
+        ucs_error("failed to map vmm handle. addr:%p len:%lu",
+                  (void *)key->address, key->length);
+        return NULL;
+    }
+
+    return va;
+}
+
+/* Release a mapping created for @a key: VMM mappings are unmapped and their
+ * reserved VA freed; pool IPC handles are detached. */
+static void uct_rocm_ipc_detach_mapping(const uct_rocm_ipc_key_t *key,
+                                        void *mapped_addr)
+{
+    if (key->is_vmm) {
+        uct_rocm_base_vmm_unmap(mapped_addr, key->length);
+        return;
+    }
+    if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
+        ucs_warn("failed to unmap addr:%p", mapped_addr);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
+                       const uct_rocm_ipc_key_t *key2)
+{
+    /* reg_id is stable per live VMM mapping (from the vmm registry), so
+     * concurrent re-registrations of the same chunk compare equal and reuse
+     * the cached mapping instead of unmapping one an in-flight copy may read. */
+    if (key1->is_vmm || key2->is_vmm) {
+        return (key1->is_vmm == key2->is_vmm) && (key1->pid == key2->pid) &&
+               (key1->vmm.reg_id == key2->vmm.reg_id);
+    }
+    return memcmp(&key1->ipc, &key2->ipc, sizeof(key1->ipc)) == 0;
+}
+
 static void
 uct_rocm_ipc_cache_region_unref(uct_rocm_ipc_cache_region_t *region)
 {
@@ -367,9 +455,8 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
         region->in_pgtable = 0;
     }
 
-    if ((mapped_addr != NULL) &&
-        (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS)) {
-        ucs_warn("failed to unmap addr:%p", mapped_addr);
+    if (mapped_addr != NULL) {
+        uct_rocm_ipc_detach_mapping(&region->key, mapped_addr);
     }
 
     ucs_trace("rocm ipc cache drop addr:%p mapped:%p",
@@ -538,7 +625,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                                   key->address);
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
-        if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
+        if (uct_rocm_ipc_key_equal(key, &region->key)) {
             if ((region->signal.handle == 0) ||
                 (hsa_signal_load_scacquire(region->signal) > 0)) {
                 ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
@@ -591,13 +678,22 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         }
     }
 
-    hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
-                                           &mapped_addr);
-    if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
-        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu hsa_status:%d",
-                  cache->name, (void*)key->address, key->length, hsa_status);
-        status = UCS_ERR_INVALID_ADDR;
-        goto err_destroy_signal;
+    if (key->is_vmm) {
+        mapped_addr = uct_rocm_ipc_vmm_map(key);
+        if (mapped_addr == NULL) {
+            status = UCS_ERR_INVALID_ADDR;
+            goto err_destroy_signal;
+        }
+    } else {
+        hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
+                                               &mapped_addr);
+        if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
+            ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu "
+                      "hsa_status:%d", cache->name, (void*)key->address,
+                      key->length, hsa_status);
+            status = UCS_ERR_INVALID_ADDR;
+            goto err_destroy_signal;
+        }
     }
 
     ret = ucs_posix_memalign((void**)&region,
@@ -606,9 +702,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                              "uct_rocm_ipc_cache_region");
     if (ret != 0) {
         ucs_warn("failed to allocate uct_rocm_ipc_cache region");
-        if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", mapped_addr);
-        }
+        uct_rocm_ipc_detach_mapping(key, mapped_addr);
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_signal;
     }
@@ -644,9 +738,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                   " size:%lu :%s",
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->length,
                   ucs_status_string(status));
-        if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", mapped_addr);
-        }
+        uct_rocm_ipc_detach_mapping(key, mapped_addr);
         ucs_free(region);
         goto err_destroy_signal;
     }
@@ -873,10 +965,7 @@ void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region)
     ucs_assert(region->pin_count > 0);
     if ((--region->pin_count == 0) &&
         (ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0)) {
-        if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
-            HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
-        }
+        uct_rocm_ipc_detach_mapping(&region->key, region->mapped_addr);
         region->mapped_addr = NULL;
     }
     ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);

@@ -29,6 +29,14 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
                                   HSA_STATUS_ERROR, void*)
 
+#ifdef HAVE_ROCM_VMM_TYPE
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_vmem_map, hsa_status_t,
+                                  HSA_STATUS_ERROR, void*, size_t, size_t,
+                                  hsa_amd_vmem_alloc_handle_t, uint64_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_vmem_unmap, hsa_status_t,
+                                  HSA_STATUS_ERROR, void*, size_t)
+#endif
+
 static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
 {
     size_t size;
@@ -102,9 +110,51 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     return status;
 }
 
+#ifdef HAVE_ROCM_VMM_TYPE
+hsa_status_t ucm_hsa_amd_vmem_map(void* va, size_t size, size_t in_offset,
+                                   hsa_amd_vmem_alloc_handle_t handle,
+                                   uint64_t flags)
+{
+    hsa_status_t status;
+
+    ucm_event_enter();
+
+    status = ucm_orig_hsa_amd_vmem_map(va, size, in_offset, handle, flags);
+    if (status == HSA_STATUS_SUCCESS) {
+        ucm_trace("ucm_hsa_amd_vmem_map(va=%p size:%lu)", va, size);
+        /* Keep type unknown for MD detection; the VMM registry hook queries the
+         * pointer type to tell a real VMEM mapping from a pool allocation. */
+        ucm_dispatch_mem_type_alloc(va, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
+    }
+
+    ucm_event_leave();
+    return status;
+}
+
+hsa_status_t ucm_hsa_amd_vmem_unmap(void* va, size_t size)
+{
+    hsa_status_t status;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_hsa_amd_vmem_unmap(va=%p size:%lu)", va, size);
+    ucm_dispatch_mem_type_free(va, size, UCS_MEMORY_TYPE_ROCM);
+
+    status = ucm_orig_hsa_amd_vmem_unmap(va, size);
+
+    ucm_event_leave();
+    return status;
+}
+#endif
+
 static ucm_hook_func_t ucm_rocm_funcs[] = {
     UCM_HOOK_FUNC_ENTRY(hsa_amd_memory_pool_allocate),
     UCM_HOOK_FUNC_ENTRY(hsa_amd_memory_pool_free),
+#ifdef HAVE_ROCM_VMM_TYPE
+    UCM_HOOK_FUNC_ENTRY(hsa_amd_vmem_map),
+    UCM_HOOK_FUNC_ENTRY(hsa_amd_vmem_unmap),
+#endif
     {{NULL, NULL}, NULL}
 };
 

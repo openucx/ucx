@@ -57,13 +57,13 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
-    void *remote_base_addr, *remote_copy_addr;
+    void *remote_base_addr, *remote_copy_addr, *detach_addr;
     void *dst_addr, *src_addr;
     uct_rocm_base_signal_desc_t *rocm_ipc_signal;
     void *tmp_base_ptr;
     size_t tmp_base_size;
     hsa_agent_t *gpu_agents;
-    hsa_amd_pointer_type_t mem_type;
+    hsa_amd_pointer_type_t mem_type, local_mem_type;
     int num_gpu;
 
     /* no data to deliver */
@@ -78,20 +78,27 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     status = uct_rocm_base_get_ptr_info(local_addr, size, &base_addr, NULL,
-                                        &mem_type, &local_agent, NULL);
+                                        &local_mem_type, &local_agent, NULL);
     if ((status != HSA_STATUS_SUCCESS) ||
-        (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
+        (local_mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
         ucs_error("local addr %p/%lx is not ROCM memory", local_addr, size);
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if (iface->config.enable_ipc_handle_cache) {
+    if (key->is_vmm) {
+        /* Mapped and pinned at rkey unpack; reuse it instead of a cache lookup. */
+        remote_base_addr = ucs_derived_of(key, uct_rocm_ipc_unpacked_rkey_t)
+                                   ->mapped_addr;
+        detach_addr      = NULL;
+    } else if (iface->config.enable_ipc_handle_cache) {
         ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr, NULL);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
             return ret;
         }
+        /* The cache owns the mapping; do not detach it on completion. */
+        detach_addr = NULL;
     } else {
         status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
                                            &remote_base_addr);
@@ -100,6 +107,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                       (void*)key->address, key->length);
             return UCS_ERR_INVALID_ADDR;
         }
+        /* Attached directly; detach it when the copy completes. */
+        detach_addr = remote_base_addr;
     }
 
     remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
@@ -121,9 +130,17 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
          * this process. Using local_agent as a backup plan. */
         remote_agent = local_agent;
     } else {
-        num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
-        status  = UCS_PROFILE_CALL_ALWAYS(hsa_amd_agents_allow_access, num_gpu,
-                                          gpu_agents, NULL, base_addr);
+        /* Grant remote_agent's copy engine access to the local buffer. */
+        if (uct_rocm_base_is_vmem_type(local_mem_type) &&
+            uct_rocm_base_vmm_range_overlaps(local_addr, size)) {
+            /* Registered VMM buffer already granted access at map time. */
+            status = HSA_STATUS_SUCCESS;
+        } else {
+            num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
+            status  = UCS_PROFILE_CALL_ALWAYS(hsa_amd_agents_allow_access,
+                                              num_gpu, gpu_agents, NULL,
+                                              base_addr);
+        }
         if (status != HSA_STATUS_SUCCESS) {
             ucs_error("failed to enable direct access for mem addr %p agent "
                       "%lu\n",
@@ -162,12 +179,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_IO_ERROR;
     }
 
-    rocm_ipc_signal->comp = comp;
-    if (iface->config.enable_ipc_handle_cache) {
-        rocm_ipc_signal->mapped_addr = NULL;
-    } else {
-        rocm_ipc_signal->mapped_addr = remote_base_addr;
-    }
+    rocm_ipc_signal->comp        = comp;
+    rocm_ipc_signal->mapped_addr = detach_addr;
     ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->queue);
 
     ucs_trace("rocm async copy issued :%p remote:%p, local:%p  len:%ld",

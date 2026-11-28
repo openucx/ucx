@@ -90,6 +90,61 @@ mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
         } \
     } while (0)
 
+static void *mem_buffer_rocm_vmm_alloc_mem(size_t size)
+{
+    hipMemGenericAllocationHandle_t handle;
+    hipMemAllocationProp prop = {};
+    hipMemAccessDesc access   = {};
+    size_t granularity;
+    size_t padded;
+    int dev = 0;
+    void *ptr;
+
+    ROCM_CALL(hipGetDevice(&dev));
+
+    prop.type          = hipMemAllocationTypePinned;
+    prop.location.type = hipMemLocationTypeDevice;
+    prop.location.id   = dev;
+
+    ROCM_CALL(hipMemGetAllocationGranularity(&granularity, &prop,
+                                             hipMemAllocationGranularityMinimum));
+    padded = ((size + granularity - 1) / granularity) * granularity;
+
+    ROCM_CALL(hipMemCreate(&handle, padded, &prop, 0));
+    ROCM_CALL(hipMemAddressReserve(&ptr, padded, 0, 0, 0));
+    ROCM_CALL(hipMemMap(ptr, padded, 0, handle, 0));
+
+    access.location = prop.location;
+    access.flags    = hipMemAccessFlagsProtReadWrite;
+    ROCM_CALL(hipMemSetAccess(ptr, padded, &access, 1));
+
+    /* Keep the create ref; free_mem reclaims it with the retained ref. */
+    return ptr;
+}
+
+/* Frees ptr via the VMM API and returns true if it was a VMM allocation.
+ * hipMemRetainAllocationHandle() succeeds only for a VMM mapping, which both
+ * detects the mode and recovers the handle release() does not otherwise hold. */
+static bool mem_buffer_rocm_vmm_free_mem(void *ptr)
+{
+    hipMemGenericAllocationHandle_t handle;
+    void *base;
+    size_t size;
+
+    if (hipMemRetainAllocationHandle(&handle, ptr) != hipSuccess) {
+        /* Expected for non-VMM pointers; clear so the error does not leak. */
+        (void)hipGetLastError();
+        return false;
+    }
+
+    ROCM_CALL(hipMemGetAddressRange(&base, &size, ptr));
+    ROCM_CALL(hipMemUnmap(base, size));
+    ROCM_CALL(hipMemAddressFree(base, size));
+    ROCM_CALL(hipMemRelease(handle)); /* retained ref */
+    ROCM_CALL(hipMemRelease(handle)); /* create ref */
+    return true;
+}
+
 #endif
 
 #if HAVE_ZE
@@ -176,6 +231,21 @@ bool mem_buffer::is_rocm_managed_supported()
     return attr.memoryType == hipMemoryTypeUnified;
 #endif
 
+#else
+    return false;
+#endif
+}
+
+bool mem_buffer::is_rocm_vmm_supported()
+{
+#ifdef HAVE_ROCM_VMM_TYPE
+    int dev, supported;
+
+    return is_rocm_supported() && (hipGetDevice(&dev) == hipSuccess) &&
+           (hipDeviceGetAttribute(&supported,
+                                  hipDeviceAttributeVirtualMemoryManagementSupported,
+                                  dev) == hipSuccess) &&
+           supported;
 #else
     return false;
 #endif
@@ -550,7 +620,8 @@ void mem_buffer_ze_memset(void *dst, int value, size_t length)
 } // namespace
 #endif
 
-void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
+void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type,
+                           alloc_mode mode)
 {
     void *ptr;
 
@@ -568,7 +639,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        if (async) {
+        if (mode == alloc_mode::ASYNC) {
 #if CUDART_VERSION >= 11020
             CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
             cudaStreamSynchronize(0);
@@ -582,7 +653,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        if (async) {
+        if (mode == alloc_mode::ASYNC) {
 #if CUDART_VERSION >= 13000
             cudaMemPool_t pool;
 
@@ -602,6 +673,9 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
+        if (mode == alloc_mode::VMM) {
+            return mem_buffer_rocm_vmm_alloc_mem(size);
+        }
         ROCM_CALL(hipMalloc(&ptr, size));
         return ptr;
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
@@ -690,6 +764,11 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 #endif
 #if HAVE_ROCM
         case UCS_MEMORY_TYPE_ROCM:
+            if (mem_buffer_rocm_vmm_free_mem(ptr)) {
+                break;
+            }
+            ROCM_CALL(hipFree(ptr));
+            break;
         case UCS_MEMORY_TYPE_ROCM_MANAGED:
             ROCM_CALL(hipFree(ptr));
             break;
@@ -826,11 +905,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
-        if (length <= 8) {
-            ::memset(buffer, c, length);
-        } else {
-            ROCM_CALL(hipMemset(buffer, c, length));
-        }
+        ROCM_CALL(hipMemset(buffer, c, length));
         ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif
@@ -1004,7 +1079,7 @@ mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type,
                        alloc_mode mode) :
     m_mem_type(mem_type),
-    m_ptr(allocate(size, mem_type, mode == alloc_mode::ASYNC)), m_size(size),
+    m_ptr(allocate(size, mem_type, mode)), m_size(size),
     m_async(mode == alloc_mode::ASYNC) {
 }
 
