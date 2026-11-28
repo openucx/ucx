@@ -15,6 +15,7 @@
 
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucp/tag/tag_rndv.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.inl>
@@ -55,6 +56,7 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_GET_REQ)]          = "rndv_get_req",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
+    [ucs_ilog2(UCP_REQUEST_FLAG_PENDING_RMA)]           = "pend_rma",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
@@ -327,6 +329,26 @@ ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .obj_str       = NULL
 };
 
+void ucp_request_pending_rma_add(ucp_request_t *req)
+{
+    ucp_operation_id_t op_id;
+
+    /* A request with an id may be linked in the endpoint proto_reqs list, and
+     * the remote completion counters track it */
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ||
+        (req->flags & UCP_REQUEST_FLAG_PENDING_RMA) ||
+        (req->id != UCS_PTR_MAP_KEY_INVALID)) {
+        return;
+    }
+
+    /* A queued put or get may send on lanes which a later flush has already
+     * flushed, also after a restart selects a multi-lane protocol */
+    op_id = ucp_proto_select_op_id(&req->send.proto_config->select_param);
+    if ((op_id == UCP_OP_ID_PUT) || (op_id == UCP_OP_ID_GET)) {
+        ucp_ep_pending_rma_reqs_add(req);
+    }
+}
+
 int ucp_request_pending_add(ucp_request_t *req)
 {
     ucs_status_t status;
@@ -338,6 +360,7 @@ int ucp_request_pending_add(ucp_request_t *req)
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
         req->send.pending_lane = req->send.lane;
+        ucp_request_pending_rma_add(req);
         return 1;
     } else if (status == UCS_ERR_BUSY) {
         /* Could not add, try to send again */
