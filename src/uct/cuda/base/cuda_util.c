@@ -319,6 +319,15 @@ uct_cuda_init_devices_nvml(const uct_cuda_visible_gpu_t *visible_gpus,
     return UCS_OK;
 }
 
+void uct_cuda_driver_init(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+
+    UCS_INIT_ONCE(&init_once) {
+        UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+    }
+}
+
 static unsigned uct_cuda_init_devices_internal(void)
 {
     uct_cuda_visible_gpu_t visible_gpus[UCT_CUDA_MAX_DEVICES];
@@ -349,6 +358,7 @@ unsigned uct_cuda_init_devices(void)
     static unsigned num_visible_gpus;
 
     UCS_INIT_ONCE(&init_once) {
+        uct_cuda_driver_init();
         num_visible_gpus = uct_cuda_init_devices_internal();
     }
 
