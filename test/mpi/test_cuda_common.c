@@ -666,7 +666,7 @@ static void run_test_for_all_sizes(test_params_t *params, size_t test_idx)
         total_ucx_errors_and_warnings = 0;
 
         params->size = sizes[size_idx];
-        res          = tests[test_idx].func(params);
+        res          = (tests[test_idx].func(params) != 0);
 
         res += total_ucx_errors_and_warnings;
 
