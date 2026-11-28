@@ -9,8 +9,14 @@ pr:
   - master
   - v*.*.x
 
+# UCXX nightlies are not built here - they stay RAPIDS-side. This stage only
+# builds UCXX on a UCX release tag (publishing itself is deferred; see the
+# per-job notes in pr/ucxx_build.yml).
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+  DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
+  # Persistent pip cache for the UCXX jobs, as in pr/main.yml.
+  UCXX_PIP_CACHE_VOL: -v /scrap/pip-cache:/pip-cache
 
 resources:
   containers:
@@ -77,6 +83,18 @@ resources:
     - container: rocky9_cuda13_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/rocky9-mofed24.10-cuda13:2
       options: $(DOCKER_OPT_VOLUMES)
+
+    # UCXX release: CPU-only conda + wheel builders (mirrors PR pipeline).
+    # Wheel images are CUDA-pinned: one base per CUDA version (see rapidsai-ci-wheel.Dockerfile).
+    - container: ucxx_rapidsai_ci_conda
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.12-azp-2
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
+    - container: ucxx_rapidsai_ci_wheel_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda12-azp-2
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
+    - container: ucxx_rapidsai_ci_wheel_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.12-cuda13-azp-3
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
 
 stages:
   - stage: Prepare
@@ -159,3 +177,15 @@ stages:
           container: centos8_cuda11_aarch64
           demands: ucx-arm64
           target: publish-release
+
+  # Build UCXX on a UCX release tag. Publishing is deferred (per-job notes):
+  # wheels -> Kitmaker/PyPI, conda -> conda-forge once upstream; nightlies
+  # stay RAPIDS-side.
+  - template: pr/ucxx_ucx.yml
+    parameters:
+      dependsOn: [Prepare]
+      condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
+
+  - template: pr/ucxx_build.yml
+    parameters:
+      dependsOn: [UCXX_ucx]
