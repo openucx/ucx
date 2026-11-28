@@ -257,6 +257,10 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                      params.remote_mem_list, 0, 0,
                                      params.length + ONESIDED_SIGNAL_SIZE,
                                      channel_id, flags, req);
+    case UCX_PERF_CMD_ADD:
+        return ucp_device_counter_inc<level>(1, params.remote_mem_list, 0,
+                                             params.length, channel_id, flags,
+                                             req);
     default:
         return UCS_ERR_UNSUPPORTED;
     }
@@ -417,7 +421,7 @@ ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
                              ucp_perf_cuda_params params)
 {
     volatile uint64_t *sn = params.counter_recv;
-    while (*sn < ctx.max_iters) {
+    while (*sn < ctx.expected_sn) {
         __nanosleep(100000); // 100us
     }
 
@@ -478,7 +482,35 @@ public:
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
+
+        if ((my_index == 0) && (m_cpu_ctx->status == UCS_OK) &&
+            (m_perf.params.command == UCX_PERF_CMD_ADD)) {
+            return check_add_counter(params_handler.get_params());
+        }
+
         return m_cpu_ctx->status;
+    }
+
+private:
+    /*
+     * The operations of the sender completed before the barrier, so the
+     * receive counter is final, and shows an add that was lost or applied
+     * twice.
+     */
+    ucs_status_t check_add_counter(const ucp_perf_cuda_params &params) const
+    {
+        uint64_t counter;
+
+        CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaMemcpy, &counter,
+                      params.counter_recv, sizeof(counter),
+                      cudaMemcpyDeviceToHost);
+        if (counter != m_cpu_ctx->expected_sn) {
+            ucs_error("receive counter %" PRIu64 ", expected %" PRIu64,
+                      counter, m_cpu_ctx->expected_sn);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        return UCS_OK;
     }
 };
 
