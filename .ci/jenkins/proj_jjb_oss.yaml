@@ -179,3 +179,11 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-mad
+    jjb_proj: "ucx-test-mad-oss"
+    jjb_conf_file: ".ci/pipeline/test_mad_matrix.yaml"
+    jjb_description: "UCX MAD tests (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
