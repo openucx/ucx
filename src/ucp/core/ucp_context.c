@@ -110,6 +110,12 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_am_lane_modes[] = {
+    [UCP_AM_LANE_MODE_AUTO]      = "auto",
+    [UCP_AM_LANE_MODE_DEDICATED] = "dedicated",
+    [UCP_AM_LANE_MODE_LAST]      = NULL
+};
+
 static const char *ucp_failover_modes[] = {
     [UCP_FAILOVER_MODE_AUTO]  = "auto",
     [UCP_FAILOVER_MODE_SW]    = "sw",
@@ -281,6 +287,20 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_RMA_RAILS", "1,assigned:auto",
    "Maximal number of devices on which a RMA operation may be executed in parallel",
    ucs_offsetof(ucp_context_config_t, max_rma_rails), UCP_CONFIG_TYPE_RAILS},
+
+  {"AM_LANE_MODE", "auto",
+   "Controls whether the active-message lane is separated from high-bandwidth\n"
+   "RMA operations, including large PUT, GET, and rendezvous transfers. A\n"
+   "dedicated lane avoids head-of-line blocking of active messages behind RMA\n"
+   "operations, but may create an additional transport endpoint. Must be set\n"
+   "to the same value on all connected processes, and left to the default when\n"
+   "connecting to UCX versions without this option.\n"
+   " auto      - use a dedicated lane only on transports where transmit\n"
+   "             progress can depend on an unrelated receive completion.\n"
+   " dedicated - always use a dedicated lane when the tag-matching or\n"
+   "             active-message API is requested.",
+   ucs_offsetof(ucp_context_config_t, am_lane_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_am_lane_modes)},
 
   {"MIN_RNDV_CHUNK_SIZE", "16k",
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"

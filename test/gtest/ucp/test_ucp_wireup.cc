@@ -2826,6 +2826,96 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_bw_lanes, cma_rcx,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_bw_lanes, cma_rcv,
                               "posix,sysv,cma,rc_v")
 
+class test_ucp_wireup_separate_am_lane : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA);
+    }
+
+protected:
+    void init() override
+    {
+        /* Select an RMA BW lane for the RMA API, without rendezvous. */
+        modify_config("PROTO_ENABLE", "y");
+        modify_config("MAX_RNDV_RAILS", "0");
+        modify_config("MAX_RMA_RAILS", "1");
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        ucp_test::init();
+
+        /* Keep only the device of the AM lane, so that the RMA BW lane can
+         * only share it or use another path of it */
+        const std::string am_device = am_lane_device();
+        m_entities.clear();
+        modify_config("NET_DEVICES", am_device);
+        ucp_test::init();
+    }
+
+    std::string am_lane_device()
+    {
+        unpacked_address receiver_address(receiver().worker());
+        ucp_ep_config_key_t key;
+
+        receiver_address.unpack(sender().worker());
+        select_lanes(sender(), receiver_address.address, key);
+        EXPECT_NE(UCP_NULL_LANE, key.am_lane);
+        return sender().ucph()->tl_rscs[key.lanes[key.am_lane].rsc_index]
+                .tl_rsc.dev_name;
+    }
+
+    static void
+    check_am_lane_separation(const ucp_ep_config_key_t &key,
+                             bool expect_separate)
+    {
+        ASSERT_NE(UCP_NULL_LANE, key.am_lane);
+        ASSERT_NE(UCP_NULL_LANE, key.rma_bw_lanes[0]);
+        EXPECT_EQ(expect_separate, key.am_lane != key.rma_bw_lanes[0])
+                << "am_lane=" << static_cast<unsigned>(key.am_lane)
+                << " rma_bw_lane="
+                << static_cast<unsigned>(key.rma_bw_lanes[0]);
+    }
+
+    void check_am_lane_separation(bool expect_separate)
+    {
+        unpacked_address receiver_address(receiver().worker());
+        ucp_ep_config_key_t key;
+
+        receiver_address.unpack(sender().worker());
+        select_lanes(sender(), receiver_address.address, key);
+        check_am_lane_separation(key, expect_separate);
+    }
+
+    void check_connect()
+    {
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        flush_workers();
+        check_am_lane_separation(ucp_ep_config(sender().ep())->key, true);
+        check_am_lane_separation(ucp_ep_config(receiver().ep())->key, true);
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_separate_am_lane, auto_mode,
+           "AM_LANE_MODE=auto")
+{
+    check_am_lane_separation(false);
+}
+
+UCS_TEST_P(test_ucp_wireup_separate_am_lane, dedicated,
+           "AM_LANE_MODE=dedicated")
+{
+    check_am_lane_separation(true);
+}
+
+UCS_TEST_P(test_ucp_wireup_separate_am_lane, dedicated_connect,
+           "AM_LANE_MODE=dedicated")
+{
+    check_connect();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_separate_am_lane, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_separate_am_lane, rcv, "rc_v")
+
 class test_ucp_reconfig_connect_remote : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
