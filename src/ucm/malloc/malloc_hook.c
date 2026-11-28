@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -387,7 +387,7 @@ static void* ucm_calloc(size_t nmemb, size_t size)
 
 static void* ucm_valloc(size_t size)
 {
-    return ucm_malloc_impl(size, "valloc");
+    return ucm_memalign_impl(ucm_get_page_size(), size, "valloc");
 }
 
 static int ucm_posix_memalign(void **memptr, size_t alignment, size_t size)

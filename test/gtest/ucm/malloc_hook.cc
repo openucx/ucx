@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -586,6 +586,57 @@ UCS_TEST_SKIP_COND_F(malloc_hook, multi_threads,
 UCS_TEST_F(malloc_hook, asprintf) {
     /* Install memory hooks */
     (void)dlerror();
+}
+
+static bool is_malloc_reloc_active() {
+    return (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&
+           ucm_global_opts.enable_malloc_reloc &&
+           !ucm_global_opts.enable_malloc_hooks;
+}
+
+static void test_valloc_page_aligned() {
+    static const size_t sizes[] = {1, 100, 4096, 10000, 1 * UCS_MBYTE};
+    const size_t page_size      = ucs_get_page_size();
+
+    for (size_t i = 0; i < ucs_static_array_size(sizes); ++i) {
+        void *ptr = valloc(sizes[i]);
+        ASSERT_NE((void*)NULL, ptr) << "size=" << sizes[i];
+        EXPECT_EQ(0u, (uintptr_t)ptr % page_size) << "size=" << sizes[i];
+        memset(ptr, 0, sizes[i]);
+        free(ptr);
+    }
+}
+
+/* valloc() is replaced by UCM only when malloc symbols are relocated. If this
+ * is not the current configuration, re-run this test in a child process with
+ * relocation forced, otherwise it would only check libc and pass anyway.
+ */
+class malloc_hook_system : private ucs::clear_dontcopy_regions,
+                           public malloc_hook {
+};
+
+UCS_TEST_SKIP_COND_F(malloc_hook_system, valloc_page_aligned,
+                     RUNNING_ON_VALGRIND) {
+    static const char *child_env = "UCX_GTEST_VALLOC_CHILD";
+
+    if (is_malloc_reloc_active()) {
+        test_valloc_page_aligned();
+        return;
+    }
+
+    if (getenv(child_env) != NULL) {
+        UCS_TEST_SKIP_R("malloc relocation could not be enabled");
+    }
+
+    std::stringstream cmd;
+    cmd << "env -u GTEST_SHARD_INDEX -u GTEST_TOTAL_SHARDS"
+        << " UCX_MEM_MMAP_HOOK_MODE=reloc UCX_MEM_MALLOC_HOOKS=n"
+        << " UCX_MEM_MALLOC_RELOC=y " << child_env << "=1"
+        << " '" << ucs_get_exe() << "'"
+        << " --gtest_filter=malloc_hook_system.valloc_page_aligned";
+
+    int ret = system(cmd.str().c_str());
+    EXPECT_EQ(0, ret) << cmd.str();
 }
 
 UCS_TEST_SKIP_COND_F(malloc_hook, fork, "broken") {
