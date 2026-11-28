@@ -76,8 +76,14 @@ jobs:
           azurelinux40:
             CONTAINER: azurelinux40
             build_mode: sanity
+          openeuler2203sp4:
+            CONTAINER: openeuler2203sp4
+            build_mode: short
           openeuler2403sp3:
             CONTAINER: openeuler2403sp3
+            build_mode: short
+          uos201060a:
+            CONTAINER: uos201060a
             build_mode: short
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
@@ -128,8 +134,14 @@ jobs:
           azurelinux40_aarch64:
             CONTAINER: azurelinux40_aarch64
             build_mode: short
+          openeuler2203sp4_aarch64:
+            CONTAINER: openeuler2203sp4_aarch64
+            build_mode: short
           openeuler2403sp3_aarch64:
             CONTAINER: openeuler2403sp3_aarch64
+            build_mode: short
+          uos201060a_aarch64:
+            CONTAINER: uos201060a_aarch64
             build_mode: short
     timeoutInMinutes: 340
 
