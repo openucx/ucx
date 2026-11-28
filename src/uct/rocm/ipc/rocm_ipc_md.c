@@ -54,15 +54,14 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
-    /* A VMM rkey covers a single chunk; a range crossing the chunk boundary
-     * cannot be packed, so fall back to staging. */
-    if (key->is_vmm &&
-        (((uintptr_t)address < key->address) ||
-         (((uintptr_t)address + length) > (key->address + key->length)))) {
-        ucs_debug("VMM rkey range [%p, +0x%zx) exceeds mapping [0x%lx, +0x%zx)",
-                  address, length, (unsigned long)key->address, key->length);
-        return UCS_ERR_UNSUPPORTED;
-    }
+    /* Registration rejects a VMM buffer that straddles its mapping, so the
+     * packed range is always within [key->address, +key->length). */
+    ucs_assertv(!key->is_vmm ||
+                (((uintptr_t)address >= key->address) &&
+                 (((uintptr_t)address + length) <=
+                  (key->address + key->length))),
+                "VMM rkey range [%p, +0x%zx) exceeds mapping [0x%lx, +0x%zx)",
+                address, length, (unsigned long)key->address, key->length);
 
     *packed = *key;
 
