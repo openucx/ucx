@@ -46,6 +46,7 @@ void uct_ugni_device_get_resource(uct_ugni_device_t *dev,
     ucs_snprintf_zero(tl_device->name, sizeof(tl_device->name), "%s", dev->fname);
     tl_device->type       = UCT_DEVICE_TYPE_NET;
     tl_device->sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    tl_device->ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 ucs_status_t uct_ugni_query_devices(uct_md_h md,
