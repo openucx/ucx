@@ -504,6 +504,9 @@ typedef struct ucp_ep_recovery_probe {
     uct_completion_t  comp;
     ucp_ep_h          ep;
     ucp_lane_index_t  lane;
+    /* Packed peer address from the last address exchange. The lane is
+     * connected to it once the probe succeeds. */
+    void              *peer_addr;
 } ucp_ep_recovery_probe_t;
 
 
@@ -1257,11 +1260,14 @@ int ucp_ep_recovery_progress(ucp_ep_h ep);
 
 /**
  * Rebuild UCT endpoints for the given set of currently-failed lanes using the
- * peer addresses in @a remote_address. Returns the bitmap of lanes rebuilt.
+ * peer addresses in @a remote_address, unpacked from @a address of
+ * @a address_length bytes. A p2p lane keeps a copy of @a address to connect
+ * once its probe succeeds. Returns the bitmap of lanes rebuilt.
  */
 ucp_lane_map_t
 ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
-                              const ucp_unpacked_address_t *remote_address);
+                              const ucp_unpacked_address_t *remote_address,
+                              const void *address, size_t address_length);
 
 
 /**
