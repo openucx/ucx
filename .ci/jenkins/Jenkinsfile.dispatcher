@@ -33,19 +33,28 @@ if (currentPrNumber) {
       }
     }
 
-    // A leaf job can be killed only after its own Jenkinsfile checkout, hence the rounds
-    for (int round = 0; stale && round < 6; round++) {
-      sleep 5
+    // A stopped build gives its agents back, a killed one keeps them: stop until every stale build ends
+    for (int round = 0; stale && round < 12; round++) {
+      sleep 10
+      def running = 0
       stale.each { n ->
         def dispatcher = Jenkins.instance.getItemByFullName(env.JOB_NAME).getBuildByNumber(n)
-        dispatcher?.doKill()
+        def builds = [dispatcher]
         dispatcher?.getLog(1000)?.each { line ->
           // A leaf job start is logged as "Starting building: <folder> <separator> <job> #<number>"
           def m = (line =~ /^Starting building: (\S+) \S+ (\S+) #(\d+)$/)
           if (m) {
-            Jenkins.instance.getItemByFullName(m[0][1] + '/' + m[0][2])?.getBuildByNumber(m[0][3] as int)?.doKill()
+            builds << Jenkins.instance.getItemByFullName(m[0][1] + '/' + m[0][2])?.getBuildByNumber(m[0][3] as int)
           }
         }
+        // One stop does not end every row of a leaf job, and none works during its Jenkinsfile checkout
+        builds.findAll { it?.isBuilding() }.each { b ->
+          running++
+          b.doStop()
+        }
+      }
+      if (!running) {
+        break
       }
     }
   } catch(InterruptedException e) {
