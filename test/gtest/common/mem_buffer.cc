@@ -90,18 +90,6 @@ mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
         } \
     } while (0)
 
-#ifdef HAVE_ROCM_VMM_TYPE
-#include <map>
-#include <mutex>
-
-/* release() only receives the VA, so track the handle + mapped size per VA. */
-struct mem_buffer_rocm_vmm_alloc {
-    hipMemGenericAllocationHandle_t handle;
-    size_t                          size;
-};
-static std::map<void*, mem_buffer_rocm_vmm_alloc> mem_buffer_rocm_vmm_allocs;
-static std::mutex                                 mem_buffer_rocm_vmm_lock;
-
 static void *mem_buffer_rocm_vmm_alloc_mem(size_t size)
 {
     hipMemGenericAllocationHandle_t handle;
@@ -130,54 +118,32 @@ static void *mem_buffer_rocm_vmm_alloc_mem(size_t size)
     access.flags    = hipMemAccessFlagsProtReadWrite;
     ROCM_CALL(hipMemSetAccess(ptr, padded, &access, 1));
 
-    {
-        std::lock_guard<std::mutex> lock(mem_buffer_rocm_vmm_lock);
-        mem_buffer_rocm_vmm_allocs[ptr] = {handle, padded};
-    }
+    /* Keep the create ref; free_mem reclaims it with the retained ref. */
     return ptr;
 }
 
-/* Frees ptr via the VMM API and returns true if it was a VMM allocation. */
+/* Frees ptr via the VMM API and returns true if it was a VMM allocation.
+ * hipMemRetainAllocationHandle() succeeds only for a VMM mapping, which both
+ * detects the mode and recovers the handle release() does not otherwise hold. */
 static bool mem_buffer_rocm_vmm_free_mem(void *ptr)
 {
-    mem_buffer_rocm_vmm_alloc alloc;
+    hipMemGenericAllocationHandle_t handle;
+    void *base;
+    size_t size;
 
-    {
-        std::lock_guard<std::mutex> lock(mem_buffer_rocm_vmm_lock);
-        auto it = mem_buffer_rocm_vmm_allocs.find(ptr);
-        if (it == mem_buffer_rocm_vmm_allocs.end()) {
-            return false;
-        }
-        alloc = it->second;
-        mem_buffer_rocm_vmm_allocs.erase(it);
-    }
-
-    ROCM_CALL(hipMemUnmap(ptr, alloc.size));
-    ROCM_CALL(hipMemAddressFree(ptr, alloc.size));
-    ROCM_CALL(hipMemRelease(alloc.handle));
-    return true;
-}
-
-/* Whether ptr (possibly an interior address) falls inside a VMM allocation. */
-static bool mem_buffer_rocm_is_vmm_mem(void *ptr)
-{
-    std::lock_guard<std::mutex> lock(mem_buffer_rocm_vmm_lock);
-
-    /* Candidate range is the one just before the first base VA past ptr. */
-    auto it = mem_buffer_rocm_vmm_allocs.upper_bound(ptr);
-    if (it == mem_buffer_rocm_vmm_allocs.begin()) {
+    if (hipMemRetainAllocationHandle(&handle, ptr) != hipSuccess) {
+        /* Expected for non-VMM pointers; clear so the error does not leak. */
+        (void)hipGetLastError();
         return false;
     }
 
-    --it;
-    uintptr_t base = reinterpret_cast<uintptr_t>(it->first);
-    return reinterpret_cast<uintptr_t>(ptr) < (base + it->second.size);
+    ROCM_CALL(hipMemGetAddressRange(&base, &size, ptr));
+    ROCM_CALL(hipMemUnmap(base, size));
+    ROCM_CALL(hipMemAddressFree(base, size));
+    ROCM_CALL(hipMemRelease(handle)); /* retained ref */
+    ROCM_CALL(hipMemRelease(handle)); /* create ref */
+    return true;
 }
-#else
-static void *mem_buffer_rocm_vmm_alloc_mem(size_t) { return NULL; }
-static bool mem_buffer_rocm_vmm_free_mem(void*)    { return false; }
-static bool mem_buffer_rocm_is_vmm_mem(void*)      { return false; }
-#endif
 
 #endif
 
@@ -272,21 +238,14 @@ bool mem_buffer::is_rocm_managed_supported()
 
 bool mem_buffer::is_rocm_vmm_supported()
 {
-#if HAVE_ROCM && defined(HAVE_ROCM_VMM_TYPE)
-    int dev       = 0;
-    int supported = 0;
+#ifdef HAVE_ROCM_VMM_TYPE
+    int dev, supported;
 
-    if (!is_rocm_supported() || (hipGetDevice(&dev) != hipSuccess)) {
-        return false;
-    }
-
-    if (hipDeviceGetAttribute(&supported,
-                              hipDeviceAttributeVirtualMemoryManagementSupported,
-                              dev) != hipSuccess) {
-        return false;
-    }
-
-    return supported != 0;
+    return is_rocm_supported() && (hipGetDevice(&dev) == hipSuccess) &&
+           (hipDeviceGetAttribute(&supported,
+                                  hipDeviceAttributeVirtualMemoryManagementSupported,
+                                  dev) == hipSuccess) &&
+           supported;
 #else
     return false;
 #endif
@@ -946,12 +905,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
-        /* VMM-backed ROCM is device-only; the CPU memset fast path would fault. */
-        if ((length <= 8) && !mem_buffer_rocm_is_vmm_mem(buffer)) {
-            ::memset(buffer, c, length);
-        } else {
-            ROCM_CALL(hipMemset(buffer, c, length));
-        }
+        ROCM_CALL(hipMemset(buffer, c, length));
         ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif

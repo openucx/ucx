@@ -33,7 +33,7 @@ public:
     enum class alloc_mode {
         DEFAULT, /* Default synchronous allocation (cudaMalloc/hipMalloc/host) */
         ASYNC,   /* Asynchronous CUDA allocation mode */
-        VMM      /* ROCm VMM (hipMem*) allocation mode */
+        VMM      /* Virtual memory management allocation mode */
     };
 
     /* allocate buffer of a given memory type */
