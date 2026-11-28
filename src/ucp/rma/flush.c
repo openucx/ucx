@@ -652,6 +652,18 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
 
     ucp_request_set_super(req, worker_req);
     ucp_request_set_send_callback_param(param, req, send);
+
+    if (ucs_unlikely(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH)) {
+        /* A request which the replay completed inline issued this flush from
+         * its send callback. The requests which the replay did not send yet
+         * were issued before the flush, so start it after the replay. */
+        ucp_trace_req(req, "flush ep %p starts after the replay", ep);
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, req,
+                                  ucp_ep_flush_resume_slow_path_callback, req);
+        ucp_worker_signal_internal(ep->worker);
+        goto out;
+    }
+
     ucp_ep_flush_progress(req);
 
     if (ucp_ep_flush_is_completed(req)) {
@@ -665,6 +677,7 @@ ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
         }
     }
 
+out:
     ucp_trace_req(req, "return inprogress flush ep %p request %p", ep, req + 1);
     return req + 1;
 }
