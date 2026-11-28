@@ -177,6 +177,15 @@ static inline const uct_md_attr_v2_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
+/* Only the legacy peer-pinning requirement is waived for async short copies. */
+static UCS_F_ALWAYS_INLINE int
+ucp_cuda_async_mem_flags_match(const uct_md_attr_v2_t *md_attr,
+                               unsigned mem_flags)
+{
+    return ucs_test_all_flags(mem_flags, md_attr->required_mem_flags &
+                                                 ~UCS_MEM_FLAG_GDR_CAPABLE);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);

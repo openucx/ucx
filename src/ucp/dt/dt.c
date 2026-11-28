@@ -66,10 +66,12 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
  * caller, or is NULL when they are unknown, in which case they are resolved on
  * the first memory domain which actually requires them. Returns UCP_NULL_LANE
  * if no lane is compatible.
+ * @a skip_md_index is the MD to exclude, or UCP_NULL_RESOURCE for none.
  */
 static ucp_lane_index_t
 ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
-                          const ucp_memory_info_t *mem_info)
+                          const ucp_memory_info_t *mem_info,
+                          ucp_md_index_t skip_md_index)
 {
     ucp_context_h context          = ep->worker->context;
     const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
@@ -80,6 +82,10 @@ ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
 
     for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
         lane    = key->rma_lanes[i];
+        if (ucp_ep_md_index(ep, lane) == skip_md_index) {
+            continue;
+        }
+
         md_attr = ucp_ep_md_attr(ep, lane);
         if (md_attr->required_mem_flags == 0) {
             return lane;
@@ -111,16 +117,17 @@ ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
  * Select the mem type endpoint lane which can register the buffer, and register
  * it. @a mem_info holds the memory flags resolved by the caller, or is NULL
  * when they are unknown.
+ * @a skip_md_index is the MD to exclude, or UCP_NULL_RESOURCE for none.
  */
 static ucs_status_t
 ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
                       size_t length, ucs_memory_type_t mem_type,
                       const ucp_memory_info_t *mem_info,
-                      ucp_lane_index_t *lane_p,
+                      ucp_md_index_t skip_md_index, ucp_lane_index_t *lane_p,
                       ucp_mtype_pack_context_t *pack_context)
 {
     ucp_lane_index_t lane = ucp_mem_type_ep_find_lane(ep, address, length,
-                                                      mem_info);
+                                                      mem_info, skip_md_index);
 
     if (lane == UCP_NULL_LANE) {
         ucs_error("no mem type lane can register %s buffer %p length %zu",
@@ -130,7 +137,125 @@ ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
 
     *lane_p = lane;
     return ucp_mem_type_reg_buffers(worker, address, length, mem_type,
-                                    ucp_ep_md_index(ep, lane), pack_context);
+                                    ucp_ep_md_index(ep, lane), 0, pack_context);
+}
+
+/*
+ * Try the optional async route before any copy. The caller owns detected so
+ * resolved memory information remains available to the fallback lane walk.
+ */
+static ucs_status_t
+ucp_mem_type_cuda_async_reg(ucp_worker_h worker, void *address, size_t length,
+                            ucs_memory_type_t mem_type,
+                            uct_ep_operation_t operation,
+                            ucp_memory_info_t *detected,
+                            const ucp_memory_info_t **mem_info_p,
+                            ucp_ep_h *ep_p, ucp_lane_index_t *lane_p,
+                            ucp_md_index_t *failed_md_index_p,
+                            ucp_mtype_pack_context_t *pack_context)
+{
+    const ucp_memory_info_t *mem_info = *mem_info_p;
+    ucp_ep_h ep                       = NULL;
+    ucp_lane_index_t lane;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+
+    if (mem_info == NULL) {
+        if ((mem_type != UCS_MEMORY_TYPE_CUDA) &&
+            (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        ep = ucp_worker_cuda_async_ep_for_short(worker, NULL, operation, &lane);
+        if (ep == NULL) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        /* Discover origin only when a qualified async route is available. */
+        /* Coverity wrongly resolves the memory domain deregister function
+         * pointer to 'uct_cuda_ipc_mem_dereg' and considers 'address' as
+         * freed */
+        /* coverity[pass_freed_arg] */
+        ucp_memory_detect(worker->context, address, length, detected);
+        detected->type = mem_type;
+        mem_info       = detected;
+        *mem_info_p    = mem_info;
+    }
+
+    if (!(mem_info->flags & UCS_MEM_FLAG_STREAM_ORDERED)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* Reuse the first capability-qualified lane only if it accepts the buffer. */
+    if ((ep == NULL) ||
+        !ucp_cuda_async_mem_flags_match(ucp_ep_md_attr(ep, lane),
+                                        mem_info->flags)) {
+        ep = ucp_worker_cuda_async_ep_for_short(worker, mem_info, operation,
+                                                &lane);
+        if (ep == NULL) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    md_index = ucp_ep_md_index(ep, lane);
+    /*
+     * GDRCopy registers CUDA memory even when the buffer is classified as
+     * CUDA_MANAGED. Its cache_mem_types == 0 keeps this local type override out
+     * of UCP's shared registration cache, avoiding conflicting cached types.
+     */
+    ucs_assertv(!(worker->context->cache_md_map[UCS_MEMORY_TYPE_CUDA] &
+                  UCS_BIT(md_index)),
+                "async MD %d uses shared registration cache", md_index);
+    status = ucp_mem_type_reg_buffers(worker, address, length,
+                                      UCS_MEMORY_TYPE_CUDA, md_index,
+                                      UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                      pack_context);
+    if (status != UCS_OK) {
+        *failed_md_index_p = md_index;
+        return status;
+    }
+
+    *ep_p   = ep;
+    *lane_p = lane;
+    return UCS_OK;
+}
+
+/* Return the endpoint and lane whose registration succeeded. */
+static ucs_status_t
+ucp_mem_type_copy_reg(ucp_worker_h worker, void *address, size_t length,
+                      ucs_memory_type_t mem_type,
+                      const ucp_memory_info_t *mem_info,
+                      uct_ep_operation_t operation, ucp_ep_h *ep_p,
+                      ucp_lane_index_t *lane_p,
+                      ucp_mtype_pack_context_t *pack_context)
+{
+    ucp_ep_h ep                    = worker->mem_type_ep[mem_type];
+    ucp_md_index_t failed_md_index = UCP_NULL_RESOURCE;
+    ucp_memory_info_t detected;
+    ucs_status_t status;
+
+    status = ucp_mem_type_cuda_async_reg(worker, address, length, mem_type,
+                                         operation, &detected, &mem_info, ep_p,
+                                         lane_p, &failed_md_index,
+                                         pack_context);
+    if (status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    if ((failed_md_index != UCP_NULL_RESOURCE) && (ep == NULL)) {
+        return status;
+    }
+
+    /* Preserve the original lane walk except for an already failed async MD. */
+    status = ucp_mem_type_lane_reg(worker, ep, address, length, mem_type,
+                                   mem_info, failed_md_index, lane_p,
+                                   pack_context);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *ep_p = ep;
+    return UCS_OK;
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
@@ -140,7 +265,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       size_t recv_length, ucs_memory_type_t mem_type,
                       const ucp_memory_info_t *mem_info)
 {
-    ucp_ep_h ep = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep;
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
@@ -149,8 +274,9 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    status = ucp_mem_type_lane_reg(worker, ep, buffer, recv_length, mem_type,
-                                   mem_info, &lane, &pack_context);
+    status = ucp_mem_type_copy_reg(worker, buffer, recv_length, mem_type,
+                                   mem_info, UCT_EP_OP_PUT_SHORT, &ep, &lane,
+                                   &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
@@ -172,7 +298,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
                       size_t length, ucs_memory_type_t mem_type,
                       const ucp_memory_info_t *mem_info)
 {
-    ucp_ep_h ep = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep;
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
@@ -181,8 +307,9 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    status = ucp_mem_type_lane_reg(worker, ep, (void*)src, length, mem_type,
-                                   mem_info, &lane, &pack_context);
+    status = ucp_mem_type_copy_reg(worker, (void*)src, length, mem_type,
+                                   mem_info, UCT_EP_OP_GET_SHORT, &ep, &lane,
+                                   &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
