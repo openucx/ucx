@@ -394,7 +394,8 @@ public:
     {
         uct_test::init();
 
-        reduce_tl_send_queues();
+        /* Keep flow-control messages out of the operations being validated. */
+        set_config("RC_FC_ENABLE?=n");
 
         m_sender = uct_test::create_entity(0, err_handler);
         m_entities.push_back(m_sender);
@@ -414,6 +415,8 @@ public:
     }
 
 protected:
+    enum completion_mode_t { CANCELED, DEFERRED, NO_COMP };
+
     struct purge_ctx {
         test_uct_purge_outstanding *self;
         uct_ep_operation_t         operation;
@@ -433,6 +436,10 @@ protected:
         uct_unpack_callback_t      unpack_cb;
         void                       *unpack_arg;
         size_t                     unpack_length;
+        const uint64_t             *remote_addrs;
+        const uct_rkey_t           *rkeys;
+        completion_mode_t          mode;
+        uct_completion_t           flush_comp;
     };
 
     using send_func_t =
@@ -508,6 +515,10 @@ protected:
         case UCT_EP_OP_PUT_ZCOPY:
             validate_put(info, ctx);
             return;
+        case UCT_EP_OP_PUT_SGL_ZCOPY:
+        case UCT_EP_OP_GET_SGL_ZCOPY:
+            validate_sgl(info, ctx);
+            return;
         case UCT_EP_OP_GET_BCOPY:
         case UCT_EP_OP_GET_ZCOPY:
             validate_get(info, ctx);
@@ -574,14 +585,11 @@ protected:
         mem_buffer::pattern_check(info->am.header.zcopy.buffer,
                                   info->am.header.zcopy.length, AM_ZCOPY_SEED);
 
-        ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
-        for (size_t i = 0; i < ctx->iovcnt; ++i) {
-            EXPECT_EQ(ctx->iov[i].buffer, info->am.payload.zcopy.iov[i].buffer);
-            EXPECT_EQ(ctx->iov[i].length, info->am.payload.zcopy.iov[i].length);
-        }
+        ASSERT_NO_FATAL_FAILURE(
+                validate_iov(info->am.payload.zcopy.iov,
+                             info->am.payload.zcopy.iovcnt, ctx));
 
-        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-        EXPECT_EQ(&ctx->comp, info->comp);
+        ASSERT_NO_FATAL_FAILURE(validate_completion(info, ctx));
         uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
 
         ++ctx->num_ops_purged;
@@ -597,17 +605,25 @@ protected:
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
     }
 
+    static void validate_iov(const uct_iov_t *iov, size_t iovcnt,
+                             const purge_ctx *ctx)
+    {
+        ASSERT_EQ(ctx->iovcnt, iovcnt);
+        for (size_t i = 0; i < iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].length, iov[i].length);
+            if ((iov[i].length != 0) ||
+                (ctx->operation == UCT_EP_OP_AM_ZCOPY)) {
+                EXPECT_EQ(ctx->iov[i].buffer, iov[i].buffer);
+            }
+        }
+    }
+
     static void validate_rma_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         EXPECT_TRUE(info->rma.field_mask &
                     UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
-        for (size_t i = 0; i < ctx->iovcnt; ++i) {
-            EXPECT_EQ(ctx->iov[i].buffer,
-                      info->rma.payload.zcopy.iov[i].buffer);
-            EXPECT_EQ(ctx->iov[i].length,
-                      info->rma.payload.zcopy.iov[i].length);
-        }
+        validate_iov(info->rma.payload.zcopy.iov,
+                     info->rma.payload.zcopy.iovcnt, ctx);
     }
 
     static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -617,10 +633,8 @@ protected:
         validate_rma_addr(info, ctx);
 
         if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
-            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-            EXPECT_EQ(&ctx->comp, info->comp);
             validate_rma_iov(info, ctx);
-
+            ASSERT_NO_FATAL_FAILURE(validate_completion(info, ctx));
             uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
         } else {
             EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
@@ -642,7 +656,6 @@ protected:
                                          UCT_EP_OP_INFO_FIELD_RMA;
 
         ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
-        EXPECT_EQ(&ctx->comp, info->comp);
         validate_rma_addr(info, ctx);
 
         if (ctx->operation == UCT_EP_OP_GET_ZCOPY) {
@@ -655,8 +668,57 @@ protected:
             EXPECT_EQ(ctx->unpack_length, info->rma.payload.unpack.length);
         }
 
+        ASSERT_NO_FATAL_FAILURE(validate_completion(info, ctx));
         uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
         ++ctx->num_ops_purged;
+    }
+
+    static void validate_completion(const uct_ep_op_info_t *info,
+                                     purge_ctx *ctx)
+    {
+        ASSERT_EQ(ctx->mode != NO_COMP,
+                  !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
+        if (ctx->mode == NO_COMP) {
+            return;
+        }
+        ASSERT_EQ(&ctx->comp, info->comp);
+    }
+
+    static void validate_sgl(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_SGL);
+        EXPECT_EQ(0u, uintptr_t(info->sgl.iov) % alignof(uct_iov_t));
+        EXPECT_EQ(0u, uintptr_t(info->sgl.remote_addrs) % alignof(uint64_t));
+        EXPECT_EQ(0u, uintptr_t(info->sgl.rkeys) % alignof(uct_rkey_t));
+        ASSERT_NO_FATAL_FAILURE(
+                validate_iov(info->sgl.iov, info->sgl.count, ctx));
+        for (size_t i = 0; i < info->sgl.count; ++i) {
+            EXPECT_EQ(ctx->remote_addrs[i], info->sgl.remote_addrs[i]);
+            EXPECT_EQ(uint32_t(ctx->rkeys[i]), uint32_t(info->sgl.rkeys[i]));
+#if HAVE_TL_RC
+            if (ctx->iov[i].length != 0) {
+                EXPECT_EQ(static_cast<uct_ib_mem_t*>(ctx->iov[i].memh)->lkey,
+                          static_cast<uct_ib_mem_t*>(
+                                  info->sgl.iov[i].memh)->lkey);
+            }
+#endif
+        }
+        ++ctx->num_ops_purged;
+        ASSERT_NO_FATAL_FAILURE(validate_completion(info, ctx));
+        if (ctx->mode == DEFERRED) {
+            EXPECT_EQ(1, info->comp->count);
+            EXPECT_EQ(0u, ctx->num_completions);
+        } else if (ctx->mode == CANCELED) {
+            uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
+        }
+    }
+
+    static void sgl_flush_cb(uct_completion_t *comp)
+    {
+        auto &ctx = *ucs_container_of(comp, purge_ctx, flush_comp);
+        if (ctx.mode == CANCELED) {
+            EXPECT_EQ(1u, ctx.num_completions);
+        }
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep,
@@ -697,48 +759,57 @@ protected:
     {
     }
 
+    std::vector<uint8_t> get_rx_token()
+    {
+        std::vector<uint8_t> rx_token;
+        uct_iface_attr_v2_t  tx_attr = {};
+        uct_iface_attr_v2_t  rx_attr = {};
+        uct_ep_attr_t        ep_attr = {};
+        std::vector<uint8_t> tx_token;
+
+        tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
+
+        rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+
+        tx_token.resize(tx_attr.tx_token_length);
+        rx_token.resize(rx_attr.rx_token_length);
+
+        ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        ep_attr.tx_token   = tx_token.data();
+        ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
+
+        rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                             UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        rx_attr.tx_token   = tx_token.data();
+        rx_attr.rx_token   = rx_token.data();
+        ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+        return rx_token;
+    }
+
+
+    void purge_outstanding(const void *rx_token,
+                           uct_ep_outstanding_purge_callback_t cb, void *arg)
+    {
+        uct_ep_outstanding_purge_params_t params = {};
+
+        params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                            UCT_EP_OUTSTANDING_FIELD_ARG;
+        params.cb         = cb;
+        params.arg        = arg;
+        if (rx_token != nullptr) {
+            params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
+            params.rx_token    = rx_token;
+        }
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0), &params));
+    }
+
     void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
     {
-        uct_ep_outstanding_purge_params_t purge_params = {};
-        /* Lives until purge returns. The params keep a pointer into it. */
-        std::vector<uint8_t> rx_token;
-
-        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
-                                  UCT_EP_OUTSTANDING_FIELD_ARG;
-        purge_params.cb         = purge_cb;
-        purge_params.arg        = ctx;
-
-        if (with_rx_token) {
-            uct_iface_attr_v2_t  tx_attr = {};
-            uct_iface_attr_v2_t  rx_attr = {};
-            uct_ep_attr_t        ep_attr = {};
-            std::vector<uint8_t> tx_token;
-
-            tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
-            ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
-
-            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
-            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
-
-            tx_token.resize(tx_attr.tx_token_length);
-            rx_token.resize(rx_attr.rx_token_length);
-
-            ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
-            ep_attr.tx_token   = tx_token.data();
-            ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
-
-            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
-                                 UCT_IFACE_ATTR_FIELD_RX_TOKEN;
-            rx_attr.tx_token   = tx_token.data();
-            rx_attr.rx_token   = rx_token.data();
-            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
-
-            purge_params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
-            purge_params.rx_token    = rx_token.data();
-        }
-
-        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0),
-                                               &purge_params));
+        auto rx_token = with_rx_token ? get_rx_token() : std::vector<uint8_t>();
+        purge_outstanding(with_rx_token ? rx_token.data() : nullptr,
+                          purge_cb, ctx);
     }
 
     void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
@@ -1144,6 +1215,163 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_purge_delivered,
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
+
+class test_uct_purge_sgl : public test_uct_purge_outstanding {
+public:
+    static std::vector<const resource*>
+    enum_resources(const std::string &tl_name)
+    {
+        static std::vector<resource> variants;
+
+        if (variants.empty()) {
+            for (const auto *elem : uct_test::enum_resources(tl_name)) {
+                for (unsigned count : {1, 2, 3}) {
+                    for (bool is_put : {true, false}) {
+                        resource rsc     = *elem;
+                        rsc.variant      = count * 2 + is_put;
+                        rsc.variant_name =
+                                std::string(is_put ? "put/" : "get/") +
+                                std::to_string(count);
+                        variants.push_back(rsc);
+                    }
+                }
+            }
+        }
+
+        return filter_resources(variants, resource::is_equal_tl_name, tl_name);
+    }
+
+protected:
+    void test_sgl(completion_mode_t mode = CANCELED, bool with_rx_token = true,
+                  bool remote_error = false)
+    {
+        const bool is_put = GetParam()->variant % 2;
+        uct_iface_attr_v2_t attr = {};
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                          UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                          UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &attr));
+        if (!(attr.cap.flags & (is_put ? UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY :
+                                        UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))) {
+            UCS_TEST_SKIP_R("native SGL is not supported");
+        }
+        const size_t count = ucs_min(size_t(GetParam()->variant / 2),
+                                    is_put ? attr.max_put_sgl_zcopy_count :
+                                             attr.max_get_sgl_zcopy_count);
+        ASSERT_GT(count, 0u);
+        UCS_TEST_MESSAGE << "count " << count << " limit "
+                         << (is_put ? attr.max_put_sgl_zcopy_count :
+                                      attr.max_get_sgl_zcopy_count);
+        const size_t failed = remote_error ? count / 2 : SIZE_MAX;
+        std::vector<mapped_buffer> local, remote;
+        std::vector<void*> buffers(count);
+        std::vector<size_t> lengths(count);
+        std::vector<uct_mem_h> memhs(count);
+        std::vector<uint64_t> addrs(count);
+        std::vector<uct_rkey_t> rkeys(count);
+        std::vector<uct_iov_t> iov(count);
+        for (size_t i = 0; i < count; ++i) {
+            const size_t length = (i + 1) * 2 * UCS_KBYTE;
+
+            local.emplace_back(length, SEND_SEED + i, *m_sender, i);
+            remote.emplace_back(length, RECV_SEED + i, *m_receiver, i);
+            buffers[i]    = local.back().ptr();
+            lengths[i]    = (is_put && (i == 1) && (i != failed)) ? 0 : length;
+            memhs[i]      = local.back().memh();
+            addrs[i]      = (i == failed) ? 0 : remote.back().addr();
+            rkeys[i]      = remote.back().rkey();
+            iov[i]        = *local.back().iov();
+            iov[i].length = lengths[i];
+        }
+        purge_ctx ctx = {this, is_put ? UCT_EP_OP_PUT_SGL_ZCOPY :
+                                       UCT_EP_OP_GET_SGL_ZCOPY,
+                        {completion_cb, 0, UCS_OK}};
+        ctx.iov             = iov.data();
+        ctx.iovcnt          = count;
+        ctx.remote_addrs    = addrs.data();
+        ctx.rkeys           = rkeys.data();
+        ctx.mode            = mode;
+        ctx.flush_comp.func = sgl_flush_cb;
+        auto sgl_op = is_put ? uct_ep_put_sgl_zcopy : uct_ep_get_sgl_zcopy;
+        send_func_t send = [&](uct_ep_h ep, uct_completion_t *comp) {
+            return sgl_op(ep, buffers.data(), lengths.data(), memhs.data(),
+                          addrs.data(), rkeys.data(), nullptr, nullptr, count,
+                          (mode == NO_COMP) ? nullptr : comp);
+        };
+        /* Consume setup fencing before checking the original RMA keys. */
+        ASSERT_UCS_OK(uct_ep_put_short(m_sender->ep(0), local[0].ptr(), 1,
+                                       remote[0].addr(), remote[0].rkey()));
+        uct_completion_t seed_comp = {[](uct_completion_t*) {}, 0, UCS_OK};
+        post_flush(m_sender->ep(0), &seed_comp);
+        wait_for_value(&seed_comp.count, 0, true);
+        if ((mode == CANCELED) && !remote_error) {
+            test_purge_outstanding(send, ctx, UCT_FLUSH_FLAG_LOCAL,
+                                   with_rx_token);
+            return;
+        }
+
+        if (!remote_error) {
+            uct_ep_invalidate_params_t params = {};
+            ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &params));
+        }
+        scoped_log_handler slh(wrap_errors_logger);
+        ASSERT_EQ(UCS_INPROGRESS, post_op(m_sender->ep(0), &ctx.comp, send));
+        post_flush(m_sender->ep(0), &ctx.flush_comp);
+        wait_for_flag(&m_err_count);
+        ASSERT_EQ(1u, m_err_count);
+        purge_outstanding(&ctx);
+        EXPECT_EQ(0, ctx.flush_comp.count);
+        ASSERT_EQ(1u, ctx.num_ops_purged);
+        if (mode == DEFERRED) {
+            EXPECT_EQ(1, ctx.comp.count);
+            EXPECT_EQ(0u, ctx.num_completions);
+            uct_invoke_completion(&ctx.comp, UCS_OK);
+        }
+        EXPECT_EQ(mode == NO_COMP ? 0u : 1u, ctx.num_completions);
+        if (mode != NO_COMP) {
+            EXPECT_EQ(0, ctx.comp.count);
+            EXPECT_EQ(mode == DEFERRED ? UCS_OK : UCS_ERR_CANCELED,
+                      ctx.comp.status);
+        }
+        if (remote_error) {
+            for (size_t i = 0; i < count; ++i) {
+                if (lengths[i] != 0) {
+                    EXPECT_EQ(i < failed, mem_buffer::compare(
+                            local[i].ptr(), remote[i].ptr(), lengths[i],
+                            UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST))
+                            << "element " << i;
+                }
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_uct_purge_sgl, purge)
+{
+    test_sgl();
+}
+
+UCS_TEST_P(test_uct_purge_sgl, no_token)
+{
+    test_sgl(CANCELED, false);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, deferred)
+{
+    test_sgl(DEFERRED);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, no_comp)
+{
+    test_sgl(NO_COMP);
+}
+
+UCS_TEST_P(test_uct_purge_sgl, remote_error)
+{
+    test_sgl(CANCELED, true, true);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_purge_sgl, rc_mlx5)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {

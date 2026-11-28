@@ -50,6 +50,8 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
+    UCT_EP_OP_PUT_SGL_ZCOPY, /**< Scatter-gather zero-copy put */
+    UCT_EP_OP_GET_SGL_ZCOPY, /**< Scatter-gather zero-copy get */
     UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
@@ -1757,6 +1759,9 @@ typedef enum uct_ep_op_info_field {
 
     /** Enables @ref uct_ep_op_info_t::atomic. */
     UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::sgl. */
+    UCT_EP_OP_INFO_FIELD_SGL       = UCS_BIT(5),
 } uct_ep_op_info_field_t;
 
 
@@ -1883,6 +1888,7 @@ typedef enum {
  * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY.
+ * - PUT_SGL_ZCOPY and GET_SGL_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_SGL.
  * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
@@ -1918,7 +1924,12 @@ typedef struct uct_ep_op_info {
      */
     uct_ep_operation_t operation;
 
-    /* Original completion. */
+    /**
+     * Original completion, when @ref UCT_EP_OP_INFO_FIELD_COMP is set.
+     * The callback takes ownership of the original completion and must
+     * complete it once for the reported operation. Purge does not add
+     * references to the caller's completion count.
+     */
     uct_completion_t   *comp;
 
     union {
@@ -1984,6 +1995,18 @@ typedef struct uct_ep_op_info {
                 } unpack;
             } payload;
         } rma;
+
+        /** Parameters of one original SGL operation, including any delivered
+         * prefix when the operation is only partially delivered. Arrays are
+         * valid only inside the purge callback. Zero-length IOV entries have
+         * no buffer or memory handle. Memory handles and keys are reconstructed
+         * as for @ref UCT_EP_OP_INFO_FIELD_RMA. */
+        struct {
+            const uct_iov_t  *iov;          /**< One IOV per SGL element. */
+            const uint64_t   *remote_addrs; /**< Remote addresses. */
+            const uct_rkey_t *rkeys;        /**< Remote keys. */
+            size_t           count;        /**< Number of SGL elements. */
+        } sgl;
 
         /* Atomic operation parameters. */
         struct {
@@ -2067,6 +2090,10 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ * A partially delivered SGL is reported once with all its elements, as
+ * @ref UCT_EP_OP_PUT_SGL_ZCOPY or @ref UCT_EP_OP_GET_SGL_ZCOPY. The original
+ * completion is transferred without changing its count. A fully delivered
+ * operation is completed by the transport without invoking @a cb.
  *
  * @note This routine should be called only after the error handler for @a ep
  *       returns @ref UCS_INPROGRESS. It can be used only if the interface
