@@ -245,6 +245,12 @@ ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
             return UCS_ERR_UNSUPPORTED;
         }
 
+        /* Atomics through different lanes are not atomic with each other */
+        if (perf->params.device_channel_mode != UCX_PERF_CHANNEL_MODE_SINGLE) {
+            ucs_error("device add supports only the single channel mode");
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
             return runner.run_stream_uni();
         }
