@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <algorithm>
@@ -36,10 +36,12 @@ const std::string Header::serialize() const
 
   ss.write((char const*)&next, sizeof(next));
   ss.write((char const*)&nframes, sizeof(nframes));
-  for (size_t i = 0; i < HeaderFramesSize; ++i)
+  for (size_t i = 0; i < HeaderFramesSize; ++i) {
     ss.write((char const*)&isCUDA[i], sizeof(isCUDA[i]));
-  for (size_t i = 0; i < HeaderFramesSize; ++i)
+  }
+  for (size_t i = 0; i < HeaderFramesSize; ++i) {
     ss.write((char const*)&size[i], sizeof(size[i]));
+  }
 
   return ss.str();
 }
@@ -50,14 +52,17 @@ void Header::deserialize(const std::string& serializedHeader)
 
   ss.read(reinterpret_cast<char*>(&next), sizeof(next));
   ss.read(reinterpret_cast<char*>(&nframes), sizeof(nframes));
-  if (nframes > HeaderFramesSize)
+  if (nframes > HeaderFramesSize) {
     throw std::overflow_error("Header nframes (" + std::to_string(nframes) +
                               ") exceeds HeaderFramesSize (" + std::to_string(HeaderFramesSize) +
                               ")");
-  for (size_t i = 0; i < HeaderFramesSize; ++i)
+  }
+  for (size_t i = 0; i < HeaderFramesSize; ++i) {
     ss.read(reinterpret_cast<char*>(&isCUDA[i]), sizeof(isCUDA[i]));
-  for (size_t i = 0; i < HeaderFramesSize; ++i)
+  }
+  for (size_t i = 0; i < HeaderFramesSize; ++i) {
     ss.read(reinterpret_cast<char*>(&size[i]), sizeof(size[i]));
+  }
 }
 
 std::vector<Header> Header::buildHeaders(const std::vector<size_t>& size,
@@ -65,8 +70,9 @@ std::vector<Header> Header::buildHeaders(const std::vector<size_t>& size,
 {
   const size_t totalFrames = size.size();
 
-  if (isCUDA.size() != totalFrames)
+  if (isCUDA.size() != totalFrames) {
     throw std::length_error("size and isCUDA must have the same length");
+  }
 
   const size_t totalHeaders = (totalFrames + HeaderFramesSize - 1) / HeaderFramesSize;
 

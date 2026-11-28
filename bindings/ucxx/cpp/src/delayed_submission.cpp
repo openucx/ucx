@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -35,7 +35,9 @@ void RequestDelayedSubmissionCollection::processItem(
 
   ucxx_trace_req("Submitting %s [%lu] callback: %p", _name.c_str(), id, req.get());
 
-  if (callback) callback();
+  if (callback) {
+    callback();
+  }
 }
 
 GenericDelayedSubmissionCollection::GenericDelayedSubmissionCollection(std::string name)
@@ -53,7 +55,9 @@ void GenericDelayedSubmissionCollection::processItem(ItemIdType id,
 {
   ucxx_trace_req("Submitting %s [%lu] callback", _name.c_str(), id);
 
-  if (callback) callback();
+  if (callback) {
+    callback();
+  }
 }
 
 DelayedSubmissionCollection::DelayedSubmissionCollection(bool enableDelayedRequestSubmission)

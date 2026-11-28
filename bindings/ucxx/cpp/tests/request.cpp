@@ -82,7 +82,9 @@ class RMMTestBuffer : public ucxx::Buffer {
 
   void* data() override
   {
-    if (!_buffer) throw std::runtime_error("Invalid object");
+    if (!_buffer) {
+      throw std::runtime_error("Invalid object");
+    }
     return _buffer->data();
   }
 };
@@ -120,7 +122,9 @@ class RequestTest
                      .requestAttributes(enableRequestAttributes);
 
 #if UCXX_ENABLE_CCCL
-    if (isCudaBufferType(_bufferType)) builder.cudaBufferType(ucxx::BufferType::CCCL);
+    if (isCudaBufferType(_bufferType)) {
+      builder.cudaBufferType(ucxx::BufferType::CCCL);
+    }
 #endif
 
     _worker = builder.build();
@@ -131,8 +135,12 @@ class RequestTest
                _progressMode == ProgressMode::ThreadBlocking) {
       _worker->setProgressThreadStartCallback(::createCudaContextCallback, nullptr);
 
-      if (_progressMode == ProgressMode::ThreadPolling) _worker->startProgressThread(true);
-      if (_progressMode == ProgressMode::ThreadBlocking) _worker->startProgressThread(false);
+      if (_progressMode == ProgressMode::ThreadPolling) {
+        _worker->startProgressThread(true);
+      }
+      if (_progressMode == ProgressMode::ThreadBlocking) {
+        _worker->startProgressThread(false);
+      }
     }
 
     _progressWorker = getProgressFunction(_worker, _progressMode);
@@ -142,7 +150,9 @@ class RequestTest
 
   void rebuildWorker(bool enableRequestAttributes)
   {
-    if (_worker && _worker->isProgressThreadRunning()) _worker->stopProgressThread();
+    if (_worker && _worker->isProgressThreadRunning()) {
+      _worker->stopProgressThread();
+    }
     _ep.reset();
     _worker.reset();
     buildWorker(enableRequestAttributes);
@@ -180,8 +190,9 @@ class RequestTest
   void TearDown()
   {
     if (_progressMode == ProgressMode::ThreadPolling ||
-        _progressMode == ProgressMode::ThreadBlocking)
+        _progressMode == ProgressMode::ThreadBlocking) {
       _worker->stopProgressThread();
+    }
   }
 
   void allocate(const size_t numBuffers = 1, const bool allocateRecvBuffer = true)
@@ -205,23 +216,31 @@ class RequestTest
 
       if (_bufferType == TestBufferType::Host) {
         _sendBuffer[i] = std::make_unique<ucxx::HostBuffer>(_messageSize);
-        if (allocateRecvBuffer) _recvBuffer[i] = std::make_unique<ucxx::HostBuffer>(_messageSize);
+        if (allocateRecvBuffer) {
+          _recvBuffer[i] = std::make_unique<ucxx::HostBuffer>(_messageSize);
+        }
 #if UCXX_TESTS_ENABLE_RMM
       } else if (_bufferType == TestBufferType::RMM) {
         _sendBuffer[i] = std::make_unique<RMMTestBuffer>(_messageSize);
-        if (allocateRecvBuffer) _recvBuffer[i] = std::make_unique<RMMTestBuffer>(_messageSize);
+        if (allocateRecvBuffer) {
+          _recvBuffer[i] = std::make_unique<RMMTestBuffer>(_messageSize);
+        }
 #endif
 #if UCXX_ENABLE_CCCL
       } else if (_bufferType == TestBufferType::CCCL) {
         _sendBuffer[i] = std::make_unique<ucxx::CCCLBuffer>(_messageSize);
-        if (allocateRecvBuffer) _recvBuffer[i] = std::make_unique<ucxx::CCCLBuffer>(_messageSize);
+        if (allocateRecvBuffer) {
+          _recvBuffer[i] = std::make_unique<ucxx::CCCLBuffer>(_messageSize);
+        }
 #endif
       }
 
       copyMemoryTypeAware(_sendBuffer[i]->data(), _send[i].data(), _messageSize, false);
 
       _sendPtr[i] = _sendBuffer[i]->data();
-      if (allocateRecvBuffer) _recvPtr[i] = _recvBuffer[i]->data();
+      if (allocateRecvBuffer) {
+        _recvPtr[i] = _recvBuffer[i]->data();
+      }
     }
 #if UCXX_TESTS_ENABLE_RMM
     if (_bufferType == TestBufferType::RMM) {
@@ -229,20 +248,25 @@ class RequestTest
       stream.sync();
     }
 #endif
-    if (_bufferType == TestBufferType::CCCL) { cudaStreamSynchronize(nullptr); }
+    if (_bufferType == TestBufferType::CCCL) {
+      cudaStreamSynchronize(nullptr);
+    }
   }
 
   void copyResults()
   {
-    for (size_t i = 0; i < _numBuffers; ++i)
+    for (size_t i = 0; i < _numBuffers; ++i) {
       copyMemoryTypeAware(_recv[i].data(), _recvPtr[i], _messageSize, false);
+    }
 #if UCXX_TESTS_ENABLE_RMM
     if (_bufferType == TestBufferType::RMM) {
       auto stream = cuda::stream_ref{cudaStream_t { cudaStreamDefault }};
       stream.sync();
     }
 #endif
-    if (_bufferType == TestBufferType::CCCL) { cudaStreamSynchronize(nullptr); }
+    if (_bufferType == TestBufferType::CCCL) {
+      cudaStreamSynchronize(nullptr);
+    }
   }
 
   void copyMemoryTypeAware(void* dst, const void* src, size_t size, bool synchronize = true)
@@ -253,11 +277,15 @@ class RequestTest
     } else if (_memoryType == UCS_MEMORY_TYPE_CUDA && _bufferType == TestBufferType::RMM) {
       auto stream = cuda::stream_ref{cudaStream_t { cudaStreamDefault }};
       RMM_CUDA_TRY(cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault, stream.get()));
-      if (synchronize) { stream.sync(); }
+      if (synchronize) {
+        stream.sync();
+      }
 #endif
     } else if (_memoryType == UCS_MEMORY_TYPE_CUDA) {
       cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault, nullptr);
-      if (synchronize) cudaStreamSynchronize(nullptr);
+      if (synchronize) {
+        cudaStreamSynchronize(nullptr);
+      }
     }
   }
 };
@@ -293,9 +321,12 @@ TEST(RequestCancellationTest, CancelBeforeDelayedSubmission)
 
   // Wait until the delayed-submission iteration has completed before cleaning up.
   EXPECT_TRUE(worker->registerGenericPost([]() {}));
-  if (!request->isCompleted()) request->cancel();
-  while (!request->isCompleted())
+  if (!request->isCompleted()) {
+    request->cancel();
+  }
+  while (!request->isCompleted()) {
     std::this_thread::yield();
+  }
   worker->stopProgressThread();
 
   EXPECT_TRUE(completedBeforeSubmission);
@@ -428,8 +459,9 @@ TEST_P(RequestTest, ProgressAmMemoryTypePolicyStrict)
 
   // Wait for completion without calling checkError(), since the receive request
   // is expected to complete with UCS_ERR_UNSUPPORTED.
-  while (!requests[0]->isCompleted() || !requests[1]->isCompleted())
+  while (!requests[0]->isCompleted() || !requests[1]->isCompleted()) {
     _progressWorker();
+  }
 
   // When the receiver rejects a rendezvous transfer, UCX propagates the error to
   // both sides, so the send may also complete with UCS_ERR_UNSUPPORTED.
@@ -479,8 +511,9 @@ TEST_P(RequestTest, ProgressAmReceiverCallback)
                        .build());
   waitRequests(_worker, requests, _progressWorker);
 
-  while (receivedRequests.size() < 1)
+  while (receivedRequests.size() < 1) {
     _progressWorker();
+  }
 
   {
     std::lock_guard<std::mutex> lock(mutex);
@@ -645,8 +678,9 @@ TEST_P(RequestTest, ProgressTag)
 
 TEST_P(RequestTest, ProgressTagRequestAttributes)
 {
-  if (_messageSize < _rndvThresh)
+  if (_messageSize < _rndvThresh) {
     GTEST_SKIP() << "Eager messages do not create a ucp_request and thus no debug info";
+  }
 
   rebuildWorker(true);
 
@@ -788,7 +822,9 @@ TEST_F(RequestAttributesDisabledTest, MemoryPut)
 
 TEST_P(RequestTest, ProgressStreamRequestAttributes)
 {
-  if (_messageSize == 0) GTEST_SKIP() << "Stream rejects zero-length transfers";
+  if (_messageSize == 0) {
+    GTEST_SKIP() << "Stream rejects zero-length transfers";
+  }
 
   rebuildWorker(true);
 
@@ -822,10 +858,12 @@ TEST_P(RequestTest, ProgressStreamRequestAttributes)
 
 TEST_P(RequestTest, ProgressAmRequestAttributes)
 {
-  if (_messageSize < _rndvThresh)
+  if (_messageSize < _rndvThresh) {
     GTEST_SKIP() << "Eager messages complete inline without a UCP request to query";
-  if (_progressMode == ProgressMode::Wait)
+  }
+  if (_progressMode == ProgressMode::Wait) {
     GTEST_SKIP() << "Interrupting UCP worker progress operation in wait mode is not possible";
+  }
 
   rebuildWorker(true);
 
@@ -849,7 +887,9 @@ TEST_P(RequestTest, ProgressAmRequestAttributes)
 
 TEST_P(RequestTest, MemoryGetRequestAttributes)
 {
-  if (_messageSize == 0) GTEST_SKIP() << "Zero-length memGet completes without a UCP request";
+  if (_messageSize == 0) {
+    GTEST_SKIP() << "Zero-length memGet completes without a UCP request";
+  }
 
   rebuildWorker(true);
 
@@ -880,7 +920,9 @@ TEST_P(RequestTest, MemoryGetRequestAttributes)
 
 TEST_P(RequestTest, MemoryPutRequestAttributes)
 {
-  if (_messageSize == 0) GTEST_SKIP() << "Zero-length memPut completes without a UCP request";
+  if (_messageSize == 0) {
+    GTEST_SKIP() << "Zero-length memPut completes without a UCP request";
+  }
 
   rebuildWorker(true);
 
@@ -967,8 +1009,9 @@ TEST_P(RequestTest, ProgressTagMulti)
   copyResults();
 
   // Assert data correctness
-  for (size_t i = 0; i < numMulti; ++i)
+  for (size_t i = 0; i < numMulti; ++i) {
     ASSERT_THAT(_recv[i], ContainerEq(_send[i]));
+  }
 }
 
 TEST_P(RequestTest, TagUserCallback)
@@ -1002,10 +1045,12 @@ TEST_P(RequestTest, TagUserCallback)
 
   copyResults();
 
-  for (const auto request : requests)
+  for (const auto request : requests) {
     ASSERT_THAT(request->getStatus(), UCS_OK);
-  for (const auto status : requestStatus)
+  }
+  for (const auto status : requestStatus) {
     ASSERT_THAT(status, UCS_OK);
+  }
 
   // Assert data correctness
   ASSERT_THAT(_recv[0], ContainerEq(_send[0]));
@@ -1054,8 +1099,9 @@ TEST_P(RequestTest, TagUserCallbackDiscardReturn)
 
   copyResults();
 
-  for (const auto status : requestStatus)
+  for (const auto status : requestStatus) {
     ASSERT_THAT(status, UCS_OK);
+  }
 
   // Assert data correctness
   ASSERT_THAT(_recv[0], ContainerEq(_send[0]));
@@ -1068,7 +1114,9 @@ TEST_P(RequestTest, MemoryGet)
   auto memoryHandle =
     _context->memoryHandleBuilder(_messageSize).buffer(nullptr).memoryType(_memoryType).build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   // Fill memory handle with send data
   copyMemoryTypeAware(
@@ -1099,7 +1147,9 @@ TEST_P(RequestTest, MemoryGetPreallocated)
                         .memoryType(_memoryType)
                         .build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   auto localRemoteKey      = memoryHandle->remoteKeyBuilder().build();
   auto serializedRemoteKey = localRemoteKey->serialize();
@@ -1118,7 +1168,9 @@ TEST_P(RequestTest, MemoryGetPreallocated)
 
 TEST_P(RequestTest, MemoryGetWithOffset)
 {
-  if (_messageLength < 2) GTEST_SKIP() << "Message too small to perform operations with offsets";
+  if (_messageLength < 2) {
+    GTEST_SKIP() << "Message too small to perform operations with offsets";
+  }
   allocate();
 
   size_t offset      = 1;
@@ -1127,7 +1179,9 @@ TEST_P(RequestTest, MemoryGetWithOffset)
   auto memoryHandle =
     _context->memoryHandleBuilder(_messageSize).buffer(nullptr).memoryType(_memoryType).build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   // Fill memory handle with send data
   copyMemoryTypeAware(
@@ -1162,7 +1216,9 @@ TEST_P(RequestTest, MemoryPut)
   auto memoryHandle =
     _context->memoryHandleBuilder(_messageSize).buffer(nullptr).memoryType(_memoryType).build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   auto localRemoteKey      = memoryHandle->remoteKeyBuilder().build();
   auto serializedRemoteKey = localRemoteKey->serialize();
@@ -1190,7 +1246,9 @@ TEST_P(RequestTest, MemoryPutPreallocated)
   auto memoryHandle =
     _context->memoryHandleBuilder(_messageSize).buffer(_recvPtr[0]).memoryType(_memoryType).build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   auto localRemoteKey      = memoryHandle->remoteKeyBuilder().build();
   auto serializedRemoteKey = localRemoteKey->serialize();
@@ -1209,7 +1267,9 @@ TEST_P(RequestTest, MemoryPutPreallocated)
 
 TEST_P(RequestTest, MemoryPutWithOffset)
 {
-  if (_messageLength < 2) GTEST_SKIP() << "Message too small to perform operations with offsets";
+  if (_messageLength < 2) {
+    GTEST_SKIP() << "Message too small to perform operations with offsets";
+  }
   allocate();
 
   size_t offset      = 1;
@@ -1218,7 +1278,9 @@ TEST_P(RequestTest, MemoryPutWithOffset)
   auto memoryHandle =
     _context->memoryHandleBuilder(_messageSize).buffer(nullptr).memoryType(_memoryType).build();
   // If message size is 0, there's no allocation and memory type is then "host" by default.
-  if (_messageSize > 0) ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  if (_messageSize > 0) {
+    ASSERT_EQ(memoryHandle->getMemoryType(), _memoryType);
+  }
 
   auto localRemoteKey      = memoryHandle->remoteKeyBuilder().build();
   auto serializedRemoteKey = localRemoteKey->serialize();

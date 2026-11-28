@@ -81,6 +81,48 @@ configure_ucx_tls() {
   fi
 }
 
+configure_crash_backtraces() {
+  # Print native (C/C++) backtraces when a process that loaded UCX (any process
+  # importing ucxx, including pytest-xdist workers and their subprocesses)
+  # receives a fatal signal (SIGSEGV, SIGBUS, SIGILL, SIGFPE). UCX's signal handler
+  # chains to previously installed handlers (e.g., Python's `faulthandler`), so
+  # Python stacks are still printed afterwards. Nothing is printed on success.
+  #
+  # - When GDB is available and allowed to attach to its parent process, use
+  #   `UCX_HANDLE_ERRORS=debug`: UCX forks GDB which prints the stacks of all
+  #   threads (see `crash_backtrace.sh`), bounded by a timeout.
+  # - Otherwise use `UCX_HANDLE_ERRORS=bt`: UCX prints the stack of the crashing
+  #   thread itself.
+  #
+  # In CI GDB is installed in the images and in the conda test environments
+  # (`dependencies.yaml`), and the containers run with `--cap-add=SYS_PTRACE`; the
+  # check below picks the mode at run time. The latter also covers environments
+  # without GDB or ptrace permissions, e.g. local runs.
+  local ci_dir cap_eff ptrace_scope
+
+  if [[ -n "${UCX_HANDLE_ERRORS:-}" ]]; then
+    echo "UCX_HANDLE_ERRORS=${UCX_HANDLE_ERRORS} already set, not overriding"
+    return
+  fi
+
+  export UCX_HANDLE_ERRORS=bt
+
+  if command -v gdb > /dev/null; then
+    # Attaching to the parent process requires either Yama's `ptrace_scope=0` or
+    # CAP_SYS_PTRACE (bit 19 of the effective capabilities) with `ptrace_scope<3`.
+    ptrace_scope="$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null || echo 0)"
+    cap_eff="$(awk '/^CapEff:/ {print $2}' /proc/self/status 2> /dev/null || echo 0)"
+    if [[ "${ptrace_scope}" -eq 0 ]] || \
+      { [[ "${ptrace_scope}" -lt 3 ]] && (( (16#${cap_eff:-0} >> 19) & 1 )); }; then
+      ci_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+      export UCX_HANDLE_ERRORS=debug
+      export UCX_GDB_COMMAND="${ci_dir}/crash_backtrace.sh"
+    fi
+  fi
+
+  echo "Native backtraces on crash: UCX_HANDLE_ERRORS=${UCX_HANDLE_ERRORS} UCX_GDB_COMMAND=${UCX_GDB_COMMAND:-}"
+}
+
 run_port_retry() {
   MAX_ATTEMPTS=${1}
   RUN_TYPE=${2}

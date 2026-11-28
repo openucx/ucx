@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <dlfcn.h>
@@ -19,10 +19,11 @@ bool isPythonAvailable()
   if (!_ucxxPythonLoadChecked) {
     _ucxxPythonLoadChecked = true;
     _ucxxPythonLib         = dlopen("libucxx_python.so", RTLD_LAZY);
-    if (_ucxxPythonLib == nullptr)
+    if (_ucxxPythonLib == nullptr) {
       ucxx_debug("dlopen('libucxx_python.so') failed");
-    else
+    } else {
       ucxx_debug("dlopen('libucxx_python.so') loaded at %p", _ucxxPythonLib);
+    }
   }
   return _ucxxPythonLib != nullptr;
 }

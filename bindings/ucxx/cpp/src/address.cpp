@@ -17,12 +17,16 @@ namespace ucxx {
 Address::Address(std::shared_ptr<Worker> worker, ucp_address_t* address, size_t length)
   : _handle{address}, _length{length}
 {
-  if (worker != nullptr) setParent(worker);
+  if (worker != nullptr) {
+    setParent(worker);
+  }
 }
 
 Address::~Address()
 {
-  if (_handle == nullptr) return;
+  if (_handle == nullptr) {
+    return;
+  }
 
   auto worker = std::dynamic_pointer_cast<Worker>(getParent());
   if (worker == nullptr) {
@@ -47,7 +51,9 @@ std::shared_ptr<Address> ConstructorFactory::createAddressFromWorker(std::shared
 std::shared_ptr<Address> ConstructorFactory::createAddressFromString(std::string_view addressString)
 {
   size_t length = addressString.length();
-  if (length == 0) throw std::invalid_argument("UCP address must not be empty");
+  if (length == 0) {
+    throw std::invalid_argument("UCP address must not be empty");
+  }
 
   ucp_address_t* address = reinterpret_cast<ucp_address_t*>(new char[length]);
   memcpy(address, addressString.data(), length);

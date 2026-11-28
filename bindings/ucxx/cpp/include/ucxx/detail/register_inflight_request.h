@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
@@ -21,10 +21,11 @@ namespace detail {
 inline void registerInflightRequest(std::shared_ptr<Component> component,
                                     std::shared_ptr<Request> req)
 {
-  if (auto ep = std::dynamic_pointer_cast<Endpoint>(component))
+  if (auto ep = std::dynamic_pointer_cast<Endpoint>(component)) {
     std::ignore = ep->registerInflightRequest(std::move(req));
-  else if (auto wk = std::dynamic_pointer_cast<Worker>(component))
+  } else if (auto wk = std::dynamic_pointer_cast<Worker>(component)) {
     std::ignore = wk->registerInflightRequest(std::move(req));
+  }
 }
 
 }  // namespace detail

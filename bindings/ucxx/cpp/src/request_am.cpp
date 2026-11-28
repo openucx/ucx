@@ -113,7 +113,9 @@ struct AmHeader {
     }
     encode(&serializedMemoryTypePolicy, sizeof(serializedMemoryTypePolicy));
     encode(&userHeaderSize, sizeof(userHeaderSize));
-    if (userHeaderSize > 0) { encode(userHeader.data(), userHeaderSize); }
+    if (userHeaderSize > 0) {
+      encode(userHeader.data(), userHeaderSize);
+    }
 
     return serialized;
   }
@@ -179,8 +181,9 @@ RequestAm::RequestAm(std::shared_ptr<Component> endpointOrWorker,
 {
   std::visit(data::dispatch{
                [this](data::AmSend) {
-                 if (_endpoint == nullptr)
+                 if (_endpoint == nullptr) {
                    throw ucxx::Error("An endpoint is required to send active messages");
+                 }
                },
                [](data::AmReceive) {},
              },
@@ -241,8 +244,9 @@ ucs_status_t RequestAm::recvCallback(void* arg,
   auto& recvPool           = amData->_recvPool;
   auto& recvWait           = amData->_recvWait;
 
-  if ((param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP) == 0)
+  if ((param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP) == 0) {
     ucxx_error("UCP_AM_RECV_ATTR_FIELD_REPLY_EP not set");
+  }
 
   ucp_ep_h ep = param->reply_ep;
 
@@ -281,7 +285,9 @@ ucs_status_t RequestAm::recvCallback(void* arg,
     } else if (reqs != recvWait.end() && !reqs->second.empty()) {
       req = reqs->second.front();
       reqs->second.pop();
-      if (reqs->second.empty()) recvWait.erase(reqs);
+      if (reqs->second.empty()) {
+        recvWait.erase(reqs);
+      }
       ucxx_trace_req_f(ownerString.c_str(), req.get(), nullptr, "amRecv", "recvWait");
     } else {
       req             = std::shared_ptr<RequestAm>(new RequestAm(worker,
@@ -299,7 +305,9 @@ ucs_status_t RequestAm::recvCallback(void* arg,
   // Return immediately if the request's status has already been set before the
   // callback executed, e.g., the user called `amRecv()` before the request arrived and
   // canceled it.
-  if (req->getStatus() != UCS_INPROGRESS) return req->getStatus();
+  if (req->getStatus() != UCS_INPROGRESS) {
+    return req->getStatus();
+  }
 
   if (is_rndv) {
     if (amData->_allocators.find(amHeader.memoryType) == amData->_allocators.end()) {
@@ -341,7 +349,7 @@ ucs_status_t RequestAm::recvCallback(void* arg,
     ucs_status_ptr_t status =
       ucp_am_recv_data_nbx(worker->getHandle(), data, buf->data(), length, &requestParam);
 
-    if (req->_enablePythonFuture)
+    if (req->_enablePythonFuture) {
       ucxx_trace_req_f(ownerString.c_str(),
                        req.get(),
                        status,
@@ -352,7 +360,7 @@ ucs_status_t RequestAm::recvCallback(void* arg,
                        length,
                        req->_future.get(),
                        req->_future->getHandle());
-    else
+    } else {
       ucxx_trace_req_f(ownerString.c_str(),
                        req.get(),
                        status,
@@ -361,6 +369,7 @@ ucs_status_t RequestAm::recvCallback(void* arg,
                        ep,
                        buf->data(),
                        length);
+    }
 
     if (req->isCompleted()) {
       // The request completed/errored immediately
@@ -391,9 +400,11 @@ ucs_status_t RequestAm::recvCallback(void* arg,
       return UCS_ERR_NO_MEMORY;
     }
 
-    if (length > 0) memcpy(buf->data(), data, length);
+    if (length > 0) {
+      memcpy(buf->data(), data, length);
+    }
 
-    if (req->_enablePythonFuture)
+    if (req->_enablePythonFuture) {
       ucxx_trace_req_f(ownerString.c_str(),
                        req.get(),
                        nullptr,
@@ -404,7 +415,7 @@ ucs_status_t RequestAm::recvCallback(void* arg,
                        length,
                        req->_future.get(),
                        req->_future->getHandle());
-    else
+    } else {
       ucxx_trace_req_f(ownerString.c_str(),
                        req.get(),
                        nullptr,
@@ -413,6 +424,7 @@ ucs_status_t RequestAm::recvCallback(void* arg,
                        ep,
                        buf->data(),
                        length);
+    }
 
     recvAmMessage.callback(nullptr, UCS_OK);
     return UCS_OK;
@@ -433,7 +445,9 @@ std::string RequestAm::getRecvHeader()
 {
   return std::visit(data::dispatch{
                       [](const data::AmReceive& amReceive) {
-                        if (amReceive._userHeader.empty()) return std::string{};
+                        if (amReceive._userHeader.empty()) {
+                          return std::string{};
+                        }
                         return std::string(
                           reinterpret_cast<const char*>(amReceive._userHeader.data()),
                           amReceive._userHeader.size());
@@ -494,12 +508,14 @@ void RequestAm::populateDelayedSubmissionImpl()
                  [](auto) -> decltype(terminate) { throw std::runtime_error("Unreachable"); },
                },
                _requestData);
-  if (terminate) return;
+  if (terminate) {
+    return;
+  }
 
   request();
 
   auto log = [this](const void* buffer, const size_t length, const ucs_memory_type_t memoryType) {
-    if (_enablePythonFuture)
+    if (_enablePythonFuture) {
       ucxx_trace_req_f(_ownerString.c_str(),
                        this,
                        _request,
@@ -511,7 +527,7 @@ void RequestAm::populateDelayedSubmissionImpl()
                        memoryType,
                        _future.get(),
                        _future->getHandle());
-    else
+    } else {
       ucxx_trace_req_f(_ownerString.c_str(),
                        this,
                        _request,
@@ -520,14 +536,16 @@ void RequestAm::populateDelayedSubmissionImpl()
                        buffer,
                        length,
                        memoryType);
+    }
   };
 
   std::visit(data::dispatch{
                [this, &log](data::AmSend amSend) {
                  if (amSend._datatype == UCP_DATATYPE_IOV) {
                    size_t totalLength{0};
-                   for (const auto& segment : amSend._iov)
+                   for (const auto& segment : amSend._iov) {
                      totalLength += segment.length;
+                   }
                    log(amSend._iov.data(), totalLength, amSend._memoryType);
                  } else {
                    log(amSend._buffer, amSend._length, amSend._memoryType);

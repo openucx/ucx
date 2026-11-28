@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -11,8 +11,9 @@ namespace ucxx {
 
 void waitSingleRequest(std::shared_ptr<Worker> worker, std::shared_ptr<Request> request)
 {
-  while (!request->isCompleted())
+  while (!request->isCompleted()) {
     worker->progress();
+  }
   // while (!request->isCompleted());
 
   request->checkError();
@@ -20,8 +21,9 @@ void waitSingleRequest(std::shared_ptr<Worker> worker, std::shared_ptr<Request> 
 
 void waitRequests(std::shared_ptr<Worker> worker, std::vector<std::shared_ptr<Request>> requests)
 {
-  for (auto& r : requests)
+  for (auto& r : requests) {
     waitSingleRequest(worker, r);
+  }
 }
 
 }  // namespace ucxx

@@ -52,8 +52,9 @@ RequestFlush::RequestFlush(std::shared_ptr<Component> endpointOrWorker,
             callbackFunction,
             callbackData)
 {
-  if (_endpoint == nullptr && _worker == nullptr)
+  if (_endpoint == nullptr && _worker == nullptr) {
     throw ucxx::Error("A valid endpoint or worker is required for a flush operation.");
+  }
 }
 
 void RequestFlush::flushCallback(void* request, ucs_status_t status, void* arg)
@@ -71,12 +72,13 @@ void RequestFlush::request()
   void* request = nullptr;
 
   param.cb.send = flushCallback;
-  if (_endpoint != nullptr)
+  if (_endpoint != nullptr) {
     request = ucp_ep_flush_nbx(_endpoint->getHandle(), &param);
-  else if (_worker != nullptr)
+  } else if (_worker != nullptr) {
     request = ucp_worker_flush_nbx(_worker->getHandle(), &param);
-  else
+  } else {
     throw ucxx::Error("A valid endpoint or worker is required for a flush operation.");
+  }
 
   publishRequest(request);
 }
@@ -96,12 +98,13 @@ void RequestFlush::populateDelayedSubmissionImpl()
   request();
 
   std::string flushComponent = "unknown";
-  if (_endpoint != nullptr)
+  if (_endpoint != nullptr) {
     flushComponent = "endpoint";
-  else if (_worker != nullptr)
+  } else if (_worker != nullptr) {
     flushComponent = "worker";
+  }
 
-  if (_enablePythonFuture)
+  if (_enablePythonFuture) {
     ucxx_trace_req_f(_ownerString.c_str(),
                      this,
                      _request,
@@ -110,13 +113,14 @@ void RequestFlush::populateDelayedSubmissionImpl()
                      flushComponent.c_str(),
                      _future.get(),
                      _future->getHandle());
-  else
+  } else {
     ucxx_trace_req_f(_ownerString.c_str(),
                      this,
                      _request,
                      _operationName.c_str(),
                      "populateDelayedSubmission, flush (%s)",
                      flushComponent.c_str());
+  }
 
   process();
 }

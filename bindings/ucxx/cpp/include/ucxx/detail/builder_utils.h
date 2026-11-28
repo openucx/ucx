@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
@@ -25,7 +25,9 @@
   }                                                                         \
   BuilderClass& BuilderClass::operator=(const BuilderClass& other)          \
   {                                                                         \
-    if (this != &other) _impl = std::make_unique<Impl>(*other._impl);       \
+    if (this != &other) {                                                   \
+      _impl = std::make_unique<Impl>(*other._impl);                         \
+    }                                                                       \
     return *this;                                                           \
   }                                                                         \
   BuilderClass::operator std::shared_ptr<TargetClass>() { return build(); }

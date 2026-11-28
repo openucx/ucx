@@ -39,8 +39,9 @@ class RequestBuilderTest : public ::testing::Test {
 
   void progressUntilCompleted(std::shared_ptr<ucxx::Request> req)
   {
-    while (!req->isCompleted())
+    while (!req->isCompleted()) {
       _worker->progress();
+    }
     req->checkError();
   }
 };
@@ -286,8 +287,9 @@ TEST_F(RequestBuilderTest, TagBuilderSendReceivePair)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 
@@ -310,8 +312,9 @@ TEST_F(RequestBuilderTest, TagBuilderWithPythonFuture)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 }
@@ -332,8 +335,9 @@ TEST_F(RequestBuilderTest, TagBuilderImplicitConversion)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 }
@@ -353,8 +357,9 @@ TEST_F(RequestBuilderTest, StreamBuilderSendReceivePair)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 }
@@ -373,8 +378,9 @@ TEST_F(RequestBuilderTest, StreamBuilderImplicitConversion)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 }
@@ -719,8 +725,9 @@ TEST_F(RequestBuilderTest, EndpointWorkerTagBuilderMethods)
   ASSERT_TRUE(sendReq != nullptr);
   ASSERT_TRUE(recvReq != nullptr);
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 
@@ -745,8 +752,9 @@ TEST_F(RequestBuilderTest, EndpointTagSendBuilderMethodWithCallbackChain)
   auto recvReq =
     _worker->tagRecvBuilder(recvBuf.data(), recvBuf.size() * sizeof(int), tag, tagMask).build();
 
-  while (!sendReq->isCompleted() || !recvReq->isCompleted())
+  while (!sendReq->isCompleted() || !recvReq->isCompleted()) {
     _worker->progress();
+  }
   sendReq->checkError();
   recvReq->checkError();
 

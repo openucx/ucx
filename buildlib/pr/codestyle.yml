@@ -53,7 +53,9 @@ jobs:
           git log -1 HEAD^
           BASE_SOURCEVERSION=$(git rev-parse HEAD^)
           echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
-          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+          # bindings/ucxx has its own .clang-format, which needs a newer
+          # clang-format than this image has; the UCXX pre-commit check covers it.
+          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} -- ':!bindings/ucxx' > format.patch
           echo "Generated patch file:"
           cat format.patch
           if [ "`cat format.patch`" = "no modified files to format" ]; then

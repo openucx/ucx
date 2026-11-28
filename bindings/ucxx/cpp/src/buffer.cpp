@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <cstring>
@@ -25,7 +25,9 @@ size_t Buffer::getSize() const noexcept { return _size; }
 
 HostBuffer::HostBuffer(const size_t size) : Buffer(BufferType::Host, size), _buffer{malloc(size)}
 {
-  if (size > 0 && _buffer == nullptr) throw std::bad_alloc();
+  if (size > 0 && _buffer == nullptr) {
+    throw std::bad_alloc();
+  }
   ucxx_trace_data("ucxx::HostBuffer created: %p, buffer: %p, size: %lu", this, _buffer, size);
 }
 
@@ -36,13 +38,17 @@ HostBuffer::HostBuffer(const void* buffer, const size_t size) : HostBuffer(size)
 
 HostBuffer::~HostBuffer()
 {
-  if (_buffer) free(_buffer);
+  if (_buffer) {
+    free(_buffer);
+  }
 }
 
 void* HostBuffer::release()
 {
   ucxx_trace_data("ucxx::HostBuffer::%s, HostBuffer: %p, buffer: %p", __func__, this, _buffer);
-  if (!_buffer) throw std::runtime_error("Invalid object or already released");
+  if (!_buffer) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   _bufferType = ucxx::BufferType::Invalid;
   _size       = 0;
@@ -53,7 +59,9 @@ void* HostBuffer::release()
 void* HostBuffer::data()
 {
   ucxx_trace_data("ucxx::HostBuffer::%s, HostBuffer: %p, buffer: %p", __func__, this, _buffer);
-  if (!_buffer) throw std::runtime_error("Invalid object or already released");
+  if (!_buffer) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   return _buffer;
 }

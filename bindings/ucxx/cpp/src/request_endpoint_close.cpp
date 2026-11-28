@@ -54,8 +54,9 @@ RequestEndpointClose::RequestEndpointClose(std::shared_ptr<Endpoint> endpoint,
             callbackFunction,
             callbackData)
 {
-  if (_endpoint == nullptr && _worker == nullptr)
+  if (_endpoint == nullptr && _worker == nullptr) {
     throw ucxx::Error("A valid endpoint or worker is required for a close operation.");
+  }
 }
 
 void RequestEndpointClose::endpointCloseCallback(void* request, ucs_status_t status, void* arg)
@@ -72,12 +73,15 @@ void RequestEndpointClose::request()
 
   ucp_request_param_t param = {
     .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_USER_DATA, .user_data = this};
-  if (std::get<data::EndpointClose>(_requestData)._force) param.flags = UCP_EP_CLOSE_FLAG_FORCE;
+  if (std::get<data::EndpointClose>(_requestData)._force) {
+    param.flags = UCP_EP_CLOSE_FLAG_FORCE;
+  }
   param.cb.send = endpointCloseCallback;
-  if (_endpoint != nullptr)
+  if (_endpoint != nullptr) {
     request = ucp_ep_close_nbx(_endpoint->getHandle(), &param);
-  else
+  } else {
     throw ucxx::Error("A valid endpoint or worker is required for a close operation.");
+  }
 
   publishRequest(request);
 }
@@ -92,7 +96,7 @@ void RequestEndpointClose::populateDelayedSubmissionImpl()
 
   request();
 
-  if (_enablePythonFuture)
+  if (_enablePythonFuture) {
     ucxx_trace_req_f(_ownerString.c_str(),
                      this,
                      _request,
@@ -100,12 +104,13 @@ void RequestEndpointClose::populateDelayedSubmissionImpl()
                      "populateDelayedSubmission, endpoint close, future: %p, future handle: %p",
                      _future.get(),
                      _future->getHandle());
-  else
+  } else {
     ucxx_trace_req_f(_ownerString.c_str(),
                      this,
                      _request,
                      _operationName.c_str(),
                      "populateDelayedSubmission, endpoint close");
+  }
 
   process();
 }

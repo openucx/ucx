@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
@@ -59,7 +59,9 @@ struct PythonFutureTask {
   void setResult(const ReturnType result)
   {
     // PyLong_FromSize_t requires the GIL
-    if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+    if (_handle == nullptr) {
+      throw std::runtime_error("Invalid object or already released");
+    }
 
     PyGILState_STATE state = PyGILState_Ensure();
     ucxx::python::future_set_result_with_event_loop(
@@ -78,7 +80,9 @@ struct PythonFutureTask {
    */
   void setPythonException(PyObject* pythonException, const std::string& message)
   {
-    if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+    if (_handle == nullptr) {
+      throw std::runtime_error("Invalid object or already released");
+    }
 
     PyGILState_STATE state = PyGILState_Ensure();
     ucxx::python::future_set_exception_with_event_loop(
@@ -208,7 +212,9 @@ struct PythonFutureTask {
    */
   [[nodiscard]] std::future<ReturnType>& getFuture()
   {
-    if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+    if (_handle == nullptr) {
+      throw std::runtime_error("Invalid object or already released");
+    }
 
     return _future;
   }
@@ -229,7 +235,9 @@ struct PythonFutureTask {
    */
   [[nodiscard]] PyObject* getHandle()
   {
-    if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+    if (_handle == nullptr) {
+      throw std::runtime_error("Invalid object or already released");
+    }
 
     return _handle;
   }
@@ -247,7 +255,9 @@ struct PythonFutureTask {
    */
   [[nodiscard]] PyObject* release()
   {
-    if (_handle == nullptr) throw std::runtime_error("Invalid object or already released");
+    if (_handle == nullptr) {
+      throw std::runtime_error("Invalid object or already released");
+    }
 
     return std::exchange(_handle, nullptr);
   }

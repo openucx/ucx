@@ -39,7 +39,9 @@ static void listenerCallback(ucp_conn_request_h connRequest, void* arg)
   attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
 
   listenerContainer->status = ucp_conn_request_query(connRequest, &attr);
-  if (listenerContainer->status != UCS_OK) return;
+  if (listenerContainer->status != UCS_OK) {
+    return;
+  }
 
   listenerContainer->endpoint = listenerContainer->listener->endpointBuilder(connRequest)
                                   .endpointErrorHandling(listenerContainer->endpointErrorHandling)
@@ -119,8 +121,9 @@ TEST_P(ListenerTest, EndpointSendRecv)
   auto ep = _worker->endpointBuilder("127.0.0.1", listener->getPort())
               .endpointErrorHandling(_endpointErrorHandling)
               .build();
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     progress();
+  }
 
   std::vector<std::shared_ptr<ucxx::Request>> requests;
 
@@ -160,16 +163,18 @@ TEST_P(ListenerTest, IsAlive)
   auto ep = _worker->endpointBuilder("127.0.0.1", listener->getPort())
               .endpointErrorHandling(_endpointErrorHandling)
               .build();
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     _worker->progress();
+  }
 
   ASSERT_TRUE(ep->isAlive());
 
   std::vector<int> buf{123};
   std::shared_ptr<ucxx::Request> send_req =
     ep->tagSendBuilder(buf.data(), buf.size() * sizeof(int), ucxx::Tag{0}).build();
-  while (!send_req->isCompleted())
+  while (!send_req->isCompleted()) {
     _worker->progress();
+  }
 
   listenerContainer->endpoint = nullptr;
 
@@ -178,10 +183,11 @@ TEST_P(ListenerTest, IsAlive)
     return !ep->isAlive();
   });
 
-  if (_endpointErrorHandling)
+  if (_endpointErrorHandling) {
     ASSERT_FALSE(ep->isAlive());
-  else
+  } else {
     ASSERT_TRUE(ep->isAlive());
+  }
 }
 
 TEST_P(ListenerTest, RaiseOnError)
@@ -193,8 +199,9 @@ TEST_P(ListenerTest, RaiseOnError)
   auto ep = _worker->endpointBuilder("127.0.0.1", listener->getPort())
               .endpointErrorHandling(_endpointErrorHandling)
               .build();
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     _worker->progress();
+  }
 
   listenerContainer->endpoint = nullptr;
 
@@ -208,7 +215,9 @@ TEST_P(ListenerTest, RaiseOnError)
     return false;
   });
 
-  if (_endpointErrorHandling) EXPECT_THROW(ep->raiseOnError(), ucxx::Error);
+  if (_endpointErrorHandling) {
+    EXPECT_THROW(ep->raiseOnError(), ucxx::Error);
+  }
 }
 
 TEST_P(ListenerTest, EndpointCloseCallback)
@@ -235,8 +244,9 @@ TEST_P(ListenerTest, EndpointCloseCallback)
     },
     callbackData);
 
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     _worker->progress();
+  }
 
   ASSERT_FALSE(callbackData->closed);
   ASSERT_EQ(callbackData->status, UCS_INPROGRESS);
@@ -262,8 +272,9 @@ TEST_P(ListenerTest, EndpointNonBlockingClose)
               .endpointErrorHandling(_endpointErrorHandling)
               .build();
 
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     _worker->progress();
+  }
 
   auto closeRequest = ep->closeBuilder().build();
 
@@ -273,10 +284,11 @@ TEST_P(ListenerTest, EndpointNonBlockingClose)
   };
   loopWithTimeout(std::chrono::milliseconds(5000), f);
 
-  if (_endpointErrorHandling)
+  if (_endpointErrorHandling) {
     ASSERT_FALSE(ep->isAlive());
-  else
+  } else {
     ASSERT_TRUE(ep->isAlive());
+  }
   EXPECT_NE(closeRequest->getStatus(), UCS_INPROGRESS);
 }
 
@@ -298,8 +310,9 @@ TEST_P(ListenerTest, EndpointNonBlockingCloseWithCallbacks)
               .build();
   ep->setCloseCallback(closeCallback, closeCallbackEndpoint);
 
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     _worker->progress();
+  }
 
   auto closeRequest = ep->closeBuilder()
                         .pythonFuture(false)
@@ -313,10 +326,11 @@ TEST_P(ListenerTest, EndpointNonBlockingCloseWithCallbacks)
   };
   loopWithTimeout(std::chrono::milliseconds(5000), f);
 
-  if (_endpointErrorHandling)
+  if (_endpointErrorHandling) {
     ASSERT_FALSE(ep->isAlive());
-  else
+  } else {
     ASSERT_TRUE(ep->isAlive());
+  }
   EXPECT_NE(closeRequest->getStatus(), UCS_INPROGRESS);
   ASSERT_NE(*closeCallbackEndpoint, UCS_INPROGRESS);
   ASSERT_NE(*closeCallbackRequest, UCS_INPROGRESS);
@@ -330,10 +344,11 @@ TEST_P(ListenerPortTest, Port)
   auto listener          = buildListener(listenerContainer);
   _worker->progress();
 
-  if (GetParam() == 0)
+  if (GetParam() == 0) {
     ASSERT_GE(listener->getPort(), 1024);
-  else
+  } else {
     ASSERT_EQ(listener->getPort(), 12345);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(PortAssignment, ListenerPortTest, ::testing::Values(0, 12345));
@@ -424,8 +439,9 @@ class ListenerCudaCloseAfterSendTest : public ::testing::Test {
     std::vector<size_t> sizes(NumBuffers, BufferSize);
     std::vector<int> isCuda(NumBuffers, true);
 
-    for (const auto& buffer : buffers)
+    for (const auto& buffer : buffers) {
       pointers.push_back(buffer->data());
+    }
 
     return endpoint->tagMultiSendBuilder(pointers, sizes, isCuda, Tag).pythonFuture(false).build();
   }
@@ -450,8 +466,11 @@ class ListenerCudaCloseAfterSendTest : public ::testing::Test {
     const std::shared_ptr<ucxx::RequestTagMulti>& request)
   {
     std::vector<std::shared_ptr<ucxx::Buffer>> buffers;
-    for (const auto& child : request->_bufferRequests)
-      if (child->buffer) buffers.push_back(child->buffer);
+    for (const auto& child : request->_bufferRequests) {
+      if (child->buffer) {
+        buffers.push_back(child->buffer);
+      }
+    }
     return buffers;
   }
 
@@ -608,8 +627,9 @@ TEST_F(ListenerHostTest, BindToHost)
   ASSERT_GE(listener->getPort(), 1024);
 
   auto ep = _worker->endpointBuilder("127.0.0.1", listener->getPort()).build();
-  while (listenerContainer->endpoint == nullptr)
+  while (listenerContainer->endpoint == nullptr) {
     progress();
+  }
 
   std::vector<std::shared_ptr<ucxx::Request>> requests;
 

@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <algorithm>
@@ -26,12 +26,13 @@ void parseLogLevel()
       });
 
     auto level = logLevelNames.find(logLevelName);
-    if (!logLevelName.empty() && level != logLevelNames.end())
+    if (!logLevelName.empty() && level != logLevelNames.end()) {
       ucxx_log_component_config.log_level = (ucs_log_level_t)level->second;
-    else
+    } else {
       ucxx_warn("UCXX_LOG_LEVEL %s unknown, defaulting to UCXX_LOG_LEVEL=%s",
                 logLevelName.c_str(),
                 logLevelNameDefault);
+    }
 
     ucxx_info("UCXX_LOG_LEVEL: %s", logLevelName.c_str());
   }

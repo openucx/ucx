@@ -10,10 +10,14 @@ TIMEOUT_TOOL_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"/timeout_with_st
 source "$(dirname "$0")/test_common.sh"
 
 configure_ucx_tls
+configure_crash_backtraces
 
 # Support invoking run_pytests.sh outside the script directory
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"/../
 
+# `--max-worker-restart=0`: fail fast if a pytest-xdist worker crashes. Replacing a
+# crashed worker with `--dist loadgroup` may otherwise hang the controller until the
+# timeout of `timeout_with_stack.py` (observed with pytest-xdist 3.8.0).
 run_py_tests() {
   if [ "${DISABLE_CYTHON:-0}" -eq 0 ]; then
     ARGS=("--run-cython")
@@ -21,11 +25,11 @@ run_py_tests() {
     ARGS=()
   fi
 
-  CMD_LINE="python ${TIMEOUT_TOOL_PATH} --enable-python $((4*60)) python -m pytest -n 4 --dist loadgroup --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib/tests/ ${ARGS[*]}"
+  CMD_LINE="python ${TIMEOUT_TOOL_PATH} --enable-python $((4*60)) python -m pytest -n 4 --dist loadgroup --max-worker-restart=0 --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib/tests/ ${ARGS[*]}"
   log_command "${CMD_LINE}"
   # Without append import mode, tests that create subprocess fail
   python "${TIMEOUT_TOOL_PATH}" --enable-python $((4*60)) \
-    python -m pytest -n 4 --dist loadgroup --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib/tests/ "${ARGS[@]}"
+    python -m pytest -n 4 --dist loadgroup --max-worker-restart=0 --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib/tests/ "${ARGS[@]}"
 }
 
 run_py_tests_async() {
@@ -34,7 +38,7 @@ run_py_tests_async() {
   ENABLE_PYTHON_FUTURE=$3
   SKIP=$4
 
-  CMD_LINE="UCXPY_PROGRESS_MODE=${PROGRESS_MODE} UCXPY_ENABLE_DELAYED_SUBMISSION=${ENABLE_DELAYED_SUBMISSION} UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} python ${TIMEOUT_TOOL_PATH} --enable-python $((30*60)) python -m pytest -n 4 --dist loadgroup --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib_async/tests/ --runslow"
+  CMD_LINE="UCXPY_PROGRESS_MODE=${PROGRESS_MODE} UCXPY_ENABLE_DELAYED_SUBMISSION=${ENABLE_DELAYED_SUBMISSION} UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} python ${TIMEOUT_TOOL_PATH} --enable-python $((30*60)) python -m pytest -n 4 --dist loadgroup --max-worker-restart=0 --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib_async/tests/ --runslow"
 
   if [ "$SKIP" -ne 0 ]; then
     echo -e "\e[1;33mSkipping unstable test: ${CMD_LINE}\e[0m"
@@ -45,7 +49,7 @@ run_py_tests_async() {
     UCXPY_ENABLE_DELAYED_SUBMISSION=${ENABLE_DELAYED_SUBMISSION} \
     UCXPY_ENABLE_PYTHON_FUTURE=${ENABLE_PYTHON_FUTURE} \
     python "${TIMEOUT_TOOL_PATH}" --enable-python $((30*60)) \
-    python -m pytest -n 4 --dist loadgroup --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib_async/tests/ --runslow
+    python -m pytest -n 4 --dist loadgroup --max-worker-restart=0 --durations=50 --import-mode=append -vs python/ucxx/ucxx/_lib_async/tests/ --runslow
   fi
 }
 

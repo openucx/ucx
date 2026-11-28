@@ -66,7 +66,9 @@ CCCLBuffer::~CCCLBuffer() = default;
 void* CCCLBuffer::data()
 {
   ucxx_trace_data("ucxx::CCCLBuffer::%s, CCCLBuffer: %p, impl: %p", __func__, this, _impl.get());
-  if (!_impl) throw std::runtime_error("Invalid object or already released");
+  if (!_impl) {
+    throw std::runtime_error("Invalid object or already released");
+  }
 
   // Explicit cast required: cuda::buffer::data() returns cuda::std::byte*, not void*.
   return static_cast<void*>(_impl->buffer.data());

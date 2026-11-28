@@ -31,10 +31,11 @@ TEST(ContextTest, DefaultConfigsAndFlags)
   auto configMapOut                  = context->getConfig();
   ASSERT_GT(configMapOut.size(), 1u);
   ASSERT_NE(configMapOut.find("TLS"), configMapOut.end());
-  if (const char* envTls = std::getenv("UCX_TLS"))
+  if (const char* envTls = std::getenv("UCX_TLS")) {
     ASSERT_EQ(configMapOut["TLS"], envTls);
-  else
+  } else {
     ASSERT_EQ(configMapOut["TLS"], "all");
+  }
 
   ASSERT_EQ(context->getFeatureFlags(), featureFlags);
 }

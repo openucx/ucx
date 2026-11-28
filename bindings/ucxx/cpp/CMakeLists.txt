@@ -30,6 +30,15 @@ project(
   LANGUAGES C CXX
 )
 
+# Find CMake packages provided by installed wheels.
+find_package(Python COMPONENTS Interpreter)
+if(Python_FOUND)
+  include(${rapids-cmake-dir}/cython-core/find_prefix_paths.cmake)
+  rapids_cython_find_prefix_paths("${Python_EXECUTABLE}" wheel_prefix_paths)
+  set_property(GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS TRUE)
+  list(PREPEND CMAKE_PREFIX_PATH ${wheel_prefix_paths})
+endif()
+
 # Needed because GoogleBenchmark changes the state of FindThreads.cmake, causing subsequent runs to
 # have different values for the `Threads::Threads` target. Setting this flag ensures
 # `Threads::Threads` is the same value in first run and subsequent runs.

@@ -1,6 +1,6 @@
 # =================================================================================
 # cmake-format: off
-# SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 # cmake-format: on
 # =================================================================================
@@ -25,6 +25,9 @@ project(
   VERSION ${ucxx_version}
   LANGUAGES CXX
 )
+
+# Find C++ libraries from RAPIDS wheels in site-packages.
+set_property(GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS TRUE)
 
 option(FIND_UCXX_PYTHON
        "Search for existing UCXX Python library installations before defaulting to local files" OFF

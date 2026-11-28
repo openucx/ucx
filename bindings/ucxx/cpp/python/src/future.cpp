@@ -23,32 +23,52 @@ PyObject* cancelled_str            = NULL;
 static int intern_strings(void)
 {
   asyncio_str = PyUnicode_InternFromString("asyncio");
-  if (asyncio_str == NULL) { return -1; }
+  if (asyncio_str == NULL) {
+    return -1;
+  }
   call_soon_threadsafe_str = PyUnicode_InternFromString("call_soon_threadsafe");
-  if (call_soon_threadsafe_str == NULL) { return -1; }
+  if (call_soon_threadsafe_str == NULL) {
+    return -1;
+  }
   create_future_str = PyUnicode_InternFromString("create_future");
-  if (create_future_str == NULL) { return -1; }
+  if (create_future_str == NULL) {
+    return -1;
+  }
   future_str = PyUnicode_InternFromString("Future");
-  if (future_str == NULL) { return -1; }
+  if (future_str == NULL) {
+    return -1;
+  }
   set_exception_str = PyUnicode_InternFromString("set_exception");
-  if (set_exception_str == NULL) { return -1; }
+  if (set_exception_str == NULL) {
+    return -1;
+  }
   set_result_str = PyUnicode_InternFromString("set_result");
-  if (set_result_str == NULL) { return -1; }
+  if (set_result_str == NULL) {
+    return -1;
+  }
   done_str = PyUnicode_InternFromString("done");
-  if (done_str == NULL) { return -1; }
+  if (done_str == NULL) {
+    return -1;
+  }
   cancelled_str = PyUnicode_InternFromString("cancelled");
-  if (cancelled_str == NULL) { return -1; }
+  if (cancelled_str == NULL) {
+    return -1;
+  }
   return 0;
 }
 
 static int init_ucxx_python()
 {
-  if (intern_strings() < 0) goto err;
+  if (intern_strings() < 0) {
+    goto err;
+  }
 
   return 0;
 
 err:
-  if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not initialize  Python C-API.");
+  if (!PyErr_Occurred()) {
+    PyErr_SetString(PyExc_RuntimeError, "could not initialize  Python C-API.");
+  }
   return -1;
 }
 
@@ -56,24 +76,35 @@ static PyObject* get_asyncio_future_object()
 {
   PyObject* asyncio_module = NULL;
 
-  if (asyncio_future_object) return asyncio_future_object;
+  if (asyncio_future_object) {
+    return asyncio_future_object;
+  }
 
   PyGILState_STATE state = PyGILState_Ensure();
 
   if (init_ucxx_python() < 0) {
-    if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    }
     goto finish;
   }
 
   asyncio_module = PyImport_Import(asyncio_str);
-  if (PyErr_Occurred()) ucxx_error("ucxx::python::%s, error importing asyncio", __func__);
-  if (asyncio_module == NULL) goto finish;
+  if (PyErr_Occurred()) {
+    ucxx_error("ucxx::python::%s, error importing asyncio", __func__);
+  }
+  if (asyncio_module == NULL) {
+    goto finish;
+  }
 
   asyncio_future_object = PyObject_GetAttr(asyncio_module, future_str);
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     ucxx_error("ucxx::python::%s, error getting asyncio.Future method", __func__);
+  }
   Py_DECREF(asyncio_module);
-  if (asyncio_future_object == NULL) { goto finish; }
+  if (asyncio_future_object == NULL) {
+    goto finish;
+  }
 
 finish:
   PyGILState_Release(state);
@@ -88,19 +119,25 @@ PyObject* create_python_future()
   PyGILState_STATE state = PyGILState_Ensure();
 
   if (init_ucxx_python() < 0) {
-    if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    }
     goto finish;
   }
 
   future_object = get_asyncio_future_object();
-  if (future_object == NULL) { goto finish; }
+  if (future_object == NULL) {
+    goto finish;
+  }
   if (!PyCallable_Check(future_object)) {
     PyErr_Format(PyExc_RuntimeError, "%U.%U is not callable.", asyncio_str, future_str);
     goto finish;
   }
 
   result = PyObject_CallFunctionObjArgs(future_object, NULL);
-  if (PyErr_Occurred()) ucxx_error("ucxx::python::%s, error creating asyncio.Future", __func__);
+  if (PyErr_Occurred()) {
+    ucxx_error("ucxx::python::%s, error creating asyncio.Future", __func__);
+  }
 
 finish:
   PyGILState_Release(state);
@@ -186,11 +223,17 @@ PyObject* future_set_exception(PyObject* future, PyObject* exception, const char
   }
 
   message_object = PyUnicode_FromString(message);
-  if (message_object == NULL) goto err;
+  if (message_object == NULL) {
+    goto err;
+  }
   message_tuple = PyTuple_Pack(1, message_object);
-  if (message_tuple == NULL) goto err;
+  if (message_tuple == NULL) {
+    goto err;
+  }
   formed_exception = PyObject_Call(exception, message_tuple, NULL);
-  if (formed_exception == NULL) goto err;
+  if (formed_exception == NULL) {
+    goto err;
+  }
 
   {
     PyObject* args[] = {future, formed_exception};
@@ -217,7 +260,9 @@ PyObject* create_python_future_with_event_loop(PyObject* event_loop)
   PyGILState_STATE state = PyGILState_Ensure();
 
   if (init_ucxx_python() < 0) {
-    if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    }
     goto finish;
   }
 
@@ -240,7 +285,9 @@ PyObject* future_set_result_with_event_loop(PyObject* event_loop, PyObject* futu
   PyGILState_STATE state = PyGILState_Ensure();
 
   if (init_ucxx_python() < 0) {
-    if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    }
     goto finish;
   }
 
@@ -291,7 +338,9 @@ PyObject* future_set_exception_with_event_loop(PyObject* event_loop,
   PyGILState_STATE state = PyGILState_Ensure();
 
   if (init_ucxx_python() < 0) {
-    if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_RuntimeError, "could not allocate internals.");
+    }
     goto finish;
   }
 
@@ -314,11 +363,17 @@ PyObject* future_set_exception_with_event_loop(PyObject* event_loop,
   }
 
   message_object = PyUnicode_FromString(message);
-  if (message_object == NULL) goto err;
+  if (message_object == NULL) {
+    goto err;
+  }
   message_tuple = PyTuple_Pack(1, message_object);
-  if (message_tuple == NULL) goto err;
+  if (message_tuple == NULL) {
+    goto err;
+  }
   formed_exception = PyObject_Call(exception, message_tuple, NULL);
-  if (formed_exception == NULL) goto err;
+  if (formed_exception == NULL) {
+    goto err;
+  }
 
   result = PyObject_CallMethodObjArgs(
     event_loop, call_soon_threadsafe_str, set_exception_callable, formed_exception, NULL);

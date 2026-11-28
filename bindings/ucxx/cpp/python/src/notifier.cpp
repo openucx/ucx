@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <memory>
@@ -95,7 +95,9 @@ RequestNotifierWaitState Notifier::waitRequestNotifierWithTimeout(uint64_t perio
                           : RequestNotifierWaitState::Timeout);
 
   ucxx_trace_req("ucxx::python::Notifier::%s, unlock: %d", __func__, static_cast<int>(state));
-  if (state == RequestNotifierWaitState::Ready) _notifierThreadFutureStatusReady = false;
+  if (state == RequestNotifierWaitState::Ready) {
+    _notifierThreadFutureStatusReady = false;
+  }
 
   return state;
 }

@@ -182,7 +182,9 @@ class ListenerContext {
    */
   void createEndpointFromConnRequest(ucp_conn_request_h connRequest)
   {
-    if (!isAvailable()) throw std::runtime_error("Listener context already has an endpoint");
+    if (!isAvailable()) {
+      throw std::runtime_error("Listener context already has an endpoint");
+    }
 
     _endpoint =
       _listener->endpointBuilder(connRequest).endpointErrorHandling(_endpointErrorHandling).build();
@@ -479,7 +481,9 @@ static ucs_status_t setCpuAffinity(const std::vector<unsigned>& cpuList)
 
     unsigned count = 0;
     for (unsigned i = 0; i < CPU_SETSIZE; ++i) {
-      if (CPU_ISSET(i, &cpuset)) ++count;
+      if (CPU_ISSET(i, &cpuset)) {
+        ++count;
+      }
     }
     if (count > 2) {
       std::cerr << "Warning: CPU affinity is not set (bound to " << count
@@ -545,25 +549,33 @@ ucs_status_t parseCommand(ApplicationContext* appContext, int argc, char* const 
         }
       case 'p': {
         ucs_status_t status = parsePort(optarg, &appContext->listenerPort, "listener port");
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 's': {
         ucs_status_t status =
           parseUnsignedLongLong(optarg, &appContext->messageSize, "message size");
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 'n': {
         ucs_status_t status =
           parseUnsignedLongLong(optarg, &appContext->numIterations, "number of iterations");
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 'w': {
         ucs_status_t status = parseUnsignedLongLong(
           optarg, &appContext->numWarmupIterations, "number of warmup iterations");
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 'L': appContext->reuseAllocations = false; break;
@@ -572,13 +584,17 @@ ucs_status_t parseCommand(ApplicationContext* appContext, int argc, char* const 
       case 'l': appContext->loopback = true; break;
       case 'c': {
         ucs_status_t status = parseCpuList(optarg, &appContext->cpuList);
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 'R': {
         ucs_status_t status =
           parseDouble(optarg, &appContext->percentileRank, "percentile rank", 0.0, 100.0);
-        if (status != UCS_OK) return status;
+        if (status != UCS_OK) {
+          return status;
+        }
         break;
       }
       case 'h':
@@ -591,7 +607,9 @@ ucs_status_t parseCommand(ApplicationContext* appContext, int argc, char* const 
     return UCS_ERR_INVALID_PARAM;
   }
 
-  if (optind < argc) { appContext->serverAddress = argv[optind]; }
+  if (optind < argc) {
+    appContext->serverAddress = argv[optind];
+  }
 
   if (appContext->loopback && appContext->serverAddress != NULL) {
     std::cerr << "Cannot use loopback connection (-l) with a server hostname" << std::endl;
@@ -637,9 +655,13 @@ std::string appendSpaces(const std::string_view input,
 std::string floatToString(double number, std::optional<size_t> precision = std::nullopt)
 {
   auto getPrecision = [precision](double num) -> int {
-    if (precision) return *precision;
+    if (precision) {
+      return *precision;
+    }
 
-    if (num == 0.0) return 5;
+    if (num == 0.0) {
+      return 5;
+    }
 
     double absNum = std::abs(num);
 
@@ -693,7 +715,9 @@ struct Results {
     total.messages += messages;
     current.messages += messages;
 
-    if (_timingQueue.size() == _timingQueueSize) _timingQueue.pop();
+    if (_timingQueue.size() == _timingQueueSize) {
+      _timingQueue.pop();
+    }
     _timingQueue.push(duration);
   }
 
@@ -795,8 +819,9 @@ class Application {
     auto progress = getProgressFunction();
     // Wait until all messages are completed
     for (auto& r : requests) {
-      while (!r->isCompleted())
+      while (!r->isCompleted()) {
         progress();
+      }
       r->checkError();
     }
   }
@@ -895,7 +920,9 @@ class Application {
     auto bufferInterface = createBufferInterface();
 
     std::unique_ptr<BufferInterface> peerBufferInterface;
-    if (_appContext.loopback) { peerBufferInterface = createBufferInterface(); }
+    if (_appContext.loopback) {
+      peerBufferInterface = createBufferInterface();
+    }
 
     std::vector<std::shared_ptr<ucxx::Request>> requests;
 
@@ -986,12 +1013,16 @@ class Application {
     }
 
     // Wait for requests and clear requests.
-    if (!requests.empty()) waitRequests(requests);
+    if (!requests.empty()) {
+      waitRequests(requests);
+    }
     auto stop = std::chrono::high_resolution_clock::now();
 
     if (_appContext.verifyResults) {
       bufferInterface->verifyResults(_appContext.messageSize);
-      if (peerBufferInterface) { peerBufferInterface->verifyResults(_appContext.messageSize); }
+      if (peerBufferInterface) {
+        peerBufferInterface->verifyResults(_appContext.messageSize);
+      }
     }
 
     return std::chrono::duration<double>{stop - start};
@@ -1020,7 +1051,9 @@ class Application {
     waitRequests({request});
     auto stop = std::chrono::high_resolution_clock::now();
 
-    if (!_isServer && ack != 0) { throw std::runtime_error("Invalid unidirectional ACK"); }
+    if (!_isServer && ack != 0) {
+      throw std::runtime_error("Invalid unidirectional ACK");
+    }
 
     return std::chrono::duration<double>{stop - start};
   }
@@ -1179,12 +1212,13 @@ class Application {
     }
 
     // Initialize worker progress
-    if (_appContext.progressMode == ProgressMode::Blocking)
+    if (_appContext.progressMode == ProgressMode::Blocking) {
       _worker->initBlockingProgressMode();
-    else if (_appContext.progressMode == ProgressMode::ThreadBlocking)
+    } else if (_appContext.progressMode == ProgressMode::ThreadBlocking) {
       _worker->startProgressThread(false);
-    else if (_appContext.progressMode == ProgressMode::ThreadPolling)
+    } else if (_appContext.progressMode == ProgressMode::ThreadPolling) {
       _worker->startProgressThread(true);
+    }
 
     auto progress = getProgressFunction();
 
@@ -1196,8 +1230,9 @@ class Application {
                                      "Self-endpoint creation");
 
       // Wait for the listener to accept our connection
-      while (_listenerContext->isAvailable())
+      while (_listenerContext->isAvailable()) {
         progress();
+      }
 
       _peerEndpoint = _listenerContext->getEndpoint();
 
@@ -1208,8 +1243,9 @@ class Application {
       std::cout << "Waiting for connection..." << std::endl;
 
       // Block until client connects
-      while (_listenerContext->isAvailable())
+      while (_listenerContext->isAvailable()) {
         progress();
+      }
 
       _endpoint = _listenerContext->getEndpoint();
       printServerHeader(
@@ -1233,8 +1269,9 @@ class Application {
   {
     // Stop progress thread
     if (_appContext.progressMode == ProgressMode::ThreadBlocking ||
-        _appContext.progressMode == ProgressMode::ThreadPolling)
+        _appContext.progressMode == ProgressMode::ThreadPolling) {
       _worker->stopProgressThread();
+    }
   }
 
   /**
@@ -1251,8 +1288,9 @@ class Application {
     UCXX_EXIT_ON_ERROR(doWireup(), "Wireup");
 
     // Warmup
-    for (size_t n = 0; n < _appContext.numWarmupIterations; ++n)
+    for (size_t n = 0; n < _appContext.numWarmupIterations; ++n) {
       UCXX_EXIT_ON_ERROR(doTransfer(), "Warmup iteration " + std::to_string(n));
+    }
     UCXX_EXIT_ON_ERROR(doUnidirectionalAck(), "Warmup completion ACK");
 
     auto lastPrintTime = std::chrono::steady_clock::now();
@@ -1281,7 +1319,9 @@ class Application {
     results.addSynchronizationDuration(
       UCXX_EXIT_ON_ERROR(doUnidirectionalAck(), "Benchmark completion ACK"));
 
-    if (!_isServer && results.total.iterations != 0) printResults(results, factor);
+    if (!_isServer && results.total.iterations != 0) {
+      printResults(results, factor);
+    }
   }
 };
 
@@ -1296,8 +1336,12 @@ class Application {
 int main(int argc, char** argv)
 {
   ApplicationContext appContext;
-  if (parseCommand(&appContext, argc, argv) != UCS_OK) return -1;
-  if (setCpuAffinity(appContext.cpuList) != UCS_OK) return -1;
+  if (parseCommand(&appContext, argc, argv) != UCS_OK) {
+    return -1;
+  }
+  if (setCpuAffinity(appContext.cpuList) != UCS_OK) {
+    return -1;
+  }
 
   auto app = Application(std::move(appContext));
   app.run();
