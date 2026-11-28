@@ -42,7 +42,5 @@ int main(int argc, char **argv)
     }
 
     test_cuda(init_params, mpi_pingpong, NULL);
-    test_cuda_cleanup(init_params);
-
-    return 0;
+    return test_cuda_cleanup(init_params);
 }

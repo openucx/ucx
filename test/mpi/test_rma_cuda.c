@@ -177,6 +177,5 @@ int main(int argc, char **argv)
     }
 
     destroy_ucp(xfer_args.ucp);
-    test_cuda_cleanup(init_params);
-    return 0;
+    return test_cuda_cleanup(init_params);
 }

@@ -135,6 +135,7 @@ const test_t tests[] = {
 };
 
 static unsigned total_ucx_errors_and_warnings = 0;
+static unsigned total_failed_tests            = 0; /* valid on rank 0 */
 
 void *gold_data;
 
@@ -665,7 +666,7 @@ static void run_test_for_all_sizes(test_params_t *params, size_t test_idx)
         total_ucx_errors_and_warnings = 0;
 
         params->size = sizes[size_idx];
-        res          = tests[test_idx].func(params);
+        res          = (tests[test_idx].func(params) != 0);
 
         res += total_ucx_errors_and_warnings;
 
@@ -674,6 +675,10 @@ static void run_test_for_all_sizes(test_params_t *params, size_t test_idx)
                        MPI_COMM_WORLD);
         } else {
             MPI_Reduce(&res, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
+
+        if ((params->rank == 0) && (res != 0)) {
+            ++total_failed_tests;
         }
 
         PRINT_ROOT(TEST_NAME_SIZE_FMT ": %s\n", test_idx,
@@ -798,8 +803,10 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
     }
 }
 
-void test_cuda_cleanup(const init_params_h init_params)
+int test_cuda_cleanup(const init_params_h init_params)
 {
+    int ret = (total_failed_tests != 0) ? -1 : 0;
+
     ucs_log_pop_handler();
 
     free(gold_data);
@@ -809,4 +816,5 @@ void test_cuda_cleanup(const init_params_h init_params)
     destroy_cu_ctx(init_params);
 
     free(init_params);
+    return ret;
 }

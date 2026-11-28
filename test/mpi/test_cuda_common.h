@@ -44,6 +44,7 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
                const void *xfer_args);
 
 
-void test_cuda_cleanup(const init_params_h init_params);
+/* Returns nonzero on rank 0 if any test case failed */
+int test_cuda_cleanup(const init_params_h init_params);
 
 #endif

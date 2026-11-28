@@ -1045,8 +1045,13 @@ run_mpi_tests() {
 						./test/mpi/test_mpi_cuda
 			fi
 
-			# test_rma_cuda and test_ucp_rkey_destroy are not run: they fail
-			# on the CI GPU hosts
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_rma_cuda ]
+			then
+				echo "==== Running RMA CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
+			fi
+
+			# test_ucp_rkey_destroy are not run: they fail on the CI GPU hosts
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
