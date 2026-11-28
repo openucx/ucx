@@ -76,6 +76,9 @@ jobs:
           azurelinux40:
             CONTAINER: azurelinux40
             build_mode: sanity
+          alpine324:
+            CONTAINER: alpine324
+            build_mode: sanity
           openeuler2403sp3:
             CONTAINER: openeuler2403sp3
             build_mode: short
@@ -128,6 +131,9 @@ jobs:
           azurelinux40_aarch64:
             CONTAINER: azurelinux40_aarch64
             build_mode: short
+          alpine324_aarch64:
+            CONTAINER: alpine324_aarch64
+            build_mode: sanity
           openeuler2403sp3_aarch64:
             CONTAINER: openeuler2403sp3_aarch64
             build_mode: short
