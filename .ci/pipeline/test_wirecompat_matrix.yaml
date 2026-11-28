@@ -1,0 +1,121 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-wirecompat
+
+failFast: false
+timeout_minutes: 180
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 12600
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Legacy UCX needs the host IPC namespace for shm; set via the raw tolerations.
+# Without a hugepages request legacy UCX gets SIGBUS opening shm (mm) ifaces.
+# The CPU request is below the limit so that two PR runs fit the namespace quota
+runs_on_dockers:
+  # RoCE (CX7) VF
+  - {
+      name: "hca-roce",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[]\n  hostIPC: true",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
+      requests: "{memory: 32Gi, cpu: 2000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  # IB (CX8) VF
+  - {
+      name: "hca-ib",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
+      requests: "{memory: 32Gi, cpu: 2000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_REPOSITORY_URI: "https://github.com/openucx/ucx.git"
+
+steps:
+  - name: Build ucx artifact
+    parallel: false
+    timeout: 30
+    run: |
+      ./autogen.sh
+      ucx_dir=${WORKSPACE}/ucx-install-current
+      ./contrib/configure-release --enable-assertions --without-java --without-go --prefix=${ucx_dir}
+      make -s -j `nproc`
+      make install
+
+  # One pod per VF runs all legacy releases in turn to stay within the VF budget.
+  - name: Test wire compatibility
+    parallel: false
+    timeout: 120
+    run: |
+      source buildlib/az-helpers.sh
+      export UCX_PR_LIB_PATH=${WORKSPACE}/ucx-install-current/lib
+      # test_wire_compat.sh derives its ports from AZP_AGENT_ID.
+      export AZP_AGENT_ID=$((${BUILD_NUMBER} % 20))
+      # The latest six release branches older than this version
+      targets=$(buildlib/tools/wire_compat_matrix.sh 6) || { echo "${targets}"; exit 1; }
+      echo "${targets}"
+      ucx_tags=$(echo "${targets}" | grep task.setvariable | grep -oE 'v[0-9]+[.][0-9]+[.]x')
+      failed=""
+      set +e
+      for ucx_tag in ${ucx_tags}
+      do
+        (
+          set -eEx
+          ucx_dir=${WORKSPACE}/ucx_${ucx_tag}
+          test_dir=${ucx_dir}/examples
+          export UCX_LEGACY_LIB_PATH=${ucx_dir}/lib
+
+          git_clone_with_retry "${ucx_tag}" "${ucx_dir}" 1
+          cd ${ucx_dir}
+          ./autogen.sh
+          ./contrib/configure-release --enable-assertions --prefix=${PWD} --without-java --without-go
+          make -s -j `nproc`
+          make install
+          cd ./examples
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o client_server ucp_client_server.c -lm -lucs -lucp
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp
+          cd ${WORKSPACE}
+
+          UCX_PR_PATH=${WORKSPACE}/ucx-install-current UCX_LEGACY_PATH=${ucx_dir} \
+            buildlib/tools/check_tls_perf_caps.sh
+          WIRE_COMPAT_STAGE_ID=1 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/client_server -a "-c tag"
+          WIRE_COMPAT_STAGE_ID=2 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/ucp_hworld -n
+          UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=3 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/client_server -a "-c tag"
+          UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=4 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/ucp_hworld -n
+        )
+        # Not "|| ..." on the subshell: that would disable its set -e.
+        [ $? -eq 0 ] || failed="${failed} ${ucx_tag}"
+        # A failed test leaves its server on the ports of the next version.
+        pkill -9 -f "${WORKSPACE}/ucx_${ucx_tag}/examples/"
+      done
+      if [ -n "${failed}" ]
+      then
+        echo "Wire compatibility failed with UCX:${failed}"
+        exit 1
+      fi
