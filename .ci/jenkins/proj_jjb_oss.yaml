@@ -105,7 +105,7 @@
             branches: [ '$sha1' ]
             shallow-clone: true
             depth: 100
-            refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
+            refspec: "+refs/heads/*:refs/remotes/origin/* +$sha1:refs/remotes/origin/pinned"
             browser: githubweb
             browser-url: "https://github.com/openucx/ucx"
       script-path: ".ci/jenkins/Jenkinsfile.github"
