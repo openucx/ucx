@@ -182,6 +182,8 @@ typedef struct uct_ib_device_spec {
     ucs_sys_pci_id_t            pci_id;
     unsigned                    flags;
     uint8_t                     priority;
+    /* Firmware version prefix to match, or NULL to match any firmware */
+    const char                  *fw_ver_prefix;
 } uct_ib_device_spec_t;
 
 

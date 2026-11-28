@@ -32,6 +32,10 @@
 #endif
 
 #define UCT_IB_MELLANOX_PCI_VENDOR_ID 0x15b3
+#define UCT_IB_PCI_ID_MLX5_VF \
+    { \
+        UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101e \
+    }
 
 #define UCT_IB_DEVICE_FLAGS_MLX4 \
     (UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM)
@@ -115,6 +119,12 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 #endif
 
 /* clang-format off */
+/*
+ * VFs of MLX5 devices (ConnectX-6 Dx, BlueField-2 and newer) share one generic
+ * PCI id, so their entries also match the firmware major version. An entry
+ * which matches the firmware version is preferred over the generic "MLX5 VF"
+ * entry, which matches any firmware.
+ */
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-3",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1003}, UCT_IB_DEVICE_FLAGS_MLX4,        10},
   {"ConnectX-3 Pro",   {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1007}, UCT_IB_DEVICE_FLAGS_MLX4,        11},
@@ -130,19 +140,31 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101a}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  36},
   {"ConnectX-6",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101b}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  50},
   {"ConnectX-6 VF",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101c}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  50},
+  /* Fallback for MLX5 VFs whose firmware matches none of the VF entries */
+  {"MLX5 VF",          UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60},
   {"ConnectX-6 DX",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101d}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60},
-  {"ConnectX-6 DX VF", {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101e}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60},
+  {"ConnectX-6 DX VF", UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60, "22."},
   {"ConnectX-6 LX",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101f}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  45},
+  {"ConnectX-6 LX VF", UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  45, "26."},
   {"ConnectX-7",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1021}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  70},
+  {"ConnectX-7 VF",    UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  70, "28."},
   {"ConnectX-8",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1023}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  80},
+  {"ConnectX-8 VF",    UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  80, "40."},
   {"ConnectX-9",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1025}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  90},
+  {"ConnectX-9 VF",    UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  90, "82."},
   {"ConnectX-10",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1027}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2, 100},
   {"ConnectX-10 GRS",  {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x2101}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2, 100},
+  /* TODO: Add ConnectX-10 VF once its firmware major version is known. */
   {"BlueField",        {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d2}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   41},
   {"BlueField VF",     {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d3}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   41},
   {"BlueField 2",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d6}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  {"BlueField 2 VF",   UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61, "24."},
   {"BlueField 3",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2dc}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  {"BlueField 3 VF",   UCT_IB_PCI_ID_MLX5_VF,                   UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61, "32."},
   {"BlueField 4",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2df}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  /* Known issue:
+   * BlueField-4 VFs have the same firmware major version as ConnectX-9 VFs,
+   * so they can't be told apart and both appear as "ConnectX-9 VF" */
   {"Generic HCA",      UCS_SYS_PCI_ID_UNDEFINED,                0,                                0},
   {NULL}
 };
@@ -710,27 +732,57 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     UCS_STATS_NODE_FREE(dev->stats);
 }
 
+static int uct_ib_device_spec_match(const uct_ib_device_t *dev,
+                                    const uct_ib_device_spec_t *spec)
+{
+    if (!ucs_topo_pci_id_equal(&dev->pci_id, &spec->pci_id)) {
+        return 0;
+    }
+
+    /* VFs share one PCI id, so their entries also compare the fw version */
+    if (spec->fw_ver_prefix != NULL) {
+        return strncmp(IBV_DEV_ATTR(dev, fw_ver), spec->fw_ver_prefix,
+                       strlen(spec->fw_ver_prefix)) == 0;
+    }
+
+    return 1;
+}
+
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
+    const uct_ib_device_spec_t *generic_spec;
     uct_ib_device_spec_t *spec;
 
     /* search through devices specified in the configuration */
     for (spec = md->custom_devices.specs;
          spec < md->custom_devices.specs + md->custom_devices.count; ++spec) {
-        if (ucs_topo_pci_id_equal(&dev->pci_id, &spec->pci_id)) {
+        if (uct_ib_device_spec_match(dev, spec)) {
             return spec;
         }
     }
 
     /* search through built-in list of device specifications */
-    spec = uct_ib_builtin_device_specs;
-    while ((spec->name != NULL) &&
-           !ucs_topo_pci_id_equal(&dev->pci_id, &spec->pci_id)) {
-        ++spec;
+    generic_spec = NULL;
+    for (spec = uct_ib_builtin_device_specs; spec->name != NULL; ++spec) {
+        if (!uct_ib_device_spec_match(dev, spec)) {
+            continue;
+        }
+
+        /* An entry which also matched the firmware version wins over a
+         * generic entry for the same PCI id (e.g. "MLX5 VF") */
+        if (spec->fw_ver_prefix != NULL) {
+            return spec;
+        }
+
+        if (generic_spec == NULL) {
+            generic_spec = spec;
+        }
     }
-    return spec; /* if no match is found, return the last entry, which contains
-                    default settings for unknown devices */
+
+    /* if no match is found, return the last entry, which contains default
+     * settings for unknown devices */
+    return (generic_spec != NULL) ? generic_spec : spec;
 }
 
 static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)

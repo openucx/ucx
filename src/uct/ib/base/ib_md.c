@@ -1440,8 +1440,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->dev.ah_cache_ttl = md_config->ah_cache_ttl;
 
-    /* TODO: Detect DPU VFs, which share the generic mlx5 VF PCI id, by the
-     * board PSID (board_id) */
     if ((md->dev.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (uct_ib_device_spec(&md->dev)->flags & UCT_IB_DEVICE_FLAG_DPU)) {
         ucs_topo_sys_device_add_flags(md->dev.sys_dev,

@@ -4,10 +4,13 @@
 * See file LICENSE for terms.
 */
 
+#include <infiniband/verbs.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/time/time.h>
+extern "C" {
 #include <uct/ib/base/ib_md.h>
+}
 #ifdef HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
@@ -100,6 +103,44 @@ TEST(test_ib_md_relaxed_order_policy, strict_order_mr_mem_type)
     md.relaxed_order_required = 1;
     params.mem_type           = UCS_MEMORY_TYPE_CUDA;
     EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
+}
+
+TEST(test_ib_md_device_spec, fw_ver)
+{
+    struct spec_test {
+        ucs_sys_pci_id_t pci_id;
+        const char       *fw_ver;
+        const char       *name;
+    };
+    static const spec_test tests[] =
+            {{{0x15b3, 0x101e}, "26.47.1026", "ConnectX-6 LX VF"},
+             {{0x15b3, 0x101e}, "28.48.1000", "ConnectX-7 VF"},
+             {{0x15b3, 0x101e}, "40.50.0446", "ConnectX-8 VF"},
+             {{0x15b3, 0x101e}, "82.48.1688", "ConnectX-9 VF"},
+             {{0x15b3, 0x101e}, "24.43.2402", "BlueField 2 VF"},
+             {{0x15b3, 0x101e}, "32.43.2402", "BlueField 3 VF"},
+             {{0x15b3, 0x101e}, "22.47.1026", "ConnectX-6 DX VF"},
+             {{0x15b3, 0x101e}, "99.48.1000", "MLX5 VF"},
+             {{0x15b3, 0x101e}, "", "MLX5 VF"},
+             {{0x15b3, 0x1021}, "82.48.1688", "ConnectX-7"}};
+    uct_ib_device_spec_t custom = {"custom", {0x15b3, 0x101e}, 0, 1};
+    uct_ib_md_t md              = {};
+    char *fw_ver                = IBV_DEV_ATTR(&md.dev, fw_ver);
+    const size_t fw_ver_size    = sizeof(IBV_DEV_ATTR(&md.dev, fw_ver));
+
+    for (const auto &test : tests) {
+        md.dev.pci_id = test.pci_id;
+        ucs_strncpy_zero(fw_ver, test.fw_ver, fw_ver_size);
+        EXPECT_STREQ(test.name, uct_ib_device_spec(&md.dev)->name)
+                << "fw_ver=" << test.fw_ver;
+    }
+
+    /* A custom spec wins even over a matching firmware entry */
+    md.dev.pci_id = custom.pci_id;
+    ucs_strncpy_zero(fw_ver, "82.48.1688", fw_ver_size);
+    md.custom_devices.specs = &custom;
+    md.custom_devices.count = 1;
+    EXPECT_EQ(&custom, uct_ib_device_spec(&md.dev));
 }
 
 void test_ib_md::init() {
