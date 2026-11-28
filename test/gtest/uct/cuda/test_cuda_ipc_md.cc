@@ -557,8 +557,8 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
     EXPECT_EQ(ucs_get_system_id(), cuda_ipc_md->system_uuid);
 }
 
-/* The NVLink domain knob enables MNNVL without a GPU fabric, and different
- * emulated hosts get different system UUIDs */
+/* The NVLink domain knob enables MNNVL and fabric support without a GPU fabric,
+ * and different emulated hosts get different system UUIDs */
 UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_emulation)
 {
     ucs::handle<uct_md_h> md_5, md_5_0, md_5_5, md_5_7, md_6_7, md_max_7;
@@ -572,6 +572,8 @@ UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_emulation)
 
     EXPECT_TRUE(ipc_md(md_5)->enable_mnnvl);
     EXPECT_TRUE(ipc_md(md_5_7)->enable_mnnvl);
+    EXPECT_TRUE(uct_cuda_ipc_md_fabric_supported(ipc_md(md_5)));
+    EXPECT_TRUE(uct_cuda_ipc_md_fabric_supported(ipc_md(md_5_7)));
     EXPECT_EQ(5u, ipc_md(md_5)->nvlink_domain);
     EXPECT_EQ(5u, ipc_md(md_5_7)->nvlink_domain);
     EXPECT_EQ(6u, ipc_md(md_6_7)->nvlink_domain);

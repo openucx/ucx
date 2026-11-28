@@ -17,10 +17,20 @@ typedef struct {
 } UCS_S_PACKED uct_cuda_ipc_iface_address_t;
 
 
+/* Interface address extended with the IMEX channel. Older peers may send only
+ * uct_cuda_ipc_iface_address_t, so check the address length first. */
+typedef struct {
+    uct_cuda_ipc_iface_address_t super;
+    uint32_t                     imex_channel;
+} UCS_S_PACKED uct_cuda_ipc_iface_imex_address_t;
+
+
 /**
- * Pack the CUDA IPC interface address into the given interface address.
+ * Pack the CUDA IPC interface address, extended with the given IMEX channel,
+ * into the given interface address.
  */
-void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr);
+void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr,
+                                     uint32_t imex_channel);
 
 
 /**

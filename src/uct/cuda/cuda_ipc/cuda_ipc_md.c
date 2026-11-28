@@ -42,6 +42,9 @@
 /* Multiplier used to derive an emulated host id from the configured host */
 #define UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX 0x9E3779B97F4A7C15ull
 
+/* IMEX channel reported when the NVLink domain is emulated without one */
+#define UCT_CUDA_IPC_NVLINK_DOMAIN_IMEX_CHANNEL 0
+
 typedef struct {
     const void                  *mapped_addr;
     CUdevice                    cu_dev;
@@ -66,10 +69,12 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "NVLink domain used to check multi-node NVLINK reachability.\n"
      " auto              - fabric cluster UUID and clique ID from NVML.\n"
      " <domain>[:<host>] - emulate host <host> in NVLink domain <domain>:\n"
-     "                     enable multi-node NVLINK even without a GPU\n"
-     "                     fabric, and treat peers configured with another\n"
-     "                     <host> as different hosts, also when they run on\n"
-     "                     the same machine. <host> defaults to <domain>.\n"
+     "                     enable multi-node NVLINK and fabric support even\n"
+     "                     without a GPU fabric or an IMEX channel (then\n"
+     "                     IMEX channel 0 is reported), and treat peers\n"
+     "                     configured with another <host> as different\n"
+     "                     hosts, also when they run on the same machine.\n"
+     "                     <host> defaults to <domain>.\n"
      "                     Values are decimal, hex (0x...) or octal (0...),\n"
      "                     and <host> must be smaller than ULONG_MAX.\n"
      "                     Only reachability is emulated: memory handles\n"
@@ -144,52 +149,65 @@ static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
     return supported;
 }
 
+/* The GPU driver uses the lowest IMEX channel accessible by the process for all
+ * fabric handle operations, see
+ * https://docs.nvidia.com/multi-node-nvlink-systems/imex-guide/imexchannels.html */
 static ucs_status_t
-uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
+uct_cuda_ipc_md_lowest_imex_channel_cb(const struct dirent *entry, void *arg)
 {
     static const char channel_prefix[] = "channel";
-    int *found                         = arg;
+    uint32_t *lowest_channel           = arg;
+    const char *channel_str;
+    unsigned long channel;
     char path[PATH_MAX];
+    char *end;
 
     if (strncmp(entry->d_name, channel_prefix,
                 sizeof(channel_prefix) - 1) != 0) {
         return UCS_OK;
     }
 
+    channel_str = entry->d_name + sizeof(channel_prefix) - 1;
+    channel     = strtoul(channel_str, &end, 10);
+    if ((*channel_str == '\0') || (*end != '\0') ||
+        (channel >= *lowest_channel)) {
+        return UCS_OK;
+    }
+
     ucs_snprintf_safe(path, sizeof(path), "%s/%s",
                       UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
     if (access(path, R_OK | W_OK) == 0) {
-        *found = 1;
+        *lowest_channel = channel;
     }
 
     return UCS_OK;
 }
 #endif
 
-static int uct_cuda_ipc_md_check_fabric_support(void)
+/* Returns the IMEX channel used for fabric handles, or
+ * UCT_CUDA_IPC_IMEX_CHANNEL_INVALID if CUDA fabric is not supported */
+static uint32_t uct_cuda_ipc_md_get_imex_channel(void)
 {
 #if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
-    int imex_channel_found = 0;
+    uint32_t imex_channel = UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     ucs_status_t status;
     CUdevice cu_device;
 
     /* md_open can run without a current context, so query CUDA device 0. */
     status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0), UCS_LOG_LEVEL_DEBUG);
     if ((status != UCS_OK) || !uct_cuda_ipc_device_supports_fabric(cu_device)) {
-        return 0;
+        return UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     }
 
     if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
-                        uct_cuda_ipc_md_check_imex_channel_cb,
-                        &imex_channel_found) != UCS_OK) {
-        return 0;
+                        uct_cuda_ipc_md_lowest_imex_channel_cb,
+                        &imex_channel) != UCS_OK) {
+        return UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
     }
 
-    ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
-              imex_channel_found ? "enabled" : "disabled");
-    return imex_channel_found;
+    return imex_channel;
 #else
-    return 0;
+    return UCT_CUDA_IPC_IMEX_CHANNEL_INVALID;
 #endif
 }
 
@@ -1030,7 +1048,13 @@ uct_cuda_ipc_md_emulate_nvlink_domain(uct_cuda_ipc_md_t *md,
     /* Processes with different emulated hosts look like different hosts to
      * each other, while real hosts stay distinguishable */
     md->system_uuid  ^= (host + 1) * UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
-    ucs_diag("emulating host %lu in NVLink domain %lu", host, domain);
+    /* Peers on other hosts are reachable only with fabric support */
+    if (!uct_cuda_ipc_md_fabric_supported(md)) {
+        md->imex_channel = UCT_CUDA_IPC_NVLINK_DOMAIN_IMEX_CHANNEL;
+    }
+
+    ucs_diag("emulating host %lu in NVLink domain %lu, IMEX channel %u", host,
+             domain, md->imex_channel);
     return UCS_OK;
 }
 
@@ -1132,10 +1156,16 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops        = &md_ops;
-    md->super.component  = &uct_cuda_ipc_component.super;
-    md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
-    md->system_uuid      = ucs_get_system_id();
+    md->super.ops       = &md_ops;
+    md->super.component = &uct_cuda_ipc_component.super;
+    md->imex_channel    = uct_cuda_ipc_md_get_imex_channel();
+    md->system_uuid     = ucs_get_system_id();
+    if (uct_cuda_ipc_md_fabric_supported(md)) {
+        ucs_debug("CUDA fabric IPC support is enabled, IMEX channel %u",
+                  md->imex_channel);
+    } else {
+        ucs_debug("CUDA fabric IPC support is disabled");
+    }
 
     if (ipc_config->enable_mnnvl == UCS_NO) {
         ucs_debug("multi-node NVLINK support is disabled");
