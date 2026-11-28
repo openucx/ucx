@@ -21,6 +21,8 @@ taskName: '${arch}/${name}'
 
 env:
   BUILD_ID: "${BUILD_NUMBER}"
+  # Make jobs match the CPU limit of the pod
+  NPROC: "4"
 
 steps:
   - name: Static Checks
