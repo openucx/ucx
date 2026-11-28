@@ -1,0 +1,81 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-bf
+
+failFast: false
+timeout_minutes: 600
+# The pods share the BF3 nodes; run the plain and ASan rows in turn.
+batchSize: 4
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  # Job timeout plus 30 minutes: ends a pod that outlives its build
+  activeDeadlineSeconds: 37800
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  # The CPU request matches the 2 CPUs each pod is pinned to.
+  requests: "{memory: 10Gi, cpu: 2000m}"
+  tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]"
+  # Verbs need privileged mode, RoCE GIDs need the DPU host netdevs.
+  caps_add: "[ IPC_LOCK, NET_RAW ]"
+  privileged: true
+  hostNetwork: true
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
+runs_on_dockers:
+  - {
+      name: "ubuntu2404-doca2.9",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      SLOT_BASE: "0"
+    }
+  - {
+      # gcc 13 ASan gtest dies with SIGILL on BF3; gcc 11 matches the Azure BF hosts.
+      name: "ubuntu2204-mofed24.10-asan",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu22.04/builder:mofed-24.10-3.2.4.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      SLOT_BASE: "4",
+      ASAN_CHECK: "yes"
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+    worker: [0, 1, 2, 3]
+
+taskName: '${arch}/${name}/w${worker}'
+
+env:
+  RUN_TESTS: "yes"
+  # No MPI on the BlueField hosts yet.
+  RUN_MPI_TESTS: "no"
+  TEST_PERF: "0"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+  # The DPU uplink IP sits on the ovsbr1 Linux bridge, which UCX TCP skips by default.
+  UCX_TCP_BRIDGE_ENABLE: "y"
+  # The DPU's only non-bridge IPv4 netdev is the calico VXLAN, where rdmacm cannot connect.
+  # recv_align over dc_x stalls past the watchdog on BF3.
+  GTEST_FILTER: "*:-all/test_ucp_sockaddr*:dcx/test_ucp_tag_match_rndv_align.recv_align/*"
+
+steps:
+  - name: Test
+    parallel: false
+    timeout: 290
+    run: |
+      # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
+      slot=$((SLOT_BASE + worker))
+      export EXECUTOR_NUMBER=${slot}
+      cpu_set="$((slot * 2))-$((slot * 2 + 1))"
+      echo "Running test_jenkins.sh on $(hostname) slot ${slot} CPUs ${cpu_set}"
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
