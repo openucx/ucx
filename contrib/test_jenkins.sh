@@ -1007,7 +1007,10 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release-mt --with-mpi --enable-assertions
+			# Resolve the UCX libraries that libmpi needs from this build at link time
+			libdir=${WORKSPACE}/build-test/src
+			build release-mt --with-mpi --enable-assertions \
+				LDFLAGS="-Wl,-rpath-link,${libdir}/ucs/.libs:${libdir}/ucm/.libs:${libdir}/uct/.libs:${libdir}/ucp/.libs"
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
@@ -1163,7 +1166,7 @@ test_init_mt() {
 	echo "==== Running multi-thread init ===="
 	# Each thread requires 5MB. Cap threads number by total available shared memory.
 	max_threads=$(df /dev/shm | awk '/shm/ {printf "%d", $4 / 5000}')
-	num_threads=$(($max_threads < $(nproc) ? $max_threads : $(nproc)))
+	num_threads=$(($max_threads < ${NPROC} ? $max_threads : ${NPROC}))
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
@@ -1618,7 +1621,10 @@ run_tests() {
 	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
 
 	# mpi tests, last: they rebuild the tree
-	do_distributed_task 1 4 run_mpi_tests
+	if [ "${RUN_MPI_TESTS:-yes}" == "yes" ]
+	then
+		do_distributed_task 1 4 run_mpi_tests
+	fi
 }
 
 run_asan_check() {

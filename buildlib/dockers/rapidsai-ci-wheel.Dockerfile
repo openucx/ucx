@@ -17,6 +17,9 @@
 ARG BASE_IMAGE=rapidsai/ci-wheel:26.12-cuda13.4.3-rockylinux8-py3.12
 FROM ${BASE_IMAGE}
 
+# enroot copies labels into /etc/rc as comments; the base's multi-line description breaks it on Slurm.
+LABEL org.opencontainers.image.description="UCX CI wrapper of a RAPIDS CI image"
+
 RUN chmod -R o+rwX /pyenv \
- && dnf install -y gdb \
+ && dnf --refresh --disablerepo=powertools install -y gdb \
  && dnf clean all

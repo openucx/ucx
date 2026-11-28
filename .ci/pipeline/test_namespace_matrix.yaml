@@ -1,0 +1,51 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-namespace
+
+failFast: false
+timeout_minutes: 60
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+  # unshare --pid/--mount-proc needs CAP_SYS_ADMIN.
+  privileged: true
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+runs_on_dockers:
+  - {
+      name: "namespace",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      # posix without proc link needs the host (default) PID namespace;
+      # ci-demo has no hostPID option, so it rides on the raw tolerations.
+      tolerations: "[]\n  hostPID: true"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+env:
+  RUNNING_IN_AZURE: "no"
+  # test_namespace.sh runs "sudo -u $USER"; the pod runs as root.
+  USER: "root"
+
+steps:
+  - name: Run namespace test
+    parallel: false
+    timeout: 30
+    run: |
+      source .ci/scripts/cap_output.sh
+      readlink /proc/self/ns/pid
+      unshare --user whoami
+      ./contrib/test_namespace.sh
