@@ -9,8 +9,8 @@ package ucx
 // #include "goucx.h"
 import "C"
 import (
-	"unsafe"
 	"sync"
+	"unsafe"
 )
 
 // UCP worker is an opaque object representing the communication context. The
@@ -31,9 +31,9 @@ import (
 // Worker are parallel "threading points" that an upper layer may use to
 // optimize concurrent communications.
 type UcpWorker struct {
-	worker C.ucp_worker_h
+	worker        C.ucp_worker_h
 	recvCallbacks []PackedCallback
-	mu sync.Mutex
+	mu            sync.Mutex
 }
 
 type UcpAddress struct {

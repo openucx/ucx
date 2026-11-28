@@ -7,11 +7,11 @@ package goucxtests
 import (
 	"errors"
 	"fmt"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"testing"
 	"time"
-	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 type TestEntity struct {

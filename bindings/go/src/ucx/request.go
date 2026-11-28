@@ -21,8 +21,8 @@ type UcpRequestParams struct {
 	memTypeSet bool
 	memType    UcsMemoryType
 	Cb         UcpCallback
-	multi	   bool
-	Memory	   *UcpMemory
+	multi      bool
+	Memory     *UcpMemory
 }
 
 func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {

@@ -8,8 +8,8 @@ package ucx
 // #include "goucx.h"
 import "C"
 import (
-	"unsafe"
 	"runtime/cgo"
+	"unsafe"
 )
 
 type UcpCallback interface{}
@@ -26,40 +26,41 @@ type UcpAmRecvCallback = func(header unsafe.Pointer, headerSize uint64,
 type UcpAmRecvCallbackBundle struct {
 	cb     UcpAmRecvCallback
 	worker *UcpWorker
-}	
+}
 
 // This callback routine is invoked on the server side to handle incoming
 // connections from remote clients.
 type UcpListenerConnectionHandler = func(connRequest *UcpConnectionRequest)
 
 type PackedCallback cgo.Handle
-func packCallback(cb UcpCallback) PackedCallback {
-    if cb == nil {
-        return 0
-    }
 
-    return PackedCallback(cgo.NewHandle(cb))
+func packCallback(cb UcpCallback) PackedCallback {
+	if cb == nil {
+		return 0
+	}
+
+	return PackedCallback(cgo.NewHandle(cb))
 }
 
 func (pc PackedCallback) unpackInternal(freeHandle bool) UcpCallback {
-    if pc == 0 {
-        return nil
-    }
+	if pc == 0 {
+		return nil
+	}
 
-    h := cgo.Handle(pc)
-    if freeHandle {
-        defer h.Delete()
-    }
+	h := cgo.Handle(pc)
+	if freeHandle {
+		defer h.Delete()
+	}
 
-    return h.Value().(UcpCallback)
+	return h.Value().(UcpCallback)
 }
 
 func (pc PackedCallback) unpack() UcpCallback {
-    return pc.unpackInternal(false)
+	return pc.unpackInternal(false)
 }
 
 func (pc PackedCallback) unpackAndFree() UcpCallback {
-    return pc.unpackInternal(true)
+	return pc.unpackInternal(true)
 }
 
 //export ucxgo_completeGoSendRequest

@@ -7,11 +7,11 @@ package goucxtests
 
 import (
 	"fmt"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"math/big"
 	"syscall"
 	"testing"
 	"time"
-	. "github.com/openucx/ucx/bindings/go/src/ucx"
 )
 
 const wakeupTimeout = 10 * time.Second
