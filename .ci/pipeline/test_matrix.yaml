@@ -14,6 +14,10 @@ kubernetes:
   # Requests follow the measured use; the limits allow bursts
   requests: "{memory: 12Gi, cpu: 4000m}"
 
+# MPI modules used by test_jenkins.sh
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
 runs_on_dockers:
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
 
@@ -36,4 +40,6 @@ steps:
     parallel: false
     timeout: 360
     run: |
+      # Add the /hpc/local modules for the MPI tests
+      source ./buildlib/az-helpers.sh && az_init_modules
       ./contrib/test_jenkins.sh
