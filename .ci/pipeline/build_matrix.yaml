@@ -13,6 +13,8 @@ kubernetes:
   limits: "{memory: 16Gi, cpu: 8000m}"
   # The request is below the limit so that two PR runs fit the namespace quota
   requests: "{memory: 8Gi, cpu: 3000m}"
+  jnlp_requests: "{memory: 512Mi, cpu: 100m}"
+  jnlp_limits: "{memory: 1Gi}"
 
 # Modules for builds.sh.
 volumes:

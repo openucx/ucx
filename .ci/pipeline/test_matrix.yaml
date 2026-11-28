@@ -13,6 +13,8 @@ kubernetes:
   limits: "{memory: 16Gi, cpu: 6000m}"
   # Requests follow the measured use; the limits allow bursts
   requests: "{memory: 12Gi, cpu: 4000m}"
+  jnlp_requests: "{memory: 512Mi, cpu: 100m}"
+  jnlp_limits: "{memory: 1Gi}"
 
 runs_on_dockers:
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
