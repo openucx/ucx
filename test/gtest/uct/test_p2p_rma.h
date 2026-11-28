@@ -40,6 +40,13 @@ public:
 
     void
     check_buf(mapped_buffer &sendbuf, mapped_buffer &recvbuf, unsigned flags);
+
+protected:
+    /* True when the MD accesses ROCm memory directly (rocm_copy/rocm_ipc) and
+     * VMM is available. */
+    bool rocm_vmm_applicable();
+
+    mem_buffer::alloc_mode m_alloc_mode = mem_buffer::alloc_mode::DEFAULT;
 };
 
 #endif

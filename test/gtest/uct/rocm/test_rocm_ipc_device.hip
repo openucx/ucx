@@ -49,9 +49,6 @@ protected:
         return sizeof(uct_rocm_ipc_device_mem_element_t);
     }
 
-    /* Host-initiated IPC zcopy, optionally over VMM-backed buffers. */
-    void do_zcopy(bool is_put, bool vmm);
-
     entity * m_sender;
     entity * m_receiver;
 
@@ -200,60 +197,8 @@ UCS_TEST_P(test_rocm_ipc_rma, get_device_ep)
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 }
 
-static void zcopy_completion_cb(uct_completion_t *comp)
-{
-    /* Completion observed via comp->count. */
-}
-
-/* Drives uct_rocm_ipc_ep_{put,get}_zcopy to completion; vmm=true allocates the
- * buffers via the VMM API to exercise the VMM key pack/import/detach path. */
-void test_rocm_ipc_rma::do_zcopy(bool is_put, bool vmm)
-{
-    const size_t length = UCS_MBYTE;
-
-    if (vmm && !mem_buffer::is_rocm_vmm_supported()) {
-        UCS_TEST_SKIP_R("ROCm VMM is not supported");
-    }
-    m_sender->vmm_alloc   = vmm;
-    m_receiver->vmm_alloc = vmm;
-
-    /* Seed so the destination ends up holding SEED1 in either direction. */
-    const uint64_t lseed = is_put ? SEED1 : SEED2;
-    const uint64_t rseed = is_put ? SEED2 : SEED1;
-    mapped_buffer lbuf(length, lseed, *m_sender, 0, UCS_MEMORY_TYPE_ROCM);
-    mapped_buffer rbuf(length, rseed, *m_receiver, 0, UCS_MEMORY_TYPE_ROCM);
-
-    uct_completion_t comp;
-    comp.count  = 1;
-    comp.status = UCS_OK;
-    comp.func   = zcopy_completion_cb;
-
-    /* rocm_ipc has max_iov == 1; the buffer's single iov covers the transfer. */
-    ucs_status_t status;
-    do {
-        status = is_put ?
-                 uct_ep_put_zcopy(m_sender->ep(0), lbuf.iov(), 1, rbuf.addr(),
-                                  rbuf.rkey(), &comp) :
-                 uct_ep_get_zcopy(m_sender->ep(0), lbuf.iov(), 1, rbuf.addr(),
-                                  rbuf.rkey(), &comp);
-        progress();
-    } while (status == UCS_ERR_NO_RESOURCE);
-    ASSERT_UCS_OK_OR_INPROGRESS(status);
-
-    if (status == UCS_INPROGRESS) {
-        while (comp.count > 0) {
-            progress();
-        }
-    }
-
-    m_sender->flush();
-    (is_put ? rbuf : lbuf).pattern_check(SEED1);
-}
-
-UCS_TEST_P(test_rocm_ipc_rma, put_zcopy)     { do_zcopy(true,  false); }
-UCS_TEST_P(test_rocm_ipc_rma, get_zcopy)     { do_zcopy(false, false); }
-UCS_TEST_P(test_rocm_ipc_rma, put_zcopy_vmm) { do_zcopy(true,  true);  }
-UCS_TEST_P(test_rocm_ipc_rma, get_zcopy_vmm) { do_zcopy(false, true);  }
+/* Host-initiated put/get zcopy (including VMM-backed buffers) is covered by the
+ * uct_p2p_rma_test *_zcopy[_vmm] variants, which instantiate for rocm_ipc. */
 
 _UCT_INSTANTIATE_TEST_CASE(test_rocm_ipc_rma, rocm_ipc)
 

@@ -225,10 +225,6 @@ protected:
 
         size_t                   max_conn_priv;
 
-        /* Allocate ROCm device buffers via the VMM API (set by the p2p vmm
-         * resource variant). */
-        bool                     vmm_alloc = false;
-
     private:
         class async_wrapper {
         public:
@@ -259,13 +255,17 @@ protected:
         mapped_buffer(size_t size, const entity &entity, size_t offset = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
                       unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL,
-                      unsigned num_retries = 0);
+                      unsigned num_retries = 0,
+                      mem_buffer::alloc_mode alloc_mode =
+                              mem_buffer::alloc_mode::DEFAULT);
 
         mapped_buffer(size_t size, uint64_t seed, const entity &entity,
                       size_t offset = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
                       unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL,
-                      unsigned num_retries = 0);
+                      unsigned num_retries = 0,
+                      mem_buffer::alloc_mode alloc_mode =
+                              mem_buffer::alloc_mode::DEFAULT);
 
         virtual ~mapped_buffer();
 

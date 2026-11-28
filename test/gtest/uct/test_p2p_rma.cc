@@ -73,14 +73,25 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
     ucs_memory_type_t src_mem_type = UCS_MEMORY_TYPE_HOST;
 
     if (has_transport("cuda_ipc") || has_transport("rocm_copy") ||
-        has_transport("ze_copy")) {
+        has_transport("rocm_ipc") || has_transport("ze_copy")) {
         src_mem_type = mem_type;
     }
 
-    mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
-    mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
+    mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type,
+                          UCT_MD_MEM_ACCESS_ALL, 0, m_alloc_mode);
+    mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type,
+                          UCT_MD_MEM_ACCESS_ALL, 0, m_alloc_mode);
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
     check_buf(sendbuf, recvbuf, flags);
+}
+
+bool uct_p2p_rma_test::rocm_vmm_applicable()
+{
+    /* Runs in check_skip_test() before init(), so entities do not exist yet;
+     * gate on the transport name (rocm_copy/rocm_ipc are the only ones that
+     * access ROCm memory) rather than sender().md_attr(). */
+    return mem_buffer::is_rocm_vmm_supported() &&
+           (has_transport("rocm_copy") || has_transport("rocm_ipc"));
 }
 
 void uct_p2p_rma_test::check_buf(mapped_buffer &sendbuf, mapped_buffer &recvbuf,
@@ -141,7 +152,57 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
+/*
+ * ROCm VMM variants. Only rocm_copy/rocm_ipc access ROCm memory directly, so
+ * rocm_vmm_applicable() skips every other transport. The short variants also
+ * exercise the is_vmm guard that keeps VMM device memory off the CPU-copy path.
+ */
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_short_vmm,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT) ||
+                     !rocm_vmm_applicable()) {
+    m_alloc_mode = mem_buffer::alloc_mode::VMM;
+    test_xfer_multi_mem_type(
+            static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 0ul,
+            sender().iface_attr().cap.put.max_short, TEST_UCT_FLAG_SEND_ZCOPY,
+            UCS_MEMORY_TYPE_ROCM);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_short_vmm,
+                     !check_caps(UCT_IFACE_FLAG_GET_SHORT) ||
+                     !rocm_vmm_applicable()) {
+    m_alloc_mode = mem_buffer::alloc_mode::VMM;
+    test_xfer_multi_mem_type(
+            static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 0ul,
+            sender().iface_attr().cap.get.max_short, TEST_UCT_FLAG_RECV_ZCOPY,
+            UCS_MEMORY_TYPE_ROCM);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_zcopy_vmm,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY) ||
+                     !rocm_vmm_applicable()) {
+    m_alloc_mode = mem_buffer::alloc_mode::VMM;
+    test_xfer_multi_mem_type(
+            static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
+            sender().iface_attr().cap.put.min_zcopy,
+            sender().iface_attr().cap.put.max_zcopy, TEST_UCT_FLAG_SEND_ZCOPY,
+            UCS_MEMORY_TYPE_ROCM);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy_vmm,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY) ||
+                     !rocm_vmm_applicable()) {
+    m_alloc_mode = mem_buffer::alloc_mode::VMM;
+    test_xfer_multi_mem_type(
+            static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+            ucs_max(1ull, sender().iface_attr().cap.get.min_zcopy),
+            sender().iface_attr().cap.get.max_zcopy, TEST_UCT_FLAG_RECV_ZCOPY,
+            UCS_MEMORY_TYPE_ROCM);
+}
+
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
+/* rocm_ipc is not in UCT_TEST_TLS (the list is at the UCS_PP_FOREACH limit), so
+ * instantiate it here to cover its put/get zcopy (incl. the VMM variants). */
+_UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test, rocm_ipc)
 
 class test_p2p_rma_madvise : private ucs::clear_dontcopy_regions,
                              public uct_p2p_rma_test
