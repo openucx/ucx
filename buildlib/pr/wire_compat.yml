@@ -2,17 +2,6 @@ parameters:
   demands: []
   name: subtest
   container:
-  ucx_targets:
-    ucx_1_14:
-      ucx_tag: v1.14.0
-    ucx_1_15:
-      ucx_tag: v1.15.x
-    ucx_1_16:
-      ucx_tag: v1.16.x
-    ucx_1_17:
-      ucx_tag: v1.17.x
-    ucx_1_18:
-      ucx_tag: v1.18.x
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -29,6 +18,11 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 1
+        retryCountOnTaskFailure: 5
+
+      - bash: buildlib/tools/wire_compat_matrix.sh 6
+        name: targets
+        displayName: Find UCX releases to test
         retryCountOnTaskFailure: 5
 
       - bash: |
@@ -54,7 +48,7 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     strategy:
-      matrix: ${{ parameters.ucx_targets }}
+      matrix: $[ dependencies.build_pr_${{ parameters.name }}.outputs['targets.matrix'] ]
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     variables:
@@ -93,7 +87,6 @@ jobs:
           UCX_PR_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)
           UCX_LEGACY_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)
         displayName: compare tls performance characteristics
-        condition: ne(variables.ucx_tag, 'v1.14.0')
       - bash: |
           export WIRE_COMPAT_STAGE_ID=1
           buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
@@ -102,7 +95,6 @@ jobs:
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_client_server with UCX $(ucx_tag)
-        condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
       - bash: |
           export WIRE_COMPAT_STAGE_ID=2
@@ -122,7 +114,6 @@ jobs:
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_client_server (no sm) with UCX $(ucx_tag)
-        condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
       - bash: |
           export WIRE_COMPAT_STAGE_ID=4
